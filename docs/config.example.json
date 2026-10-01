@@ -2,6 +2,6 @@
   "tokens_file": "/opt/sontv/tokens.txt",
   "default_ttl_hours": 24,
   "upstream_m3u": "https://cdn.qd.je/mytv0.m3u",
-  "listen": "127.0.0.1:19900",
+  "listen": "127.0.0.1:9900",
   "unwrap_remote_proxy": true
 }

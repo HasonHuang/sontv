@@ -69,6 +69,8 @@ GOOS=linux GOARCH=amd64 go build -o bin/sontv-go ./cmd/sontv-go
 
 ### 安装到 /opt/sontv
 
+二进制与配置文件同级摆放，放好后直接起即可：
+
 ```bash
 sudo install -d /opt/sontv
 sudo install -m 0755 bin/sontv-go /opt/sontv/sontv-go
@@ -78,6 +80,8 @@ sudo install -m 0644 docs/config.example.json /opt/sontv/config.json
 
 # 凭据文件，权限收紧到只有服务账号可读
 sudo install -m 0600 tokens.txt /opt/sontv/tokens.txt
+
+cd /opt/sontv && sudo -u sontv ./sontv-go   # 直接起，二进制同级已有 config.json
 ```
 
 也可以不建配置文件——`-config ""` 直接用内置缺省值启动。
@@ -110,7 +114,7 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
   "tokens_file": "/opt/sontv/tokens.txt",
   "default_ttl_hours": 24,
   "upstream_m3u": "https://cdn.qd.je/mytv0.m3u",
-  "listen": "127.0.0.1:19900",
+  "listen": "127.0.0.1:9900",
   "unwrap_remote_proxy": true
 }
 ```
@@ -120,8 +124,10 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
 | `tokens_file` | string | `/opt/sontv/tokens.txt` | token 表路径 |
 | `default_ttl_hours` | int | `24` | 临时 token 的默认有效期（小时）；表里没写第三列的行用它。≤0 时静默回落为 24 |
 | `upstream_m3u` | string | `https://cdn.qd.je/mytv0.m3u` | `/sub` 未带 `url=` 时使用的上游播放列表 |
-| `listen` | string | `127.0.0.1:19900` | 监听地址 |
+| `listen` | string | `127.0.0.1:9900` | 监听地址 |
 | `unwrap_remote_proxy` | bool | `true` | 是否把第三方代理链接解包成本站单跳 |
+
+`tokens_file` 写相对路径时，同样按二进制同级目录解析。
 
 ### tokens.txt
 
@@ -149,10 +155,10 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
 
 | 参数 | 缺省值 | 说明 |
 | --- | --- | --- |
-| `-config` | `/opt/sontv/config.json` | 配置文件路径；传空串（`-config ""`）表示全部使用缺省值 |
+| `-config` | `config.json` | 配置文件路径；相对路径以二进制所在目录为基准。传空串（`-config ""`）表示全部使用缺省值 |
 | `-check` | `false` | 只做配置与 token 表校验，不启动服务 |
 
-指定了路径但文件不存在或 JSON 非法时，启动失败并退出（退出码非 0）。
+缺省就是读二进制同级的 `config.json`，所以把二进制和配置放在一起即可免参数启动。指定了路径但文件不存在或 JSON 非法时，启动失败并退出（退出码非 0）。
 
 token 表装载失败**不会**阻止启动，只在日志里提示——服务照常起，但认证必然 `503`（fail closed）。因此 `-check` 也只保证「配置合法」：token 表有问题时它会打印错误日志，但退出码仍为 0，请以日志内容为准。
 
@@ -161,14 +167,21 @@ token 表装载失败**不会**阻止启动，只在日志里提示——服务�
 ## 运行
 
 ```bash
-# 使用 /opt/sontv/config.json
-/opt/sontv/sontv-go -config /opt/sontv/config.json
+# 缺省：读二进制同级的 config.json
+/opt/sontv/sontv-go
 
-# 全部缺省值（监听 127.0.0.1:19900）
+# 也可以显式指定，相对路径同样以二进制所在目录为基准
+/opt/sontv/sontv-go -config config.json
+/opt/sontv/sontv-go -config etc/sontv.json
+
+# 绝对路径照旧
+/opt/sontv/sontv-go -config /etc/sontv/config.json
+
+# 全部缺省值（监听 127.0.0.1:9900）
 /opt/sontv/sontv-go -config ""
 
 # 启动前自检，不监听端口
-/opt/sontv/sontv-go -config /opt/sontv/config.json -check
+/opt/sontv/sontv-go -check
 ```
 
 ### 信号
@@ -191,7 +204,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/sontv/sontv-go -config /opt/sontv/config.json
+ExecStart=/opt/sontv/sontv-go -config config.json
 ExecReload=/bin/kill -USR1 $MAINPID
 Restart=on-failure
 RestartSec=3
@@ -209,7 +222,7 @@ WantedBy=multi-user.target
 
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:19900;
+    proxy_pass http://127.0.0.1:9900;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;   # 必须：否则 https 入口下的子链接会写回 http
     proxy_buffering off;                          # 长流不憋在缓冲里
@@ -225,10 +238,10 @@ location / {
 
 ```bash
 # 订阅：用配置里的缺省上游
-curl "http://127.0.0.1:19900/sub?token=<稳定token>"
+curl "http://127.0.0.1:9900/sub?token=<稳定token>"
 
 # 订阅：指定上游 + 过滤关键字（英文或全角逗号分隔，最多 20 个，每个 ≤64 字节）
-curl "http://127.0.0.1:19900/sub?token=<稳定token>&url=https%3A%2F%2Fexample.com%2Flist.m3u&filter=翡翠台,TVB"
+curl "http://127.0.0.1:9900/sub?token=<稳定token>&url=https%3A%2F%2Fexample.com%2Flist.m3u&filter=翡翠台,TVB"
 ```
 
 返回体形如：

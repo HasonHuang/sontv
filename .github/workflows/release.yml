@@ -93,7 +93,8 @@ jobs:
             stage="stage/$flavor"
             mkdir -p "$stage"
             cp build/sontv-go "$stage/"
-            cp docs/config.example.json "$stage/config.example.json"
+            # 二进制与配置同级：装成 config.json 后 `-config` 可整个省掉
+            cp docs/config.example.json "$stage/config.json"
             cp README.md "$stage/"
             # 固定 mtime/属主 + gzip -n：同样的输入打出同样的字节，
             # 同架构的 glibc 与 musl 两份因此完全一致，便于比对与校验。

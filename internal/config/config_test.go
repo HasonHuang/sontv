@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func TestDefaultConfig(t *testing.T) {
 	if c.TokensFile != "/opt/sontv/tokens.txt" || c.DefaultTTLHours != 24 {
 		t.Fatalf("凭据缺省不符: %+v", c)
 	}
-	if c.UpstreamM3U != "https://cdn.qd.je/mytv0.m3u" || c.Listen != "127.0.0.1:19900" {
+	if c.UpstreamM3U != "https://cdn.qd.je/mytv0.m3u" || c.Listen != "127.0.0.1:9900" {
 		t.Fatalf("上游/监听缺省不符: %+v", c)
 	}
 	if !c.UnwrapRemoteProxy {
@@ -68,8 +69,102 @@ func TestLoadConfigSanitizes(t *testing.T) {
 	if c.DefaultTTLHours != 24 {
 		t.Fatalf("负 TTL 应回落 24，实际 %d", c.DefaultTTLHours)
 	}
-	if c.Listen != "127.0.0.1:19900" {
+	if c.Listen != "127.0.0.1:9900" {
 		t.Fatalf("空 listen 应回落缺省，实际 %q", c.Listen)
+	}
+}
+
+// ---------- 配置路径解析 ----------
+
+// TestResolveConfigPathEmpty 空串原样返回，调用方据此走全缺省。
+func TestResolveConfigPathEmpty(t *testing.T) {
+	got, err := ResolveConfigPath("")
+	if err != nil || got != "" {
+		t.Fatalf("空串应原样返回，实际 %q, %v", got, err)
+	}
+}
+
+// TestResolveConfigPathAbsolute 绝对路径原样透传，不做任何改写。
+func TestResolveConfigPathAbsolute(t *testing.T) {
+	abs := filepath.Join(t.TempDir(), "c.json")
+	got, err := ResolveConfigPath(abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != abs {
+		t.Fatalf("绝对路径应原样返回: %q", got)
+	}
+}
+
+// TestResolveConfigPathRelativeToBinary 关键契约：相对路径按**二进制同级目录**
+// 解析，而不是工作目录——否则 systemd/容器里换个 cwd 就读不到配置了。
+// 测试自身是二进制（go test 编译出的 test 程序），所以它的目录就是可预期的基准。
+func TestResolveConfigPathRelativeToBinary(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skipf("拿不到可执行文件路径: %v", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	got, err := ResolveConfigPath(DefaultConfigName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(filepath.Dir(exe), DefaultConfigName)
+	if got != want {
+		t.Fatalf("相对路径应基于二进制同级目录:\n  得到 %q\n  期望 %q", got, want)
+	}
+}
+
+// TestResolveConfigPathNestedRelative 相对路径里的子目录同样以二进制目录为基准。
+func TestResolveConfigPathNestedRelative(t *testing.T) {
+	got, err := ResolveConfigPath(filepath.Join("etc", "sontv.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Fatalf("结果应为绝对路径，实际 %q", got)
+	}
+	if filepath.Base(filepath.Dir(got)) != "etc" {
+		t.Fatalf("子目录应保留: %q", got)
+	}
+}
+
+// TestTokensFileRelative 相对 tokens_file 以配置文件同级目录为基准补全，
+// 绝对路径原样透传。
+func TestTokensFileRelative(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "c.json")
+	if err := os.WriteFile(path, []byte(`{"tokens_file":"tokens.txt"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "tokens.txt"); c.TokensFile != want {
+		t.Fatalf("相对 tokens_file 应基于配置文件目录:\n  得到 %q\n  期望 %q", c.TokensFile, want)
+	}
+
+	// 绝对路径不动
+	abs := filepath.Join(dir, "t.txt")
+	if err := os.WriteFile(path, []byte(`{"tokens_file":`+strconv.Quote(abs)+`}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err = LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.TokensFile != abs {
+		t.Fatalf("绝对 tokens_file 应原样保留: %q", c.TokensFile)
+	}
+}
+
+// TestTokensFileDefaultIsAbsolute 缺省 tokens_file 本来就是绝对路径，不该被改写。
+func TestTokensFileDefaultIsAbsolute(t *testing.T) {
+	if !filepath.IsAbs(DefaultConfig().TokensFile) {
+		t.Fatalf("缺省 tokens_file 应为绝对路径: %q", DefaultConfig().TokensFile)
 	}
 }
 

@@ -1,0 +1,155 @@
+name: Release
+
+# 推 v* tag 即发版；手动触发用于补发/重跑某个已存在的 tag。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（形如 v0.2.0）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# 同一个 tag 只允许一次发布在跑，重跑排队而不是并发。
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  # 门禁：不通过就不往下走。
+  test:
+    name: 测试与静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # 1.24
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "以下文件未 gofmt："
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go test
+        run: go test ./... -race
+
+  build:
+    name: 构建 ${{ matrix.arch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+          - arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # CGO_ENABLED=0 走纯 Go resolver，产出完全静态链接的二进制——
+      # 所以 glibc / musl 两份在功能上无差别，只是给 Alpine 用户一个
+      # 符合直觉的下载名（见 README 的安装说明）。
+      - name: 编译
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p build
+          CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" \
+            go build -trimpath -ldflags="-s -w" -o build/sontv-go ./cmd/sontv-go
+
+      # arm64 产物在本机跑不了，只对原生架构做一次冒烟自检。
+      - name: 冒烟自检
+        if: matrix.arch == 'amd64'
+        run: ./build/sontv-go -config "" -check
+
+      - name: 打包 glibc / musl
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p dist
+          for flavor in glibc musl; do
+            stage="stage/$flavor"
+            mkdir -p "$stage"
+            cp build/sontv-go "$stage/"
+            cp docs/config.example.json "$stage/config.example.json"
+            cp README.md "$stage/"
+            # 固定 mtime/属主 + gzip -n：同样的输入打出同样的字节，
+            # 同架构的 glibc 与 musl 两份因此完全一致，便于比对与校验。
+            tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+              -cf - -C "$stage" . \
+              | gzip -n -9 > "dist/sontv-go-linux-$ARCH-$flavor.tar.gz"
+          done
+          ls -l dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: 生成 Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0 # 更新说明要翻 tag 之间的提交历史
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: 生成校验和
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: 生成更新说明
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/gen-changelog.sh "$TAG" > NOTES.md
+
+      # gh 是 runner 自带的，不必再引一个第三方 action。
+      # 重跑同一个 tag 走 edit/upload 而不是报错，保证幂等。
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，更新说明并覆盖附件"
+            gh release edit "$TAG" --notes-file NOTES.md
+            gh release upload "$TAG" artifacts/*.tar.gz artifacts/checksums.txt --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file NOTES.md \
+              --verify-tag \
+              artifacts/*.tar.gz artifacts/checksums.txt
+          fi

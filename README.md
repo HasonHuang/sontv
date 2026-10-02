@@ -6,6 +6,14 @@
 
 > 本仓库是 PHP 版 [mytv](https://github.com/HasonHuang/mytv) 的 Go 重写。
 
+## 快速开始
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | bash
+```
+
+装到 `/opt/sontv`，支持 Debian / Ubuntu / Alpine 与 amd64 / arm64，下载后按 `checksums.txt` 校验 sha256。Alpine 默认不带 bash，把 `bash` 换成 `sh` 即可。选项与手动安装见[安装](#安装)。
+
 ---
 
 ## 功能
@@ -52,6 +60,48 @@
 
 ## 安装
 
+### 一键安装
+
+下载 [Releases](https://github.com/HasonHuang/sontv/releases) 里对应架构的产物，装到 `/opt/sontv`：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | bash
+```
+
+支持 Debian / Ubuntu / Alpine，会自动认架构（`amd64` / `arm64`）与 libc、按 `checksums.txt` 校验 sha256，下载失败或校验不过就直接退出。装完只放两样东西：
+
+```
+/opt/sontv/sontv-go        二进制
+/opt/sontv/config.json     配置（docs/config.example.json 的内容）
+```
+
+`tokens.txt` 脚本不会碰，需要你自己建（见[生成 token](#生成-token)）。重跑脚本是升级：二进制直接覆盖，**已存在的 `config.json` 与 `tokens.txt` 保持不变**。
+
+常用选项（通过管道传参要放在 `-s --` 之后）：
+
+```bash
+# 装指定版本
+curl -fsSL .../install.sh | bash -s -- --version v0.1.0
+
+# 换安装目录
+curl -fsSL .../install.sh | bash -s -- --dir /usr/local/sontv
+
+# 连带注册成 systemd 服务并启动
+curl -fsSL .../install.sh | bash -s -- --service
+
+# 覆盖已有配置（默认保留）
+curl -fsSL .../install.sh | bash -s -- --force-config
+```
+
+`./install.sh --help` 可看全部选项；同名环境变量（`SONTV_VERSION`、`SONTV_INSTALL_DIR`、`SONTV_SERVICE` …）等价。不带参数直接跑 `./install.sh` 也行，适合先下载再执行。`--service` 会建一个 `sontv` 系统用户、写 `/etc/systemd/system/sontv.service` 并 `enable --now`；非 systemd 系统（Alpine 的 OpenRC）会跳过并提示。
+
+> **Alpine 上用 `| sh` 代替 `| bash`**：Alpine 默认不带 bash。脚本本身是 POSIX sh，`sh` 与 `bash` 都能跑：
+>
+> ```bash
+> apk add --no-cache curl   # 或者直接用 busybox 自带的 wget
+> wget -qO- https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | sh
+> ```
+
 ### 从源码构建
 
 需要 **Go 1.24 或更高版本**（纯标准库，无需 `go mod download`）：
@@ -69,6 +119,7 @@ GOOS=linux GOARCH=amd64 go build -o bin/sontv-go ./cmd/sontv-go
 
 ### 安装到 /opt/sontv
 
+不想用一键脚本时，可以手动摆（最终布局与脚本一致）：
 二进制与配置文件同级摆放，放好后直接起即可：
 
 ```bash

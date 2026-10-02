@@ -13,7 +13,7 @@ func TestDefaultConfig(t *testing.T) {
 	if c.TokensFile != "/opt/sontv/tokens.txt" || c.DefaultTTLHours != 24 {
 		t.Fatalf("凭据缺省不符: %+v", c)
 	}
-	if c.UpstreamM3U != "https://cdn.qd.je/mytv0.m3u" || c.Listen != "0.0.0.0:9900" {
+	if c.UpstreamM3U != "https://cdn.qd.je/live.m3u" || c.Listen != "0.0.0.0:9900" {
 		t.Fatalf("上游/监听缺省不符: %+v", c)
 	}
 	if !c.UnwrapRemoteProxy {

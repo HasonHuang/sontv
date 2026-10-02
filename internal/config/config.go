@@ -33,7 +33,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		TokensFile:        "/opt/sontv/tokens.txt",
 		DefaultTTLHours:   24,
-		UpstreamM3U:       "https://cdn.qd.je/mytv0.m3u",
+		UpstreamM3U:       "https://cdn.qd.je/live.m3u",
 		Listen:            DefaultListen,
 		UnwrapRemoteProxy: true,
 	}

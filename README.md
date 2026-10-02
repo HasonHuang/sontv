@@ -189,7 +189,7 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
 {
   "tokens_file": "/opt/sontv/tokens.txt",
   "default_ttl_hours": 24,
-  "upstream_m3u": "https://cdn.qd.je/mytv0.m3u",
+  "upstream_m3u": "https://cdn.qd.je/live.m3u",
   "listen": "0.0.0.0:9900",
   "unwrap_remote_proxy": true
 }
@@ -199,7 +199,7 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
 | --- | --- | --- | --- |
 | `tokens_file` | string | `/opt/sontv/tokens.txt` | token 表路径 |
 | `default_ttl_hours` | int | `24` | 临时 token 的默认有效期（小时）；表里没写第三列的行用它。≤0 时静默回落为 24 |
-| `upstream_m3u` | string | `https://cdn.qd.je/mytv0.m3u` | `/sub` 未带 `url=` 时使用的上游播放列表 |
+| `upstream_m3u` | string | `https://cdn.qd.je/live.m3u` | `/sub` 未带 `url=` 时使用的上游播放列表 |
 | `listen` | string | `0.0.0.0:9900` | 监听地址。绑 `0.0.0.0` 才能被容器端口转发（`-p 9900:9900` 转发到容器 IP，只听 `127.0.0.1` 会无人应答）；裸机部署因此默认对全网卡开放，鉴权由 token 把关，只想本机可达就显式写 `127.0.0.1:9900` |
 | `unwrap_remote_proxy` | bool | `true` | 是否把第三方代理链接解包成本站单跳 |
 

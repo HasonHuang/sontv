@@ -93,6 +93,8 @@ $RECYCLE.BIN/
 logs/
 tmp/
 temp/
+# 上面的 temp/ 会匹配任意层级的同名目录，但 internal/temp 是真实源码包，必须纳入版本管理。
+!internal/temp/
 *.tmp
 *.bak
 

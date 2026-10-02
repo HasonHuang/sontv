@@ -1,0 +1,464 @@
+<title>IPTV Proxy 上手</title>
+<style>
+/* 设计取向：沿用 IPTV Proxy 面板自身的青绿科技系，让说明书与产品同源。
+   排版取「操作台」路线——命令、地址、字段名一律等宽字体，正文用 Plex Sans 承担叙述。
+   布局是单列阅读宽度 + 吸顶进度条；每一步做成带「完成标志」的卡片，
+   因为新手最需要知道的不是有哪些功能，而是每一步做到哪算完。 */
+:root{
+  --bg:#f4f6f7; --bg2:#e9eef1; --card:#ffffff; --card2:#f7f9fa;
+  --text:#0f1b21; --text2:#4d5966; --text3:#7c8894;
+  --line:#dbe3e8; --line2:#c4d0d8;
+  --accent:#0f766e; --accent-soft:#ddf1ee; --accent-line:#0f766e;
+  --warn:#a45b09; --warn-soft:#fdf2e0; --warn-line:#d99b3a;
+  --ok:#15803d; --ok-soft:#e0f5e7;
+  --code-bg:#0d1418; --code-fg:#dfe9ee; --code-dim:#7d8f9b; --code-key:#5eead4;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --step:1.35rem;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1114; --bg2:#131b21; --card:#151d23; --card2:#1a232a;
+  --text:#e4edf2; --text2:#93a3af; --text3:#6c7c88;
+  --line:#232f38; --line2:#31404b;
+  --accent:#2dd4bf; --accent-soft:#0d3733;
+  --warn:#fbbf24; --warn-soft:#38290c; --warn-line:#a16207;
+  --ok:#4ade80; --ok-soft:#123021;
+  --code-bg:#05090c; --code-fg:#dfe9ee; --code-dim:#7d8f9b; --code-key:#5eead4;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1114; --bg2:#131b21; --card:#151d23; --card2:#1a232a;
+  --text:#e4edf2; --text2:#93a3af; --text3:#6c7c88;
+  --line:#232f38; --line2:#31404b;
+  --accent:#2dd4bf; --accent-soft:#0d3733;
+  --warn:#fbbf24; --warn-soft:#38290c; --warn-line:#a16207;
+  --ok:#4ade80; --ok-soft:#123021;
+  --code-bg:#05090c; --code-fg:#dfe9ee; --code-dim:#7d8f9b; --code-key:#5eead4;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:78px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:16.5px;line-height:1.78;
+  -webkit-font-smoothing:antialiased;
+  padding-inline:20px;
+}
+.wrap{max-width:760px;margin:0 auto}
+
+h1,h2,h3{line-height:1.25;text-wrap:balance;margin:0}
+h1{font-size:clamp(30px,6vw,42px);letter-spacing:-.028em;font-weight:700;margin:0 0 14px}
+h2{font-size:23px;letter-spacing:-.015em;margin:0 0 8px}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.87em}
+p code,li code,td code{background:var(--card2);border:1px solid var(--line);
+  padding:.1em .4em;border-radius:4px;white-space:nowrap;color:var(--text)}
+.mono{font-family:var(--mono)}
+strong{font-weight:600}
+
+/* ── 吸顶进度 ── */
+.bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:transparent}
+.bar i{display:block;height:100%;width:0;background:var(--accent);
+  transition:width .12s linear}
+.topbar{position:sticky;top:0;z-index:50;
+  background:color-mix(in srgb,var(--bg) 90%,transparent);
+  backdrop-filter:saturate(1.5) blur(10px);
+  border-bottom:1px solid var(--line);
+  padding-block:env(safe-area-inset-top,0px) 0}
+.topbar .wrap{display:flex;align-items:center;gap:14px;height:54px}
+.topbar .tt{font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.topbar .sp{flex:1}
+.topbar nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.topbar nav::-webkit-scrollbar{display:none}
+.topbar nav a{font-family:var(--mono);font-size:12px;color:var(--text2);
+  text-decoration:none;padding:5px 9px;border-radius:5px;white-space:nowrap}
+.topbar nav a:hover{color:var(--accent);background:var(--accent-soft)}
+.topbar nav a.full{color:var(--accent);font-weight:600}
+.topbar nav a.full::after{content:" ↗";opacity:.6}
+
+/* ── Hero ── */
+.hero{padding-block:56px 36px}
+.hero .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+.hero p.lede{font-size:19px;color:var(--text2);max-width:34em;margin:0 0 4px}
+.hero p.lede b{color:var(--text);font-weight:600}
+
+/* ── 目标卡 ── */
+.goals{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;margin-top:28px;grid-template-columns:1fr}
+@media(min-width:640px){.goals{grid-template-columns:repeat(3,1fr)}}
+.goals div{background:var(--card);padding:16px 18px}
+.goals dt{font-family:var(--mono);font-size:11px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--text3);margin:0 0 5px}
+.goals dd{margin:0;font-size:15px;color:var(--text2);line-height:1.6}
+.goals dd b{display:block;color:var(--text);font-size:16.5px;font-weight:600;margin-bottom:3px}
+
+/* ── 步骤 ── */
+.step{padding-block:44px;border-top:1px solid var(--line)}
+.step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.step-n{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);
+  letter-spacing:.1em;flex:none;padding-top:2px}
+.step h2{margin:0}
+.step .sub{color:var(--text2);margin:0 0 20px;font-size:16px}
+
+.step ul,ol{margin:0 0 16px;padding-left:22px}
+li{margin-bottom:7px}
+li::marker{color:var(--text3)}
+
+/* 面板路径 */
+.path{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:13.5px;color:var(--text);
+  background:var(--card);border:1px solid var(--line2);
+  border-radius:6px;padding:5px 11px;margin:0 0 12px}
+.path b{font-weight:600;color:var(--accent)}
+.path .sepr{color:var(--text3)}
+
+/* ── 代码块 ── */
+.code{background:var(--code-bg);border-radius:10px;overflow:hidden;margin:0 0 16px}
+.code .hd{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  border-bottom:1px solid #1c262d;font-family:var(--mono);
+  font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--code-dim)}
+.code .cp{margin-left:auto;background:#1a242b;color:var(--code-fg);
+  border:1px solid #2b3740;border-radius:5px;padding:3px 11px;
+  font-size:11px;cursor:pointer;letter-spacing:.02em;text-transform:none;
+  font-family:var(--sans)}
+.code .cp:hover{border-color:var(--accent);color:var(--code-key)}
+.code .cp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.code pre{margin:0;padding:14px 16px;font-family:var(--mono);font-size:13.5px;
+  line-height:1.7;color:var(--code-fg);white-space:pre-wrap;
+  overflow-wrap:anywhere;overflow-x:auto}
+.code pre .p{color:var(--code-dim)}
+.code pre .k{color:var(--code-key)}
+
+/* ── 完成标志 ── */
+.done{display:flex;gap:11px;align-items:flex-start;background:var(--ok-soft);
+  border:1px solid color-mix(in srgb,var(--ok) 28%,transparent);
+  border-radius:9px;padding:13px 16px;font-size:15px;line-height:1.65}
+.done .mk{flex:none;font-family:var(--mono);font-weight:700;color:var(--ok);margin-top:1px}
+.done b{color:var(--ok);font-weight:600}
+.done .mono{font-size:13.5px;word-break:break-all}
+
+/* ── 提示 ── */
+.note{border-radius:9px;padding:13px 16px;font-size:15px;line-height:1.7;
+  border:1px solid var(--line);background:var(--card2);color:var(--text2);margin:0 0 16px}
+.note b{color:var(--text)}
+.note.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+.note.warn b{color:var(--warn)}
+.note:last-child{margin-bottom:0}
+
+/* ── 选择卡 ── */
+.pick{border:1px solid var(--line2);border-left:3px solid var(--accent);
+  border-radius:8px;padding:15px 18px;background:var(--card);margin:0 0 14px}
+.pick .lb{font-family:var(--mono);font-size:11px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+.pick h3{font-size:16px;margin:0 0 4px}
+.pick p{margin:0;font-size:15px;color:var(--text2);line-height:1.65}
+
+/* ── 表格 ── */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:9px;
+  background:var(--card);margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:15px;min-width:420px}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text3);font-weight:600;background:var(--card2);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+
+/* ── 排错 ── */
+.fix{counter-reset:fx;display:grid;gap:12px}
+.fix > div{background:var(--card);border:1px solid var(--line);
+  border-radius:9px;padding:15px 18px;display:grid;
+  grid-template-columns:24px minmax(0,1fr);gap:12px;align-items:baseline}
+.fix .n{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent)}
+.fix h3{margin:0 0 3px;font-size:16px}
+.fix p{margin:0;font-size:14.5px;color:var(--text2);line-height:1.65}
+
+/* ── 截图 ── */
+.shot{margin:0 0 16px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.shot img{width:100%;height:auto;display:block}
+.shot figcaption{padding:11px 15px;border-top:1px solid var(--line);
+  font-size:14px;color:var(--text2);line-height:1.6}
+.shot figcaption b{color:var(--text)}
+
+/* ── 更多文档 ── */
+.more{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden}
+@media(min-width:560px){.more{grid-template-columns:1fr 1fr}}
+.more a{display:block;background:var(--card);padding:14px 17px;text-decoration:none;
+  color:inherit;min-width:0}
+.more a:hover{background:var(--card2)}
+.more .f{font-family:var(--mono);font-size:13px;color:var(--accent);
+  display:block;margin-bottom:3px;word-break:break-all}
+.more .d{font-size:13.5px;color:var(--text2);line-height:1.55}
+
+footer{margin-top:52px;padding-block:26px 44px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--text3);line-height:1.7}
+footer .mono{color:var(--text2)}
+
+@media(max-width:560px){
+  body{font-size:16px;padding-inline:16px}
+  .hero{padding-block:34px 26px}
+  .hero p.lede{font-size:17.5px}
+  .step{padding-block:34px}
+  h2{font-size:21px}
+}
+</style>
+
+<div class="bar"><i id="prog"></i></div>
+
+<div class="topbar"><div class="wrap">
+  <span class="tt">IPTV Proxy 上手</span>
+  <span class="sp"></span>
+  <nav>
+    <a class="full" href="iptv-proxy-reference.html">完整手册</a>
+    <a href="#s1">安装</a>
+    <a href="#s2">登录</a>
+    <a href="#s3">导入</a>
+    <a href="#s4">订阅</a>
+    <a href="#trouble">排错</a>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">第一次用 · 约 15 分钟</p>
+  <h1>把手上的订阅，<br>变成走你自己服务器的订阅</h1>
+  <p class="lede">IPTV Proxy 把直播源中转一遍。播放器只跟你的服务器通信。<b>源地址保持隐藏</b>。你可以添加缓存、节目单和防盗链。</p>
+  <dl class="goals">
+    <div><dt>你得到</dt><dd><b>一个订阅地址</b>填入 TVBox / 影视仓 / TiviMate</dd></div>
+    <div><dt>附带</dt><dd><b>源地址保持隐藏</b>其他人无法从链接中读取源地址</dd></div>
+    <div><dt>可选</dt><dd><b>缓存与节目单</b>缩短起播时间，频道附带 EPG</dd></div>
+  </dl>
+</header>
+
+<section class="step" id="s1">
+  <div class="step-head"><span class="step-n">步骤 1</span><h2>装到服务器上</h2></div>
+  <p class="sub">用 SSH 连接服务器。执行这一条命令。</p>
+  <div class="code">
+    <div class="hd"><span>安装</span><button class="cp" data-cp="bash &lt;(curl -fsSL https://raw.githubusercontent.com/YanG-1989/rust/main/IPTV%20Proxy/iptv-proxy.sh)">复制</button></div>
+<pre><span class="p">$</span> bash &lt;(curl -fsSL https://raw.githubusercontent.com/YanG-1989/rust/main/IPTV%20Proxy/iptv-proxy.sh)</pre>
+  </div>
+  <p>选择 <b>1</b> 开始安装。安装程序询问四个问题。<b>按回车键接受默认值。</b></p>
+  <p>默认端口是 <code>19899</code>。默认账号是 <code>admin</code>。默认密码是 <code>admin</code>。</p>
+  <p>安装程序把服务注册为开机自启。服务器重启后，服务自动启动。</p>
+  <div class="done">
+    <span class="mk">✓</span>
+    <span><b>完成标志：</b>命令返回正常内容<br><span class="mono">curl -s localhost:19899/playlist.m3u</span></span>
+  </div>
+</section>
+
+<section class="step" id="s2">
+  <div class="step-head"><span class="step-n">步骤 2</span><h2>打开面板并改密码</h2></div>
+  <p class="sub">在浏览器中打开这个地址。</p>
+  <div class="code">
+    <div class="hd"><span>面板地址</span><button class="cp" data-cp="http://服务器IP:19899/panel">复制</button></div>
+<pre>http://<span class="k">服务器IP</span>:19899/panel</pre>
+  </div>
+  <p>使用账号 <code>admin</code> 和密码 <code>admin</code> 登录。</p>
+  <div class="note warn">
+    <b>登录后立即执行两项操作。</b>默认密码是公开的。<br>
+    ① <b>更改密码</b>——在面板中打开「系统设置 → 面板认证」。也可以在服务器上执行
+    <code>iptv-proxy pass 你的新密码</code>。该命令可以重置忘记的密码。<br>
+    ② <b>放行端口</b>——面板默认监听所有网卡。云服务器还需要在安全组中放行 <code>19899</code>。
+  </div>
+  <div class="done">
+    <span class="mk">✓</span>
+    <span><b>完成标志：</b>面板首页显示出来。左侧列出功能菜单。</span>
+  </div>
+  <figure class="shot">
+    <img src="ui/dashboard.png" alt="面板概览页：上方是分组数、频道数、缓存占用等统计，下方有快速操作按钮" loading="lazy">
+    <figcaption><b>安装完成时的画面。</b>首页名称是「概览」。统计卡片显示为 0。导入订阅后，统计卡片显示实际数值。左侧菜单依次是概览、缓存状态、分组管理、系统设置等。</figcaption>
+  </figure>
+</section>
+
+<section class="step" id="s3">
+  <div class="step-head"><span class="step-n">步骤 3</span><h2>把你的订阅导进来</h2></div>
+  <p class="sub">这一步包含两个操作。先确定功能，再执行导入。</p>
+
+  <h3 style="margin:0 0 8px">第一步：选择功能</h3>
+  <p>面板提供两个导入功能。二者的输出结果不同。请根据你的目标选择。</p>
+  <div class="tw"><table>
+    <thead><tr><th>你要的</th><th>用哪个</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>流量经过我的服务器</td><td><b>M3U 导入</b></td><td>生成你的频道。支持代理、缓存、防盗链</td></tr>
+      <tr><td>合并多份订阅</td><td>订阅聚合</td><td>地址保持原样。流量不经过服务器</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><b>本页只说明 M3U 导入。</b>该功能提供反向代理。</div>
+
+  <h3 style="margin:26px 0 8px">第二步：导入</h3>
+  <div class="note warn">
+    <b>M3U 导入的窗口不接受订阅地址。</b>该窗口只接受粘贴内容和上传文件。请先获取订阅内容。
+  </div>
+  <p>在你的电脑上执行以下操作。不要在服务器上执行。</p>
+  <ul>
+    <li><b>下载文件</b>——在浏览器中打开订阅地址。选择「另存为」，保存为 <code>.m3u</code> 文件。订阅内容较多时使用此方法。</li>
+    <li><b>复制内容</b>——在浏览器中打开订阅地址。选择全部内容并复制。</li>
+  </ul>
+  <p>订阅地址返回一份文本文件。文件的第一行是 <code>#EXTM3U</code>。</p>
+
+  <h3 style="margin:26px 0 8px">第三步：填写导入窗口</h3>
+  <div class="path"><b>分组管理</b><span class="sepr">→</span>M3U 导入</div>
+  <div class="tw"><table>
+    <thead><tr><th>填什么</th><th>怎么填</th></tr></thead>
+    <tbody>
+      <tr><td>选择文件 / M3U 文本</td><td>上面获取的文件或内容。二选一</td></tr>
+      <tr><td>频道模式</td><td>选择 <code>Proxy</code>。该模式支持的功能最完整</td></tr>
+      <tr><td>导入策略</td><td>选择 <code>追加</code>。该策略跳过同名的分组</td></tr>
+    </tbody>
+  </table></div>
+  <p>点击「开始导入」。等待数秒。频道显示在分组列表中。</p>
+
+  <div class="note">
+    <b>导入多份订阅：</b>对每份订阅分别执行一次导入。每份订阅生成一个独立的分组。总订阅地址包含全部分组。参见步骤 4。
+  </div>
+
+  <div class="done">
+    <span class="mk">✓</span>
+    <span><b>完成标志：</b>「分组管理」页显示分组。展开分组可以查看频道列表。</span>
+  </div>
+  <figure class="shot">
+    <img src="ui/groups.png" alt="分组管理页：顶部是 M3U 导入等按钮，中间是分组列表" loading="lazy">
+    <figcaption><b>导入结果。</b>导入前，该页显示「暂无分组」。导入后，该页列出分组名称和频道数量。每个分组右侧有复制订阅地址的按钮。</figcaption>
+  </figure>
+</section>
+
+<section class="step" id="s4">
+  <div class="step-head"><span class="step-n">步骤 4</span><h2>拿到地址，填进播放器</h2></div>
+  <p class="sub">面板提供两种订阅地址。</p>
+
+  <div class="pick">
+    <p class="lb">推荐</p>
+    <h3>总订阅地址</h3>
+    <p>该地址包含全部分组。多份订阅导入后使用该地址。</p>
+  </div>
+  <div class="code">
+    <div class="hd"><span>总订阅</span><button class="cp" data-cp="http://服务器IP:19899/playlist.m3u">复制</button></div>
+<pre>http://<span class="k">服务器IP</span>:19899/playlist.m3u</pre>
+  </div>
+
+  <div class="pick" style="border-left-color:var(--line2)">
+    <p class="lb" style="color:var(--text3)">可选</p>
+    <h3>单个分组地址</h3>
+    <p>该地址只包含一个分组。在分组列表中点击该分组右侧的复制按钮。</p>
+  </div>
+  <div class="code">
+    <div class="hd"><span>单个分组</span><button class="cp" data-cp="http://服务器IP:19899/分组ID/playlist.m3u">复制</button></div>
+<pre>http://<span class="k">服务器IP</span>:19899/<span class="k">分组ID</span>/playlist.m3u</pre>
+  </div>
+
+  <p>在 TVBox、影视仓、TiviMate 或 Kodi 的订阅设置中粘贴该地址。刷新后显示频道列表。</p>
+  <div class="done">
+    <span class="mk">✓</span>
+    <span><b>全部做完了：</b>播放器里出现频道列表，点一个能播</span>
+  </div>
+</section>
+
+<section class="step" id="trouble">
+  <div class="step-head"><span class="step-n">排错</span><h2>频道无法播放</h2></div>
+  <p class="sub">按下列顺序检查。前三步可以定位多数问题。</p>
+  <div class="fix">
+    <div>
+      <span class="n">01</span>
+      <div>
+        <h3>检查源地址</h3>
+        <p>在 VLC 中打开<b>原始订阅地址</b>。可以播放则源地址正常。继续执行下一步检查。无法播放则源站故障。IPTV Proxy 无法处理源站故障。</p>
+      </div>
+    </div>
+    <div>
+      <span class="n">02</span>
+      <div>
+        <h3>检查工作模式</h3>
+        <p>打开「分组管理」编辑分组。选择「工作模式」。按源的类型选择模式。</p>
+      </div>
+    </div>
+    <div>
+      <span class="n">03</span>
+      <div>
+        <h3>添加 UA 和 Referer</h3>
+        <p>部分源站校验请求头。导入后无法播放时，优先检查此项。编辑分组，打开「网络配置」。在 User-Agent 填入浏览器标识。在「自定义请求头」添加 <code>Referer: https://源站域名/</code>。</p>
+      </div>
+    </div>
+    <div>
+      <span class="n">04</span>
+      <div>
+        <h3>面板无法访问</h3>
+        <p>检查防火墙规则。在服务器上执行 <code>iptv-proxy log</code> 查看日志。执行 <code>iptv-proxy url</code> 确认实际地址。</p>
+      </div>
+    </div>
+    <div>
+      <span class="n">05</span>
+      <div>
+        <h3>可以播放，但无节目单</h3>
+        <p>打开「节目指南」页。检查总开关。检查频道的 <code>tvg-id</code>。打开「频道匹配」，查看「未匹配」的数量。</p>
+      </div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:16px">
+    <b>日志中的「未检测到 ffmpeg」和「未检测到 python3」是警告。</b>该警告不影响播放。仅在使用<b>定时录制</b>或 EPG 脚本源时需要安装。
+  </div>
+</section>
+
+<section class="step">
+  <div class="step-head"><span class="step-n">参考</span><h2>完整文档</h2></div>
+  <p class="sub">以下文件与本页面位于同一目录。</p>
+  <div class="more">
+    <a href="markdown/README.md"><span class="f">README.md</span><span class="d">文档导航、工作模式速查、上线安全清单</span></a>
+    <a href="markdown/iptv.md"><span class="f">iptv.md</span><span class="d">订阅接入入门。含排错与功能配合</span></a>
+    <a href="markdown/fields-common.md"><span class="f">fields-common.md</span><span class="d">六种模式共用的字段定义</span></a>
+    <a href="markdown/panel.md"><span class="f">panel.md</span><span class="d">面板 13 个页面说明、配置项、运维命令</span></a>
+    <a href="markdown/mode-proxy.md"><span class="f">mode-*.md</span><span class="d">六种工作模式各自的配置与调优</span></a>
+    <a href="markdown/resource.md"><span class="f">resource.md</span><span class="d">资源占用实测数据。用于选择服务器规格</span></a>
+  </div>
+</section>
+
+<footer>
+  IPTV Proxy v0.8.2 · 面板端口 19899<br>
+  上游项目 <span class="mono">github.com/YanG-1989/rust</span><br>
+  本页写于 2026-10-02。数据来自实机采集。界面截图来自同一台机器。<br>
+  面板默认账号和密码是公开的。请立即更改。
+</footer>
+
+</div>
+
+<script>
+// 复制按钮：clipboard 在部分桌面应用与 App 内嵌视图会拒绝，失败时回退为选中文本
+document.querySelectorAll('.cp').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = btn.getAttribute('data-cp');
+    var pre = btn.closest('.code').querySelector('pre');
+    var done = function (ok) {
+      var old = btn.textContent;
+      btn.textContent = ok ? '已复制' : '请手动选中';
+      setTimeout(function () { btn.textContent = old; }, 1500);
+      if (!ok) {
+        var r = document.createRange();
+        r.selectNodeContents(pre);
+        var s = window.getSelection();
+        s.removeAllRanges(); s.addRange(r);
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else { done(false); }
+  });
+});
+
+// 阅读进度
+var prog = document.getElementById('prog');
+var ticking = false;
+function update() {
+  var h = document.documentElement.scrollHeight - window.innerHeight;
+  prog.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + '%';
+  ticking = false;
+}
+window.addEventListener('scroll', function () {
+  if (!ticking) { ticking = true; requestAnimationFrame(update); }
+}, { passive: true });
+update();
+</script>

@@ -1,0 +1,1270 @@
+<title>IPTV Proxy 完整手册</title>
+<style>/* 设计取向：与上手页同一套视觉语言（面板青绿 + IBM Plex），但这是查阅型文档，
+   密度更高、双栏、左侧深色导航。排版规则同 STE100 改写后的 Markdown：
+   表格为主、说明克制、无装饰性图形。 */
+:root{
+  --bg:#f4f6f7; --bg2:#e9eef1; --card:#ffffff; --card2:#f7f9fa;
+  --text:#0f1b21; --text2:#4d5966; --text3:#7c8894;
+  --line:#dbe3e8; --line2:#c4d0d8;
+  --accent:#0f766e; --accent-soft:#ddf1ee;
+  --warn:#a45b09; --warn-soft:#fdf2e0;
+  --side-bg:#12201f; --side-fg:#a8bfba; --side-fg2:#e6f0ee;
+  --code-bg:#0d1418; --code-fg:#dfe9ee;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1114; --bg2:#131b21; --card:#151d23; --card2:#1a232a;
+  --text:#e4edf2; --text2:#93a3af; --text3:#6c7c88;
+  --line:#232f38; --line2:#31404b;
+  --accent:#2dd4bf; --accent-soft:#0d3733;
+  --warn:#fbbf24; --warn-soft:#38290c;
+  --side-bg:#080d0e; --side-fg:#8fa5a1; --side-fg2:#e6f0ee;
+  --code-bg:#05090c; --code-fg:#dfe9ee;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1114; --bg2:#131b21; --card:#151d23; --card2:#1a232a;
+  --text:#e4edf2; --text2:#93a3af; --text3:#6c7c88;
+  --line:#232f38; --line2:#31404b;
+  --accent:#2dd4bf; --accent-soft:#0d3733;
+  --warn:#fbbf24; --warn-soft:#38290c;
+  --side-bg:#080d0e; --side-fg:#8fa5a1; --side-fg2:#e6f0ee;
+  --code-bg:#05090c; --code-fg:#dfe9ee;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:16px;line-height:1.78;
+  -webkit-font-smoothing:antialiased}
+
+h1,h2,h3,h4{line-height:1.3;text-wrap:balance;margin:0;font-weight:600}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.87em}
+p code,li code,td code,blockquote code{background:var(--card2);border:1px solid var(--line);
+  padding:.1em .4em;border-radius:4px;white-space:nowrap;color:var(--text)}
+pre code{background:none;border:0;padding:0;white-space:pre}
+strong{font-weight:600;color:var(--text)}
+hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+
+/* 顶栏 */
+.top{position:sticky;top:0;z-index:40;
+  background:color-mix(in srgb,var(--bg) 90%,transparent);
+  backdrop-filter:saturate(1.5) blur(10px);border-bottom:1px solid var(--line);
+  padding-block:env(safe-area-inset-top,0px) 0}
+.top .tw{display:flex;align-items:center;gap:14px;height:52px;padding-inline:20px}
+.top .tt{font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.top .sp{flex:1}
+.top .home{font-family:var(--mono);font-size:12.5px;color:var(--text2);
+  text-decoration:none;padding:5px 11px;border:1px solid var(--line2);
+  border-radius:6px;white-space:nowrap}
+.top .home:hover{border-color:var(--accent);color:var(--accent)}
+
+/* 双栏 */
+.shell{display:grid;grid-template-columns:262px minmax(0,1fr);
+  gap:0;max-width:1360px;margin:0 auto;align-items:start}
+.side{position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;
+  background:var(--side-bg);padding:20px 0 40px;
+  scrollbar-width:thin}
+.side nav{display:flex;flex-direction:column}
+.side a{display:block;padding:5px 18px;text-decoration:none;
+  color:var(--side-fg);font-size:13.5px;line-height:1.5}
+.side a.nd{font-weight:600;color:var(--side-fg2);margin-top:14px;padding-top:7px;
+  border-top:1px solid rgba(255,255,255,.07)}
+.side a.nd:first-child{margin-top:0;border-top:0}
+.side a.ns2{padding-left:30px;font-size:13px}
+.side a.ns3{padding-left:42px;font-size:12.5px;color:color-mix(in srgb,var(--side-fg) 78%,transparent)}
+.side a:hover{color:var(--side-fg2);background:rgba(255,255,255,.05)}
+.side a.on{color:#5eead4;background:rgba(94,234,212,.09)}
+.side a.on2{color:#5eead4}
+
+.content{padding:30px 34px 90px;min-width:0}
+.doc{padding-bottom:20px}
+.doc + .doc{border-top:3px solid var(--line);margin-top:44px;padding-top:38px}
+.src{display:inline-block;font-family:var(--mono);font-size:11.5px;
+  color:var(--text3);text-decoration:none;border:1px solid var(--line);
+  border-radius:5px;padding:3px 9px;margin-bottom:18px}
+.src:hover{color:var(--accent);border-color:var(--accent)}
+
+.content h1{font-size:30px;letter-spacing:-.025em;margin:0 0 14px;
+  padding-bottom:12px;border-bottom:2px solid var(--accent)}
+.content h2{font-size:22px;letter-spacing:-.015em;margin:38px 0 12px;
+  padding-left:11px;border-left:3px solid var(--accent)}
+.content h3{font-size:17.5px;margin:26px 0 8px;color:var(--text)}
+.content h4{font-size:15.5px;margin:20px 0 6px;color:var(--text2)}
+
+/* 表格 */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:9px;
+  background:var(--card);margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:400px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text3);font-weight:600;background:var(--card2);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+
+/* 代码块 */
+pre.code{background:var(--code-bg);color:var(--code-fg);border-radius:9px;
+  padding:14px 16px;margin:0 0 16px;overflow-x:auto;
+  font-family:var(--mono);font-size:13px;line-height:1.7}
+
+/* 引用 */
+blockquote{margin:0 0 16px;padding:12px 16px;background:var(--card2);
+  border-left:3px solid var(--line2);border-radius:0 8px 8px 0;color:var(--text2)}
+blockquote p:last-child{margin-bottom:0}
+blockquote strong{color:var(--text)}
+
+/* 列表 */
+ul,ol{margin:0 0 16px;padding-left:22px}
+li{margin-bottom:6px}
+li>ul,li>ol{margin:6px 0 0}
+li>blockquote,li>p{margin:6px 0}
+li::marker{color:var(--text3)}
+
+/* 页脚 */
+.ft{border-top:1px solid var(--line);padding:22px 20px 40px;
+  font-size:13.5px;color:var(--text3);line-height:1.7}
+.ft .tw{max-width:1360px;margin:0 auto}
+.ft .mono{font-family:var(--mono);color:var(--text2)}
+
+@media(max-width:900px){
+  html{scroll-padding-top:56px}
+  .shell{grid-template-columns:1fr}
+  .side{position:static;height:auto;max-height:none;
+    padding:12px 0;border-bottom:1px solid var(--line)}
+  .side nav{flex-direction:row;overflow-x:auto;gap:4px;padding:0 16px 10px;
+    scrollbar-width:none}
+  .side nav::-webkit-scrollbar{display:none}
+  .side a{white-space:nowrap;padding:5px 11px;border-radius:6px;
+    background:rgba(255,255,255,.05)}
+  .side a.nd{margin-top:0;border-top:0;padding-top:5px}
+  .side .ns{display:none}
+  .side a.ns2,.side a.ns3{display:none}
+  .content{padding:22px 16px 64px}
+  .content h1{font-size:25px}
+  .content h2{font-size:20px;margin-top:30px}
+  .doc + .doc{margin-top:34px;padding-top:28px}
+  .top .tw{padding-inline:16px;height:48px}
+  .top .tt{font-size:14px}
+  body{font-size:15.5px}
+}</style>
+
+<header class="top"><div class="tw">
+  <span class="tt">IPTV Proxy 完整手册</span>
+  <span class="sp"></span>
+  <a class="home" href="iptv-proxy-handbook.html">上手页 →</a>
+</div></header>
+
+<div class="shell">
+<aside class="side"><nav id="nav"><a class="nd" href="#导航与速查" data-d="导航与速查">导航与速查</a><div class="ns"><a class="ns2" href="#IPTV-Proxy-使用文档" data-d="导航与速查">📺 IPTV Proxy 使用文档</a><a class="ns2" href="#三分钟跑起来" data-d="导航与速查">三分钟跑起来</a><a class="ns2" href="#我想做什么" data-d="导航与速查">我想做什么</a><a class="ns2" href="#六种工作模式" data-d="导航与速查">六种工作模式</a><a class="ns2" href="#两个常见错误" data-d="导航与速查">两个常见错误</a><a class="ns3" href="#订阅聚合不做反向代理" data-d="导航与速查">订阅聚合不做反向代理</a><a class="ns3" href="#M3U-导入不接受订阅地址" data-d="导航与速查">M3U 导入不接受订阅地址</a><a class="ns2" href="#上线前安全清单" data-d="导航与速查">上线前安全清单</a><a class="ns2" href="#文档结构" data-d="导航与速查">文档结构</a><a class="ns2" href="#已知问题" data-d="导航与速查">已知问题</a><a class="ns3" href="#回源流量统计失效" data-d="导航与速查">回源流量统计失效</a><a class="ns3" href="#无法调整分组顺序" data-d="导航与速查">无法调整分组顺序</a><a class="ns2" href="#项目信息" data-d="导航与速查">项目信息</a></div><a class="nd" href="#订阅接入入门" data-d="订阅接入入门">订阅接入入门</a><div class="ns"><a class="ns2" href="#IPTV-Proxy-订阅接入入门" data-d="订阅接入入门">IPTV Proxy 订阅接入入门</a><a class="ns2" href="#先看这里-两种导入方式的区别" data-d="订阅接入入门">先看这里：两种导入方式的区别</a><a class="ns2" href="#三分钟速通" data-d="订阅接入入门">三分钟速通</a><a class="ns2" href="#第-1-步-安装" data-d="订阅接入入门">第 1 步：安装</a><a class="ns2" href="#第-2-步-把你的订阅导进来" data-d="订阅接入入门">第 2 步：把你的订阅导进来</a><a class="ns3" href="#获取订阅内容" data-d="订阅接入入门">获取订阅内容</a><a class="ns3" href="#执行导入" data-d="订阅接入入门">执行导入</a><a class="ns3" href="#频道模式怎么选" data-d="订阅接入入门">频道模式怎么选</a><a class="ns3" href="#导入策略" data-d="订阅接入入门">导入策略</a><a class="ns3" href="#导入后会自动处理的东西" data-d="订阅接入入门">导入后会自动处理的东西</a><a class="ns2" href="#第-3-步-拿到订阅地址" data-d="订阅接入入门">第 3 步：拿到订阅地址</a><a class="ns3" href="#单个分组地址" data-d="订阅接入入门">单个分组地址</a><a class="ns3" href="#总订阅地址" data-d="订阅接入入门">总订阅地址</a><a class="ns2" href="#第-4-步-自定义顺序" data-d="订阅接入入门">第 4 步：自定义顺序</a><a class="ns2" href="#第-5-步-让频道真的能播" data-d="订阅接入入门">第 5 步：让频道真的能播</a><a class="ns3" href="#检查源地址" data-d="订阅接入入门">检查源地址</a><a class="ns3" href="#检查工作模式" data-d="订阅接入入门">检查工作模式</a><a class="ns3" href="#添加-UA-和-Referer" data-d="订阅接入入门">添加 UA 和 Referer</a><a class="ns2" href="#第-6-步-让订阅自动更新-不反代" data-d="订阅接入入门">第 6 步：让订阅自动更新（不反代）</a><a class="ns3" href="#过滤频道" data-d="订阅接入入门">过滤频道</a><a class="ns3" href="#全局排除" data-d="订阅接入入门">全局排除</a><a class="ns3" href="#分组整理" data-d="订阅接入入门">分组整理</a><a class="ns2" href="#第-7-步-功能之间的关系" data-d="订阅接入入门">第 7 步：功能之间的关系</a><a class="ns3" href="#频道的来源和归属" data-d="订阅接入入门">频道的来源和归属</a><a class="ns3" href="#分组管理与订阅聚合的关系" data-d="订阅接入入门">分组管理与订阅聚合的关系</a><a class="ns3" href="#顺序-优先级与合并位置" data-d="订阅接入入门">顺序、优先级与合并位置</a><a class="ns3" href="#访问范围与总订阅" data-d="订阅接入入门">访问范围与总订阅</a><a class="ns3" href="#工作模式与录制-回看-预载" data-d="订阅接入入门">工作模式与录制、回看、预载</a><a class="ns3" href="#Token-与地址分发" data-d="订阅接入入门">Token 与地址分发</a><a class="ns3" href="#EPG-tvg-id" data-d="订阅接入入门">EPG × tvg-id</a><a class="ns3" href="#台标与频道" data-d="订阅接入入门">台标与频道</a><a class="ns3" href="#监控与频道数量" data-d="订阅接入入门">监控与频道数量</a><a class="ns2" href="#第-8-步-验证结果" data-d="订阅接入入门">第 8 步：验证结果</a><a class="ns2" href="#排错" data-d="订阅接入入门">排错</a><a class="ns3" href="#常见问题" data-d="订阅接入入门">常见问题</a><a class="ns2" href="#命令速查" data-d="订阅接入入门">命令速查</a><a class="ns2" href="#参考文档" data-d="订阅接入入门">参考文档</a></div><a class="nd" href="#工作模式-反向代理" data-d="工作模式-反向代理">工作模式 · 反向代理</a><div class="ns"><a class="ns2" href="#工作模式-反向代理-Proxy" data-d="工作模式-反向代理">工作模式 · 反向代理（Proxy）</a><a class="ns2" href="#数据怎么流" data-d="工作模式-反向代理">数据怎么流</a><a class="ns2" href="#使用条件" data-d="工作模式-反向代理">使用条件</a><a class="ns2" href="#不适用场景" data-d="工作模式-反向代理">不适用场景</a><a class="ns2" href="#本模式的全部配置项" data-d="工作模式-反向代理">本模式的全部配置项</a><a class="ns3" href="#分组级" data-d="工作模式-反向代理">分组级</a><a class="ns3" href="#频道级" data-d="工作模式-反向代理">频道级</a><a class="ns3" href="#全局预载配置-系统设置-缓存配置" data-d="工作模式-反向代理">全局预载配置（系统设置 → 缓存配置）</a><a class="ns2" href="#上游源应该长什么样" data-d="工作模式-反向代理">上游源应该长什么样</a><a class="ns2" href="#配置步骤" data-d="工作模式-反向代理">配置步骤</a><a class="ns3" href="#1-建分组" data-d="工作模式-反向代理">1. 建分组</a><a class="ns3" href="#2-加频道" data-d="工作模式-反向代理">2. 加频道</a><a class="ns3" href="#3-补-tvg-id" data-d="工作模式-反向代理">3. 补 tvg-id</a><a class="ns3" href="#4-复制订阅地址" data-d="工作模式-反向代理">4. 复制订阅地址</a><a class="ns3" href="#5-粘进播放器" data-d="工作模式-反向代理">5. 粘进播放器</a><a class="ns3" href="#6-播不了的话-按这个顺序查" data-d="工作模式-反向代理">6. 播不了的话，按这个顺序查</a><a class="ns3" href="#7-想回看的话" data-d="工作模式-反向代理">7. 想回看的话</a><a class="ns2" href="#代价" data-d="工作模式-反向代理">代价</a><a class="ns3" href="#实测占用" data-d="工作模式-反向代理">实测占用</a><a class="ns2" href="#排错-1" data-d="工作模式-反向代理">排错</a><a class="ns2" href="#相关文档" data-d="工作模式-反向代理">相关文档</a></div><a class="nd" href="#工作模式-Remux" data-d="工作模式-Remux">工作模式 · Remux</a><div class="ns"><a class="ns2" href="#工作模式-Remux-转封装" data-d="工作模式-Remux">工作模式 · Remux 转封装</a><a class="ns2" href="#数据怎么流-1" data-d="工作模式-Remux">数据怎么流</a><a class="ns2" href="#使用条件-1" data-d="工作模式-Remux">使用条件</a><a class="ns2" href="#不适用场景-1" data-d="工作模式-Remux">不适用场景</a><a class="ns2" href="#Remux-与-Proxy-有什么区别" data-d="工作模式-Remux">Remux 与 Proxy 有什么区别</a><a class="ns2" href="#本模式的全部配置项-1" data-d="工作模式-Remux">本模式的全部配置项</a><a class="ns3" href="#分组级-1" data-d="工作模式-Remux">分组级</a><a class="ns3" href="#频道级-1" data-d="工作模式-Remux">频道级</a><a class="ns3" href="#不会出现的字段" data-d="工作模式-Remux">不会出现的字段</a><a class="ns2" href="#上游源应该长什么样-1" data-d="工作模式-Remux">上游源应该长什么样</a><a class="ns2" href="#配置步骤-1" data-d="工作模式-Remux">配置步骤</a><a class="ns2" href="#代价-1" data-d="工作模式-Remux">代价</a><a class="ns2" href="#排错-2" data-d="工作模式-Remux">排错</a><a class="ns2" href="#相关文档-1" data-d="工作模式-Remux">相关文档</a></div><a class="nd" href="#工作模式-DASH" data-d="工作模式-DASH">工作模式 · DASH</a><div class="ns"><a class="ns2" href="#工作模式-DASH-转封装" data-d="工作模式-DASH">工作模式 · DASH 转封装</a><a class="ns2" href="#数据怎么流-2" data-d="工作模式-DASH">数据怎么流</a><a class="ns2" href="#使用条件-2" data-d="工作模式-DASH">使用条件</a><a class="ns2" href="#不适用场景-2" data-d="工作模式-DASH">不适用场景</a><a class="ns2" href="#DASH-模式自动化了什么" data-d="工作模式-DASH">DASH 模式自动化了什么</a><a class="ns2" href="#本模式的全部配置项-2" data-d="工作模式-DASH">本模式的全部配置项</a><a class="ns3" href="#分组级-2" data-d="工作模式-DASH">分组级</a><a class="ns3" href="#频道级-ClearKey-解密" data-d="工作模式-DASH">频道级 · ClearKey 解密</a><a class="ns3" href="#频道级-回看保留" data-d="工作模式-DASH">频道级 · 回看保留</a><a class="ns3" href="#频道级-URL-池" data-d="工作模式-DASH">频道级 · URL 池</a><a class="ns2" href="#DASH-调优-系统设置-DASH-调优" data-d="工作模式-DASH">DASH 调优（系统设置 → DASH 调优）</a><a class="ns3" href="#播放体验-影响延迟-起播速度-卡顿稳定性" data-d="工作模式-DASH">播放体验（影响延迟、起播速度、卡顿稳定性）</a><a class="ns3" href="#网络性能-高级-默认值适用大多数场景" data-d="工作模式-DASH">网络性能（高级，默认值适用大多数场景）</a><a class="ns3" href="#特殊场景-高级参数" data-d="工作模式-DASH">特殊场景（高级参数）</a><a class="ns2" href="#上游源应该长什么样-2" data-d="工作模式-DASH">上游源应该长什么样</a><a class="ns2" href="#配置步骤-2" data-d="工作模式-DASH">配置步骤</a><a class="ns2" href="#代价-2" data-d="工作模式-DASH">代价</a><a class="ns2" href="#排错-3" data-d="工作模式-DASH">排错</a><a class="ns2" href="#相关文档-2" data-d="工作模式-DASH">相关文档</a></div><a class="nd" href="#工作模式-302-跳转" data-d="工作模式-302-跳转">工作模式 · 302 跳转</a><div class="ns"><a class="ns2" href="#工作模式-302-跳转-Redirect" data-d="工作模式-302-跳转">工作模式 · 302 跳转（Redirect）</a><a class="ns2" href="#数据怎么流-3" data-d="工作模式-302-跳转">数据怎么流</a><a class="ns2" href="#使用条件-3" data-d="工作模式-302-跳转">使用条件</a><a class="ns2" href="#不适用场景-3" data-d="工作模式-302-跳转">不适用场景</a><a class="ns2" href="#本模式的全部配置项-3" data-d="工作模式-302-跳转">本模式的全部配置项</a><a class="ns3" href="#分组级-3" data-d="工作模式-302-跳转">分组级</a><a class="ns3" href="#网络配置-分组级" data-d="工作模式-302-跳转">网络配置（分组级）</a><a class="ns3" href="#频道级-2" data-d="工作模式-302-跳转">频道级</a><a class="ns3" href="#不会出现的字段-1" data-d="工作模式-302-跳转">不会出现的字段</a><a class="ns2" href="#配置步骤-3" data-d="工作模式-302-跳转">配置步骤</a><a class="ns2" href="#代价-3" data-d="工作模式-302-跳转">代价</a><a class="ns2" href="#排错-4" data-d="工作模式-302-跳转">排错</a><a class="ns2" href="#相关文档-3" data-d="工作模式-302-跳转">相关文档</a></div><a class="nd" href="#工作模式-URL-改写" data-d="工作模式-URL-改写">工作模式 · URL 改写</a><div class="ns"><a class="ns2" href="#工作模式-URL-改写-Rewrite" data-d="工作模式-URL-改写">工作模式 · URL 改写（Rewrite）</a><a class="ns2" href="#数据怎么流-4" data-d="工作模式-URL-改写">数据怎么流</a><a class="ns2" href="#使用条件-4" data-d="工作模式-URL-改写">使用条件</a><a class="ns2" href="#不适用场景-4" data-d="工作模式-URL-改写">不适用场景</a><a class="ns2" href="#本模式的全部配置项-4" data-d="工作模式-URL-改写">本模式的全部配置项</a><a class="ns3" href="#分组级-4" data-d="工作模式-URL-改写">分组级</a><a class="ns3" href="#频道级-3" data-d="工作模式-URL-改写">频道级</a><a class="ns3" href="#不会出现的字段-2" data-d="工作模式-URL-改写">不会出现的字段</a><a class="ns2" href="#与-Redirect-的区别" data-d="工作模式-URL-改写">与 Redirect 的区别</a><a class="ns2" href="#配置步骤-4" data-d="工作模式-URL-改写">配置步骤</a><a class="ns2" href="#代价-4" data-d="工作模式-URL-改写">代价</a><a class="ns2" href="#排错-5" data-d="工作模式-URL-改写">排错</a><a class="ns2" href="#相关文档-4" data-d="工作模式-URL-改写">相关文档</a></div><a class="nd" href="#工作模式-直链" data-d="工作模式-直链">工作模式 · 直链</a><div class="ns"><a class="ns2" href="#工作模式-直链-Passthrough" data-d="工作模式-直链">工作模式 · 直链（Passthrough）</a><a class="ns2" href="#数据怎么流-5" data-d="工作模式-直链">数据怎么流</a><a class="ns2" href="#使用条件-5" data-d="工作模式-直链">使用条件</a><a class="ns2" href="#不适用场景-5" data-d="工作模式-直链">不适用场景</a><a class="ns2" href="#本模式的全部配置项-5" data-d="工作模式-直链">本模式的全部配置项</a><a class="ns3" href="#分组级-5" data-d="工作模式-直链">分组级</a><a class="ns3" href="#频道级-4" data-d="工作模式-直链">频道级</a><a class="ns3" href="#不会出现的字段-3" data-d="工作模式-直链">不会出现的字段</a><a class="ns2" href="#配置步骤-5" data-d="工作模式-直链">配置步骤</a><a class="ns2" href="#代价-5" data-d="工作模式-直链">代价</a><a class="ns2" href="#排错-6" data-d="工作模式-直链">排错</a><a class="ns2" href="#相关文档-5" data-d="工作模式-直链">相关文档</a></div><a class="nd" href="#通用字段详解" data-d="通用字段详解">通用字段详解</a><div class="ns"><a class="ns2" href="#通用配置项详解" data-d="通用字段详解">通用配置项详解</a><a class="ns2" href="#一-分组级字段" data-d="通用字段详解">一、分组级字段</a><a class="ns3" href="#分组-ID" data-d="通用字段详解">分组 ID</a><a class="ns3" href="#显示名称" data-d="通用字段详解">显示名称</a><a class="ns3" href="#工作模式" data-d="通用字段详解">工作模式</a><a class="ns3" href="#EPG-地址" data-d="通用字段详解">EPG 地址</a><a class="ns3" href="#访问范围" data-d="通用字段详解">访问范围</a><a class="ns3" href="#网络配置-分组级-1" data-d="通用字段详解">网络配置（分组级）</a><a class="ns2" href="#二-频道级字段" data-d="通用字段详解">二、频道级字段</a><a class="ns3" href="#频道-ID" data-d="通用字段详解">频道 ID</a><a class="ns3" href="#频道名称" data-d="通用字段详解">频道名称</a><a class="ns3" href="#上游-URL" data-d="通用字段详解">上游 URL</a><a class="ns3" href="#频道-Logo-URL" data-d="通用字段详解">频道 Logo URL</a><a class="ns3" href="#tvg-id" data-d="通用字段详解">tvg-id</a><a class="ns3" href="#tvg-name" data-d="通用字段详解">tvg-name</a><a class="ns3" href="#上游解析" data-d="通用字段详解">上游解析</a><a class="ns3" href="#解析脚本-脚本参数-解析缓存时长" data-d="通用字段详解">解析脚本 / 脚本参数 / 解析缓存时长</a><a class="ns2" href="#三-频道级的通用网络配置" data-d="通用字段详解">三、频道级的通用网络配置</a><a class="ns2" href="#四-通用字段速查" data-d="通用字段详解">四、通用字段速查</a><a class="ns2" href="#相关文档-6" data-d="通用字段详解">相关文档</a></div><a class="nd" href="#资源占用实测-1" data-d="资源占用实测-1">资源占用实测</a><div class="ns"><a class="ns2" href="#资源占用实测" data-d="资源占用实测-1">资源占用实测</a><a class="ns2" href="#测试环境" data-d="资源占用实测-1">测试环境</a><a class="ns2" href="#实测数据" data-d="资源占用实测-1">实测数据</a><a class="ns3" href="#三个档位" data-d="资源占用实测-1">三个档位</a><a class="ns3" href="#完整对照" data-d="资源占用实测-1">完整对照</a><a class="ns2" href="#三个反直觉的结论" data-d="资源占用实测-1">三个反直觉的结论</a><a class="ns3" href="#1-决定-CPU-的是码率-不是人数" data-d="资源占用实测-1">1. 决定 CPU 的是码率，不是人数</a><a class="ns3" href="#2-同一频道多人-比一个人还省" data-d="资源占用实测-1">2. 同一频道多人 ≈ 比一个人还省</a><a class="ns3" href="#3-冷缓存才是直播的真实成本" data-d="资源占用实测-1">3. 冷缓存才是直播的真实成本</a><a class="ns2" href="#换算到你的-VPS" data-d="资源占用实测-1">换算到你的 VPS</a><a class="ns2" href="#真正的瓶颈是带宽" data-d="资源占用实测-1">真正的瓶颈是带宽</a><a class="ns2" href="#把内存压住" data-d="资源占用实测-1">把内存压住</a><a class="ns3" href="#发片方式-整片-vs-流式" data-d="资源占用实测-1">发片方式：整片 vs 流式</a><a class="ns2" href="#怎么自己测" data-d="资源占用实测-1">怎么自己测</a><a class="ns2" href="#测试局限" data-d="资源占用实测-1">测试局限</a><a class="ns2" href="#相关文档-7" data-d="资源占用实测-1">相关文档</a></div><a class="nd" href="#面板与运维参考-1" data-d="面板与运维参考-1">面板与运维参考</a><div class="ns"><a class="ns2" href="#面板与运维参考" data-d="面板与运维参考-1">面板与运维参考</a><a class="ns2" href="#面板页面逐页说明" data-d="面板与运维参考-1">面板页面逐页说明</a><a class="ns3" href="#概览" data-d="面板与运维参考-1">📊 概览</a><a class="ns3" href="#缓存状态" data-d="面板与运维参考-1">💾 缓存状态</a><a class="ns3" href="#分组管理" data-d="面板与运维参考-1">🗂 分组管理</a><a class="ns3" href="#系统设置" data-d="面板与运维参考-1">⚙️ 系统设置</a><a class="ns3" href="#安全管控" data-d="面板与运维参考-1">🛡 安全管控</a><a class="ns3" href="#频道热度" data-d="面板与运维参考-1">🔥 频道热度</a><a class="ns3" href="#定时录制" data-d="面板与运维参考-1">⏰ 定时录制</a><a class="ns3" href="#节目指南-EPG" data-d="面板与运维参考-1">📺 节目指南（EPG）</a><a class="ns3" href="#台标管理" data-d="面板与运维参考-1">🖼 台标管理</a><a class="ns3" href="#订阅聚合" data-d="面板与运维参考-1">📥 订阅聚合</a><a class="ns3" href="#回看管理" data-d="面板与运维参考-1">⏪ 回看管理</a><a class="ns3" href="#视频素材" data-d="面板与运维参考-1">🎬 视频素材</a><a class="ns3" href="#运行日志" data-d="面板与运维参考-1">📜 运行日志</a><a class="ns2" href="#订阅与播放地址" data-d="面板与运维参考-1">订阅与播放地址</a><a class="ns2" href="#可选依赖" data-d="面板与运维参考-1">可选依赖</a><a class="ns2" href="#配置文件" data-d="面板与运维参考-1">配置文件</a><a class="ns2" href="#命令行运维" data-d="面板与运维参考-1">命令行运维</a><a class="ns3" href="#文件位置" data-d="面板与运维参考-1">文件位置</a><a class="ns3" href="#Docker-部署-本环境" data-d="面板与运维参考-1">Docker 部署（本环境）</a><a class="ns2" href="#相关文档-8" data-d="面板与运维参考-1">相关文档</a></div></nav></aside>
+<main class="content"><section class="doc" id="导航与速查"><a class="src" href="markdown/README.md">查看 Markdown 源文件</a><h1 id="IPTV-Proxy-使用文档">📺 IPTV Proxy 使用文档</h1>
+<p>IPTV Proxy 是一个直播流代理服务。它把直播源中转一遍，播放器只跟你的服务器通信。</p>
+<p>文档基于 <strong>v0.8.2</strong> 实机采集写成。采集日期：2026-10-02。</p>
+<hr>
+<h2 id="三分钟跑起来">三分钟跑起来</h2>
+<p>在服务器上执行这一条命令：</p>
+<pre class="code lang-bash"><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/YanG-1989/rust/main/IPTV%20Proxy/iptv-proxy.sh)</code></pre>
+<p>选择 <code>1</code> 开始安装。安装程序询问四个问题。<strong>直接按回车键接受默认值。</strong></p>
+<div class="tw"><table><thead><tr><th>问题</th><th>默认值</th></tr></thead><tbody><tr><td>端口</td><td><code>19899</code></td></tr><tr><td>账号</td><td><code>admin</code></td></tr><tr><td>密码</td><td><code>admin</code></td></tr></tbody></table></div>
+<p>然后在浏览器中打开面板，导入订阅，复制订阅地址。</p>
+<blockquote><p>详细步骤见 <a href="iptv.md">订阅接入入门</a>。执行时间约 15 分钟。</p>
+<p>⚠️ 安装完成后必须改密码。默认密码是公开的。</p></blockquote>
+<hr>
+<h2 id="我想做什么">我想做什么</h2>
+<div class="tw"><table><thead><tr><th>你的任务</th><th>阅读</th></tr></thead><tbody><tr><td>第一次使用。你手上有订阅地址</td><td><a href="iptv.md">订阅接入入门</a></td></tr><tr><td>选择工作模式</td><td>本文的工作模式速查表</td></tr><tr><td>查某个字段的含义</td><td><a href="fields-common.md">通用字段详解</a></td></tr><tr><td>源是 FLV / TS / MMT</td><td><a href="mode-remux.md">Remux</a></td></tr><tr><td>源是 <code>.mpd</code> 文件或带 ClearKey</td><td><a href="mode-dash.md">DASH</a></td></tr><tr><td>降低带宽费用</td><td><a href="mode-redirect.md">Redirect</a> 或 <a href="mode-rewrite.md">Rewrite</a></td></tr><tr><td>完全信任源地址</td><td><a href="mode-passthrough.md">Passthrough</a></td></tr><tr><td>设置 Token 或 IP 封禁</td><td><a href="panel.md">面板与运维参考</a></td></tr><tr><td>设置缓存、伪装或备份</td><td><a href="panel.md">面板与运维参考</a></td></tr><tr><td>选择服务器规格</td><td><a href="resource.md">资源占用实测</a></td></tr><tr><td>查询配置项名称</td><td><a href="panel.md">面板与运维参考</a></td></tr><tr><td>更改端口或重置密码</td><td><a href="panel.md">面板与运维参考</a></td></tr><tr><td>查看图解版</td><td><a href="iptv-proxy-handbook.html">可视化上手页</a></td></tr></tbody></table></div>
+<hr>
+<h2 id="六种工作模式">六种工作模式</h2>
+<p>模式设置在 <strong>分组管理 → 编辑分组 → 工作模式</strong>。同一分组内所有频道共用该模式。</p>
+<blockquote><p>项目的 README 文件写有四种模式。面板实际提供六个选项。</p></blockquote>
+<div class="tw"><table><thead><tr><th>模式</th><th>英文名</th><th>功能</th><th>使用场景</th></tr></thead><tbody><tr><td><strong>反向代理</strong></td><td>Proxy</td><td>中转流量并缓存切片</td><td><strong>通用模式</strong>。不确定时选它</td></tr><tr><td><strong>DASH 转封装</strong></td><td>DASH</td><td>把 MPD 转成 HLS，支持 ClearKey 解密</td><td>源是 <code>.mpd</code> 文件</td></tr><tr><td><strong>Remux</strong></td><td>Remux</td><td>把连续流转封装成 HLS</td><td>源是 FLV / TS / MMT</td></tr><tr><td><strong>302 跳转</strong></td><td>Redirect</td><td>返回 302 跳转。流量不经过服务器</td><td>源稳定。需要降低带宽费用</td></tr><tr><td><strong>URL 改写</strong></td><td>Rewrite</td><td>把清单中的相对地址改成绝对地址</td><td>M3U 导入的默认模式</td></tr><tr><td><strong>直链</strong></td><td>Passthrough</td><td>原样传递地址。不添加 Token</td><td>完全信任源地址</td></tr></tbody></table></div>
+<p><strong>快速判断</strong>：</p>
+<div class="tw"><table><thead><tr><th>源的类型</th><th>选择</th></tr></thead><tbody><tr><td><code>.mpd</code> 文件</td><td>DASH</td></tr><tr><td><code>.flv</code> 或 <code>.ts</code> 文件</td><td>Remux</td></tr><tr><td>其他</td><td>Proxy</td></tr></tbody></table></div>
+<p><strong>带宽费用高时</strong>：选择 Rewrite 或 Redirect。这两种模式的出网流量接近零。</p>
+<p>各模式的完整说明：</p>
+<div class="tw"><table><thead><tr><th>模式</th><th>文档</th></tr></thead><tbody><tr><td>反向代理</td><td><a href="mode-proxy.md">mode-proxy.md</a></td></tr><tr><td>Remux</td><td><a href="mode-remux.md">mode-remux.md</a></td></tr><tr><td>DASH</td><td><a href="mode-dash.md">mode-dash.md</a></td></tr><tr><td>302 跳转</td><td><a href="mode-redirect.md">mode-redirect.md</a></td></tr><tr><td>URL 改写</td><td><a href="mode-rewrite.md">mode-rewrite.md</a></td></tr><tr><td>直链</td><td><a href="mode-passthrough.md">mode-passthrough.md</a></td></tr></tbody></table></div>
+<hr>
+<h2 id="两个常见错误">两个常见错误</h2>
+<h3 id="订阅聚合不做反向代理">订阅聚合不做反向代理</h3>
+<p>订阅聚合的频道在总订阅中保留<strong>上游原始地址</strong>。播放器直接连接源站。这些频道无法使用 Token、缓存和录制。</p>
+<p>要使用反向代理，请用 <strong>分组管理 → M3U 导入</strong>。</p>
+<h3 id="M3U-导入不接受订阅地址">M3U 导入不接受订阅地址</h3>
+<p>M3U 导入的窗口只接受粘贴内容和上传文件。窗口内没有填写地址的输入框。</p>
+<p>能填写地址的是订阅聚合页。但该页面不做反向代理。</p>
+<p>详细说明见 <a href="iptv.md">订阅接入入门</a>。</p>
+<hr>
+<h2 id="上线前安全清单">上线前安全清单</h2>
+<p>逐项确认后再开放公网访问。</p>
+<ul><li>[ ] <strong>更改默认密码</strong>。执行 <code>iptv-proxy pass <新密码></code>，或在面板中修改</li><li>[ ] <strong>防火墙只放行必要的端口</strong>。不需要公网访问时，不要放行 19899</li><li>[ ] <strong>开启 Token 验证和随机频道 ID</strong>。在 <code>config.toml</code> 中设置 <code>token_enabled = true</code></li><li>[ ] <strong>开启 IP 管控</strong>。设置并发上限和白名单。将自己的地址加入白名单</li><li>[ ] <strong>多 VPS 同步使用强随机密钥</strong>。使用 IP 白名单限制对端</li><li>[ ] <strong>定期下载完整备份</strong>。在面板的系统设置页下载</li><li>[ ] <strong>设置内网监听地址</strong>。不需要公网访问时</li></ul>
+<hr>
+<h2 id="文档结构">文档结构</h2>
+<pre class="code"><code>docs/iptv-proxy/
+├── README.md                    ← 本文件。导航页
+├── iptv.md                      ← 订阅接入入门。新用户从这篇开始
+├── fields-common.md             ← 六种模式共用的字段
+├── mode-proxy.md                ┐
+├── mode-remux.md                │
+├── mode-dash.md                 ├ 六种工作模式各一篇
+├── mode-redirect.md             │
+├── mode-rewrite.md              │
+├── mode-passthrough.md          ┘
+├── resource.md                  ← 资源占用实测
+├── panel.md                     ← 面板 13 个页面逐页说明、配置、运维命令
+├── iptv-proxy-handbook.html     ← 可视化上手页
+└── ui/                          ← 界面截图</code></pre>
+<hr>
+<h2 id="已知问题">已知问题</h2>
+<p>以下问题在 v0.8.2 中存在。</p>
+<h3 id="回源流量统计失效">回源流量统计失效</h3>
+<p>面板概览页的累计回源流量始终显示 0。CPU 累计秒数和内存数值准确。</p>
+<p>使用 <code>docker stats</code> 查看真实的回源流量。</p>
+<h3 id="无法调整分组顺序">无法调整分组顺序</h3>
+<p>面板未提供分组排序功能。订阅源的优先级和分组内的频道顺序可以调整。</p>
+<hr>
+<h2 id="项目信息">项目信息</h2>
+<div class="tw"><table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>版本</td><td>0.8.2</td></tr><tr><td>面板端口</td><td>19899。默认监听所有网卡</td></tr><tr><td>作者</td><td>YanG</td></tr><tr><td>上游项目</td><td>https://github.com/YanG-1989/rust/tree/main/IPTV%20Proxy</td></tr><tr><td>文档采集日期</td><td>2026-10-02</td></tr></tbody></table></div></section><section class="doc" id="订阅接入入门"><a class="src" href="markdown/iptv.md">查看 Markdown 源文件</a><h1 id="IPTV-Proxy-订阅接入入门">IPTV Proxy 订阅接入入门</h1>
+<blockquote><p><strong>你的情况</strong>：你有一份或多份 M3U 订阅。你希望流量经过自己的服务器（反向代理）。然后把订阅地址填入播放器。</p>
+<p>本文的执行时间约 15 分钟。</p>
+<p>⚠️ <strong>面板的「订阅聚合」功能不做反向代理。</strong> 该功能只合并订阅，并保留上游地址。 「M3U 导入」功能提供反向代理。参见开头的对比表和第 6 步。</p></blockquote>
+<hr>
+<h2 id="先看这里-两种导入方式的区别">先看这里：两种导入方式的区别</h2>
+<p>面板提供两个导入功能。请根据目标选择。</p>
+<div class="tw"><table><thead><tr><th>项目</th><th><strong>M3U 导入</strong></th><th><strong>订阅聚合</strong></th></tr></thead><tbody><tr><td><strong>输出地址</strong></td><td>✅ <strong>代理地址</strong></td><td>❌ <strong>上游原始地址</strong></td></tr><tr><td>适用目标</td><td>流量经过自己的服务器</td><td>合并多份订阅</td></tr><tr><td>频道存储</td><td>保存到你的分组</td><td>不保存。生成总订阅时拼接</td></tr><tr><td>上游修改后</td><td><strong>需要重新导入</strong></td><td><strong>自动更新</strong></td></tr><tr><td>删除单个频道</td><td>支持</td><td>不支持</td></tr><tr><td>工作模式 / 缓存 / 录制 / Token</td><td>✅ 支持</td><td>❌ 不支持</td></tr></tbody></table></div>
+<blockquote><p>⚠️ <strong>实测结果（2026-10-02）</strong>：订阅聚合的频道在 <code>/playlist.m3u</code> 中输出<strong>上游原始地址</strong>。 手动添加的频道输出 <code>http://localhost:19899/mygroup/HOY77.m3u8</code>。 订阅聚合的频道输出 <code>https://上游域名/...</code>。 <strong>因此订阅聚合不等于反向代理。</strong></p>
+<p>⚠️ <strong>M3U 导入不接受订阅地址。</strong> 该窗口只接受粘贴内容和上传文件。 「订阅聚合」页接受订阅地址，但不做反向代理。</p>
+<p>导入订阅前，先获取订阅内容。参见第 2 步。</p></blockquote>
+<p><strong>选择建议</strong>：需要反向代理时，选择 <strong>M3U 导入</strong>。该功能把订阅转换为你的频道，并支持代理、删除和模式更改。</p>
+<p>多份订阅：<strong>对每份订阅分别执行一次导入</strong>。每份订阅生成一个独立的分组。总订阅地址包含全部分组，全部经过代理。</p>
+<hr>
+<h2 id="三分钟速通">三分钟速通</h2>
+<p>执行下列五步可以完成安装。</p>
+<ul><li><strong>安装</strong> —— 选择 <code>1</code>，按回车键接受默认值</li><li><strong>登录</strong> —— 打开 <code>http://服务器IP:19899/panel</code>，使用 <code>admin</code> / <code>admin</code></li><li><strong>导入</strong> —— 分组管理 → M3U 导入 → 粘贴订阅内容或上传文件 → 频道模式 <strong>Proxy</strong> → 导入策略 <strong>追加</strong> → 开始导入</li><li><strong>复制地址</strong> —— 分组管理 → 复制订阅地址。每个分组各有一条</li><li><strong>填写地址</strong> —— 在播放器中填写该地址</li></ul>
+<p>总订阅地址包含全部分组：<code>http://服务器IP:19899/playlist.m3u</code></p>
+<p>完成上述步骤后，阅读后续章节了解细节。</p>
+<hr>
+<h2 id="第-1-步-安装">第 1 步：安装</h2>
+<pre class="code lang-bash"><code>bash &lt;(curl -fsSL https://raw.githubusercontent.com/YanG-1989/rust/main/IPTV%20Proxy/iptv-proxy.sh))</code></pre>
+<p>选择 <code>1</code> 开始安装。安装程序询问四个问题。按回车键接受默认值。</p>
+<div class="tw"><table><thead><tr><th>问题</th><th>默认值</th></tr></thead><tbody><tr><td>面板端口</td><td><code>19899</code></td></tr><tr><td>面板账号</td><td><code>admin</code></td></tr><tr><td>面板密码</td><td><code>admin</code></td></tr></tbody></table></div>
+<p>安装目录是 <code>/opt/iptv-proxy</code>。服务自动设置为开机自启。 在浏览器中打开 <code>http://服务器IP:19899/panel</code>，使用 <code>admin</code> / <code>admin</code> 登录。</p>
+<blockquote><p>⚠️ <strong>两件马上要做的事</strong></p>
+<ul><li><strong>更改密码</strong> —— 执行 <code>iptv-proxy pass 你的新密码</code>。改完后需要重新登录</li><li><strong>放行端口</strong> —— 面板默认监听所有网卡。在云安全组和防火墙中放行 19899</li></ul></blockquote>
+<hr>
+<h2 id="第-2-步-把你的订阅导进来">第 2 步：把你的订阅导进来</h2>
+<p>打开 <strong>分组管理</strong>，点击顶部的 <strong>M3U 导入</strong>。</p>
+<p><strong>该窗口只包含「选择文件」和「M3U 文本」两个输入框。窗口内没有订阅地址输入框。</strong> 请先获取订阅内容。</p>
+<h3 id="获取订阅内容">获取订阅内容</h3>
+<div class="tw"><table><thead><tr><th>方式</th><th>操作</th></tr></thead><tbody><tr><td><strong>下载文件</strong></td><td>在浏览器中打开订阅地址。选择「另存为」，保存为 <code>.m3u</code> 文件</td></tr><tr><td><strong>复制内容</strong></td><td>在浏览器中打开订阅地址。选择全部内容并复制</td></tr></tbody></table></div>
+<blockquote><p>订阅地址返回一份文本文件。第一行是 <code>#EXTM3U</code>。内容较多时，下载文件更方便。</p></blockquote>
+<h3 id="执行导入">执行导入</h3>
+<div class="tw"><table><thead><tr><th>输入项</th><th>内容</th></tr></thead><tbody><tr><td>选择文件 / M3U 文本</td><td>上一步获取的文件或内容。二选一</td></tr><tr><td>频道模式</td><td><strong>Proxy</strong></td></tr><tr><td>导入策略</td><td><strong>追加</strong></td></tr></tbody></table></div>
+<p>点击「开始导入」。等待数秒。频道显示在分组列表中。</p>
+<blockquote><p><strong>需要自动更新时：</strong> 使用「订阅聚合」页。该页接受订阅地址，但不做反向代理。参见开头的对比表。</p></blockquote>
+<h3 id="频道模式怎么选">频道模式怎么选</h3>
+<div class="tw"><table><thead><tr><th>选项</th><th>使用条件</th></tr></thead><tbody><tr><td><strong>Proxy</strong></td><td><strong>默认选择</strong>。支持缓存、回看、录制</td></tr><tr><td>Rewrite</td><td>只改写播放列表地址。出网流量为零。不支持缓存</td></tr><tr><td>Redirect</td><td>返回 302 跳转。出网流量为零。源地址对播放器可见</td></tr><tr><td>DASH</td><td>订阅是 <code>.mpd</code> 格式</td></tr><tr><td>Passthrough</td><td>完全信任源地址</td></tr></tbody></table></div>
+<p>不确定时选择 <strong>Proxy</strong>。导入后可以更改。</p>
+<h3 id="导入策略">导入策略</h3>
+<div class="tw"><table><thead><tr><th>策略</th><th>行为</th></tr></thead><tbody><tr><td><strong>追加</strong></td><td>跳过同名分组。新分组追加到列表。<strong>推荐</strong></td></tr><tr><td>合并</td><td>保留同名分组。新频道加入该分组</td></tr><tr><td>覆盖</td><td>用新数据替换同名分组的全部内容</td></tr></tbody></table></div>
+<h3 id="导入后会自动处理的东西">导入后会自动处理的东西</h3>
+<p>导入程序自动完成下列处理：</p>
+<ul><li>频道名称、<code>tvg-id</code>、分组标题等元数据<strong>全部保留</strong></li><li>UA / Referer / Origin 等请求头<strong>自动抓取</strong></li><li>源站地址里的相对路径<strong>自动补全</strong></li></ul>
+<blockquote><p>⚠️ <strong>部分频道导入后无法播放。</strong> 部分源站校验 Referer 等请求头。参见第 5 步。</p></blockquote>
+<hr>
+<h2 id="第-3-步-拿到订阅地址">第 3 步：拿到订阅地址</h2>
+<h3 id="单个分组地址">单个分组地址</h3>
+<p>在分组列表中，点击分组右侧的<strong>复制按钮</strong>。</p>
+<pre class="code"><code>http://你的IP:19899/分组ID/playlist.m3u</code></pre>
+<h3 id="总订阅地址">总订阅地址</h3>
+<p>该地址包含全部分组。多份订阅导入后使用该地址。</p>
+<pre class="code"><code>http://你的IP:19899/playlist.m3u</code></pre>
+<blockquote><p>访问范围设为「隐藏」的分组不出现在总订阅中。该分组的独立地址仍然可以访问。</p></blockquote>
+<hr>
+<h2 id="第-4-步-自定义顺序">第 4 步：自定义顺序</h2>
+<p>面板支持三种排序方式。各自的可调整范围不同。</p>
+<div class="tw"><table><thead><tr><th>排序对象</th><th>支持调整</th><th>操作方式</th></tr></thead><tbody><tr><td><strong>分组内的频道</strong></td><td>✅</td><td>展开分组，拖动频道</td></tr><tr><td><strong>订阅源的优先级</strong></td><td>✅</td><td>在订阅聚合页点击 <strong>↑ / ↓</strong> 按钮</td></tr><tr><td><strong>分组之间的顺序</strong></td><td>❌</td><td>面板未提供该功能</td></tr></tbody></table></div>
+<blockquote><p><strong>顺序决定优先级。</strong> 订阅聚合中靠前的源优先采用。多个源提供同名频道时，靠前的源生效。</p></blockquote>
+<hr>
+<h2 id="第-5-步-让频道真的能播">第 5 步：让频道真的能播</h2>
+<p>导入后尝试播放频道。无法播放时，按下列顺序检查。</p>
+<h3 id="检查源地址">检查源地址</h3>
+<p>在 VLC 中打开<strong>原始订阅地址</strong>。可以播放则源地址正常。无法播放则源站故障。IPTV Proxy 无法处理源站故障。</p>
+<h3 id="检查工作模式">检查工作模式</h3>
+<p>打开「分组管理」编辑分组，选择「工作模式」。</p>
+<div class="tw"><table><thead><tr><th>源的类型</th><th>工作模式</th></tr></thead><tbody><tr><td><code>.m3u8</code>（HLS）</td><td>Proxy / Rewrite / Redirect</td></tr><tr><td><code>.mpd</code>（MPEG-DASH）</td><td><strong>DASH</strong></td></tr><tr><td><code>.flv</code> / <code>.ts</code> 连续流</td><td><strong>Remux</strong></td></tr></tbody></table></div>
+<p>工作模式与源类型不匹配时，频道无法播放。</p>
+<h3 id="添加-UA-和-Referer">添加 UA 和 Referer</h3>
+<p>部分源站校验请求头。这是导入后无法播放的常见原因。</p>
+<p>编辑分组或频道，打开「网络配置」。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>填写条件</th><th>示例值</th></tr></thead><tbody><tr><td><strong>User-Agent</strong></td><td>源返回 403 或错误页面时</td><td><code>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36</code></td></tr><tr><td><strong>自定义请求头</strong></td><td>源校验 Referer 时</td><td>点击「＋ 添加请求头」，每行一条，例如 <code>Referer: https://源站域名/</code></td></tr></tbody></table></div>
+<blockquote><p>在分组中填写，该分组的全部频道生效。在频道中填写，只对该频道生效。留空则继承分组的设置。</p></blockquote>
+<hr>
+<h2 id="第-6-步-让订阅自动更新-不反代">第 6 步：让订阅自动更新（不反代）</h2>
+<blockquote><p>⚠️ <strong>本节的功能不提供反向代理。</strong> 阅读后再执行。</p>
+<p>订阅聚合的频道在总订阅中<strong>保留上游原始地址</strong>。播放器直接连接源站。流量不经过服务器。 因此无法使用 Token、缓存和录制，也无法隐藏源地址。</p>
+<div class="tw"><table><thead><tr><th>目标</th><th>功能</th></tr></thead><tbody><tr><td>流量经过服务器，支持缓存、录制、防盗链</td><td><strong>M3U 导入</strong>（第 2 步）</td></tr><tr><td>合并多份订阅，接受源地址可见</td><td>订阅聚合（本节）</td></tr></tbody></table></div>
+<p><strong>需要对两份订阅使用代理时：</strong> 对每份订阅分别执行一次 M3U 导入。 每份订阅生成一个独立的分组。总订阅地址包含全部分组，全部经过代理。 上游修改后，需要重新导入。</p></blockquote>
+<p>仅需要合并功能时，执行本节。</p>
+<p>打开左侧导航的 <strong>订阅聚合</strong>，点击 <code>+ 添加订阅源</code>，填写下列内容。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>内容</th></tr></thead><tbody><tr><td>订阅源名称</td><td>用于识别的名称</td></tr><tr><td>订阅地址</td><td>M3U 订阅地址。<strong>该字段接受地址，M3U 导入不接受</strong></td></tr><tr><td>启用</td><td>可先设为「停用」以检查结果</td></tr><tr><td>缓存（分钟）</td><td>重新获取上游的间隔。<code>60</code> 表示 1 小时</td></tr><tr><td><strong>只要这些（include）</strong></td><td>留空则导入全部频道。填写后只导入名称匹配的频道</td></tr><tr><td><strong>剔除这些（exclude）</strong></td><td>填写后不导入名称匹配的频道</td></tr></tbody></table></div>
+<h3 id="过滤频道">过滤频道</h3>
+<p>订阅聚合页提供频道过滤功能。示例：</p>
+<pre class="code"><code>只要这些（include）：
+央视
+卫视
+
+剔除这些（exclude）：
+购物
+测试</code></pre>
+<p>单个订阅源的 include 和 exclude <strong>按频道名称匹配</strong>。匹配时不区分大小写。名称包含关键字即匹配。</p>
+<p><code>group:</code> / <code>id:</code> / 正则语法只适用于「全局排除」。单个订阅源不支持这些语法。</p>
+<h3 id="全局排除">全局排除</h3>
+<p>该设置对全部订阅源生效。点击「全局设置 ▶」展开。</p>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td><strong>合并位置</strong></td><td>置底（默认）或置顶。决定聚合频道在分组内的排列位置</td></tr><tr><td><strong>默认缓存（分钟）</strong></td><td>新建订阅源的默认缓存时长</td></tr><tr><td><strong>全局排除</strong></td><td>对全部订阅源生效的排除列表，每行一条</td></tr></tbody></table></div>
+<p>全局排除支持以下语法。</p>
+<div class="tw"><table><thead><tr><th>语法</th><th>匹配对象</th><th>示例</th></tr></thead><tbody><tr><td>关键字</td><td>频道名称</td><td><code>购物</code></td></tr><tr><td><code>group:</code> 前缀</td><td>分组名称</td><td><code>group:成人</code></td></tr><tr><td><code>id:</code> 前缀</td><td>tvg-id</td><td><code>id:XXX.com</code></td></tr><tr><td><code>/正则/</code></td><td>频道名称正则</td><td><code>/^广告/</code></td></tr></tbody></table></div>
+<h3 id="分组整理">分组整理</h3>
+<p>每个订阅源提供「分组处理」设置。三选一。</p>
+<div class="tw"><table><thead><tr><th>模式</th><th>效果</th></tr></thead><tbody><tr><td><strong>各自保留原名</strong></td><td>输出保留上游的分组名称</td></tr><tr><td><strong>逐个指定</strong></td><td>逐个指定输出的分组名称</td></tr><tr><td><strong>全部合并到一个组</strong></td><td>全部上游分组使用同一个分组名称</td></tr></tbody></table></div>
+<p>点击 <strong>保存订阅配置</strong> 保存设置。点击 <strong>预览</strong> 可以查看合并结果。</p>
+<hr>
+<h2 id="第-7-步-功能之间的关系">第 7 步：功能之间的关系</h2>
+<p>前面几节提供了最短执行路径。本节说明各功能之间的关系。</p>
+<h3 id="频道的来源和归属">频道的来源和归属</h3>
+<p><strong>两条路，结局完全不同</strong>：</p>
+<pre class="code"><code>   M3U 导入（粘内容/传文件）          订阅聚合（填订阅地址）
+            │                                │
+            ▼                                ▼
+      变成你的分组里的频道            不落地，生成总订阅时
+            │                        直接拼上游的内容
+            ▼                                │
+      ┌─────────────┐                        │
+      │   分 组     │                        │
+      └──────┬──────┘                        │
+             │ 分组决定                      │
+   ┌─────────┼─────────┐                     │
+   ▼         ▼         ▼                     ▼
+工作模式  访问范围  网络配置            上游原始地址
+（怎么转）（进不进）（UA/代理）        ⚠️ 不经过你的服务器
+   │
+   ▼
+http://你的IP:19899/分组/频道.m3u8   ✅ 走代理</code></pre>
+<p><strong>关键事实：工作模式、访问范围和 UA 属于分组，不属于频道。</strong></p>
+<p>因此：<strong>只有 M3U 导入的频道具有代理地址。</strong> 订阅聚合的频道没有分组归属。 这些频道无法读取已设置的 Proxy 模式，在总订阅中保持上游原样。</p>
+<blockquote><p>该区别在输出中可见。手动添加的频道输出 <code>group-title="我的组"</code>（显示名称）。 订阅聚合的频道输出 <code>group-title="july"</code>（分组 ID）。二者走不同的代码路径。</p></blockquote>
+<h3 id="分组管理与订阅聚合的关系">分组管理与订阅聚合的关系</h3>
+<p>「分组处理」决定<strong>总订阅中频道的排列和分组名称</strong>。该设置<strong>不改变代理规则</strong>。</p>
+<div class="tw"><table><thead><tr><th>模式</th><th>效果</th><th>使用条件</th></tr></thead><tbody><tr><td><strong>各自保留原名</strong></td><td>输出保留上游分组名称</td><td>上游分组名称清晰</td></tr><tr><td><strong>逐个指定</strong></td><td>逐个指定输出的分组名称</td><td>上游分组名称无意义，需要整理</td></tr><tr><td><strong>全部合并到一个组</strong></td><td>全部上游分组使用同一名称</td><td>需要平铺的列表</td></tr></tbody></table></div>
+<p><strong>「逐个指定」的使用方法</strong>：先点击 <strong>读取分组</strong> 获取上游的分组列表。面板显示分组清单。逐个填写输出名称。</p>
+<blockquote><p>面板提示：「点『读取分组』先抓一次——不看清楚源里有什么，配出来的规则就是盲配。」</p>
+<p>⚠️ <strong>这里填写的名称只是输出时的分组标题。</strong> 该设置不启用代理。 实测填写 <code>july</code> 后，输出地址仍为上游原始地址。</p></blockquote>
+<h3 id="顺序-优先级与合并位置">顺序、优先级与合并位置</h3>
+<div class="tw"><table><thead><tr><th>目标</th><th>设置位置</th></tr></thead><tbody><tr><td>调整订阅源的优先级</td><td>订阅聚合页的 <strong>↑ / ↓</strong> 按钮。靠前的源优先</td></tr><tr><td>调整聚合频道在分组内的位置</td><td>全局设置 → <strong>合并位置</strong>。置顶或置底，默认置底</td></tr><tr><td>调整分组内频道的顺序</td><td>分组管理页拖动频道</td></tr><tr><td>调整分组之间的顺序</td><td>面板未提供该功能</td></tr></tbody></table></div>
+<h3 id="访问范围与总订阅">访问范围与总订阅</h3>
+<p>每个分组提供四种访问范围。该设置决定分组是否出现在总订阅中。</p>
+<div class="tw"><table><thead><tr><th>访问范围</th><th>出现在 <code>/playlist.m3u</code></th><th>独立地址可播放</th><th>用途</th></tr></thead><tbody><tr><td><strong>公开</strong></td><td>✅</td><td>✅</td><td>正常分发</td></tr><tr><td><strong>隐藏</strong></td><td>❌</td><td>✅</td><td>向指定人员分发独立地址</td></tr><tr><td><strong>归档</strong></td><td>❌</td><td>❌ 整组停用</td><td>暂时下架。EPG 和台标匹配继续执行</td></tr><tr><td><strong>免验证</strong></td><td>✅</td><td>✅</td><td>不校验 Token 的公开入口</td></tr></tbody></table></div>
+<blockquote><p><strong>该设置只作用于 M3U 导入的频道。</strong> 订阅聚合的频道没有分组归属，因此不受访问范围控制。 这些频道始终出现在总订阅中，也无法设为「隐藏」或「免验证」。</p></blockquote>
+<h3 id="工作模式与录制-回看-预载">工作模式与录制、回看、预载</h3>
+<p>以下功能受工作模式限制。</p>
+<blockquote><p><strong>本表只适用于 M3U 导入的频道。</strong> 订阅聚合的频道没有工作模式，始终使用上游地址。表中的功能对该类频道无效。</p></blockquote>
+<div class="tw"><table><thead><tr><th>功能</th><th>Proxy</th><th>Remux</th><th>DASH</th><th>Rewrite</th><th>Redirect</th><th>Passthrough</th></tr></thead><tbody><tr><td>本地回看</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>定时录制</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>切片预载（加速起播）</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>缓存加速</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>隐藏源地址</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr><tr><td>套用 Token</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr></tbody></table></div>
+<blockquote><p><strong>录制前必须安装 ffmpeg。</strong> 否则录制任务失败。执行 <code>apt install ffmpeg</code>，然后重启服务。</p></blockquote>
+<h3 id="Token-与地址分发">Token 与地址分发</h3>
+<p>在「安全管控」页启用以下两项设置。两项设置同时生效。</p>
+<div class="tw"><table><thead><tr><th>设置</th><th>功能</th></tr></thead><tbody><tr><td><strong>启用 Token 验证</strong></td><td>播放地址必须包含 Token 参数</td></tr><tr><td><strong>随机频道 ID</strong></td><td>频道 ID 替换为 6 位随机字符。Token 轮换时同步更新</td></tr></tbody></table></div>
+<p><strong>仅启用 Token 验证不足以保护地址。</strong> 真实频道 ID 仍会出现在外部。 两项设置同时启用后，即使他人获得链接也无法播放。</p>
+<blockquote><p>⚠️ <strong>启用前先分发地址。</strong> 启用后旧地址全部失效。</p>
+<p>需要免登录入口时，将该分组设为<strong>免验证</strong>。</p></blockquote>
+<h3 id="EPG-tvg-id">EPG × tvg-id</h3>
+<p>节目单匹配失败的主要原因是 <code>tvg-id</code> 缺失或填写错误。</p>
+<div class="tw"><table><thead><tr><th>环节</th><th>位置</th></tr></thead><tbody><tr><td>频道的 tvg-id</td><td>分组管理 → 编辑频道</td></tr><tr><td>EPG 总开关</td><td>节目指南页。<strong>关闭时 <code>/epg.xml.gz</code> 返回 404</strong></td></tr><tr><td>检查匹配结果</td><td>节目指南 → 频道匹配，查看「未匹配」数量</td></tr><tr><td>名称匹配</td><td>系统设置中可启用。tvg-id 不匹配时按频道名称再匹配一次</td></tr></tbody></table></div>
+<p><strong>M3U 导入保留 tvg-id。</strong> 订阅聚合的 tvg-id 取决于上游提供的值。上游提供错误值时，匹配同样失败。</p>
+<h3 id="台标与频道">台标与频道</h3>
+<p>「台标管理」页上传的图标自动匹配频道。匹配成功后，该图标用于 M3U 的 <code>tvg-logo</code> 和 EPG 的 <code>icon</code>。</p>
+<ul><li>频道填写了<strong>外部 Logo URL</strong> 时，仍使用外部图床。该图床停止服务后图标无法显示</li><li>台标页列出缺少台标的频道。按列表补充</li><li>不建议在频道中填写外部图床。使用台标管理存储在本地</li></ul>
+<h3 id="监控与频道数量">监控与频道数量</h3>
+<p>「系统设置 → 监控」的健康探测<strong>每轮都产生上游请求</strong>。</p>
+<div class="tw"><table><thead><tr><th>频道数量</th><th>探测周期</th></tr></thead><tbody><tr><td>数十个</td><td>使用默认值</td></tr><tr><td>数百个</td><td>设置为 15 分钟以上</td></tr><tr><td>仅需要分组页的状态显示</td><td>关闭该功能</td></tr></tbody></table></div>
+<p>在线人数和「频道热度」页的数据来自<strong>访问统计</strong>。该功能需要单独启用。</p>
+<hr>
+<h2 id="第-8-步-验证结果">第 8 步：验证结果</h2>
+<p>执行下列检查。</p>
+<div class="tw"><table><thead><tr><th>检查项</th><th>操作</th><th>预期结果</th></tr></thead><tbody><tr><td><strong>订阅可访问</strong></td><td>浏览器打开 <code>http://你的IP:19899/playlist.m3u</code></td><td>显示以 <code>#EXTM3U</code> 开头的频道列表</td></tr><tr><td><strong>地址可播放</strong></td><td>从列表复制一条播放地址，在 VLC 中打开</td><td>可以播放</td></tr><tr><td><strong>节目单可用</strong>（可选）</td><td>打开 <code>http://你的IP:19899/epg.xml.gz</code></td><td>下载到 XML 文件</td></tr></tbody></table></div>
+<p>节目单需要额外配置。打开 <strong>节目指南</strong> 页启用总开关，执行一次采集。然后检查频道的 <code>tvg-id</code>。</p>
+<hr>
+<h2 id="排错">排错</h2>
+<div class="tw"><table><thead><tr><th>现象</th><th>怎么办</th></tr></thead><tbody><tr><td>面板打不开</td><td>端口放行了吗 → <code>iptv-proxy log</code> 看日志 → <code>iptv-proxy url</code> 确认地址</td></tr><tr><td>订阅地址 404</td><td>分组访问范围是不是设成了「隐藏」？</td></tr><tr><td>订阅能拉但频道播不了</td><td>源本身能播吗 → 模式选对吗 → UA / Referer 填了吗</td></tr><tr><td>播放中出现卡顿</td><td>关闭「系统设置 → 缓存配置」的<strong>预载</strong>，然后重启服务</td></tr><tr><td>内存持续增长</td><td>缓存后端改为 <code>memory</code> 并设置上限。关闭预载</td></tr><tr><td>日志提示缺少 ffmpeg 或 python3</td><td><strong>警告，不影响播放。</strong> 录制和 EPG 脚本源需要该组件：<code>apt install ffmpeg python3</code>，然后重启服务</td></tr><tr><td>频道数量多导致面板变慢</td><td>在「系统设置 → 监控」中关闭健康探测，或延长探测周期</td></tr></tbody></table></div>
+<h3 id="常见问题">常见问题</h3>
+<p><strong>Q：更改设置后没有生效？</strong> 点击「保存设置」。热重载关闭时，执行 <code>iptv-proxy restart</code>。 下列三个开关在启动时读取，修改后必须重启服务：DASH 会话预启动、配置文件热重载监视、登录失败计数清理。 其余设置即时生效。</p>
+<p><strong>Q：播放器无法打开订阅地址？</strong> 按顺序检查。 ① 启用 Token 验证时，地址必须包含 Token 参数。使用面板的「导出全部」获取地址，不要手工拼接 ② 频道的访问范围是否设为「隐藏」或「归档」 ③ 自己的 IP 是否在封禁列表中。检查安全管控页 ④ Token 是否过期</p>
+<p><strong>Q：频道可以播放，但没有节目单？</strong> 检查 EPG 总开关。检查频道的 <code>tvg-id</code>。在「节目指南 → 频道匹配」查看「未匹配」数量。</p>
+<p><strong>Q：定时录制任务失败？</strong> 原因是缺少 ffmpeg。面板的「视频素材」页显示检测结果。安装后重启服务。</p>
+<p><strong>Q：日志显示「边缘来源校验模式: Off」？</strong> 该消息表示启用了边缘模式，但未配置密钥或未接受边缘请求。非 CDN 环境下该消息不影响使用。</p>
+<p><strong>Q：启用 Token 后旧地址是否有效？</strong> 旧地址全部失效。<strong>启用前先分发地址。</strong> 启用后需要重新复制地址。</p>
+<p><strong>Q：为什么订阅聚合的频道不是代理地址？</strong> 这是设计行为。订阅聚合只执行合并，不改写地址。使用 M3U 导入实现反向代理。参见开头的对比表。</p>
+<p><strong>Q：如何查看资源占用？</strong> 面板「概览」显示实时指标。<strong>v0.8.2 的回源流量统计失效，数值始终为 0。</strong> 使用 <code>docker stats</code> 查看真实数据。参见 <a href="resource.md">资源占用实测</a>。</p>
+<hr>
+<h2 id="命令速查">命令速查</h2>
+<div class="tw"><table><thead><tr><th>命令</th><th>作用</th></tr></thead><tbody><tr><td><code>iptv-proxy pass <新密码></code></td><td>更改密码。该命令可重置忘记的密码</td></tr><tr><td><code>iptv-proxy restart</code></td><td>重启服务</td></tr><tr><td><code>iptv-proxy log</code></td><td>查看运行日志</td></tr><tr><td><code>iptv-proxy url</code></td><td>打印面板地址</td></tr><tr><td><code>iptv-proxy update</code></td><td>更新版本</td></tr><tr><td><code>iptv-proxy uninstall</code></td><td>卸载。选择 N 保留数据</td></tr></tbody></table></div>
+<hr>
+<h2 id="参考文档">参考文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>使用时机</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>查询工作模式、查看安全清单</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>查询面板页面、配置项、运维命令</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>查询字段定义</td></tr><tr><td><a href="mode-proxy.md"><code>mode-proxy.md</code></a></td><td>调整 Proxy 模式的缓存和回看</td></tr><tr><td><a href="mode-redirect.md"><code>mode-redirect.md</code></a></td><td>改为 302 跳转以降低带宽</td></tr><tr><td><a href="mode-dash.md"><code>mode-dash.md</code></a></td><td>订阅是 <code>.mpd</code> 格式</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>选择服务器规格</td></tr></tbody></table></div></section><section class="doc" id="工作模式-反向代理"><a class="src" href="markdown/mode-proxy.md">查看 Markdown 源文件</a><h1 id="工作模式-反向代理-Proxy">工作模式 · 反向代理（Proxy）</h1>
+<blockquote><p>模式标识：<code>proxy</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：服务器替你拉流、缓存切片，再把切片转发给播放器。源地址对播放器不可见。</p>
+<blockquote><p>面板在模式选择框下方会显示这句官方说明：「清单与切片都经本服务转发并缓存，占带宽最高、最稳。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy  ──拉流──▶  上游源站
+   ▲                    │
+   └──回传切片───────────┘
+                 （切片同时落盘缓存，第二次观看不再回源）</code></pre>
+<p>播放器只和你的服务器说话，从头到尾不知道源站在哪。这就是 Proxy 存在的理由。</p>
+<hr>
+<h2 id="使用条件">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td>需要<strong>隐藏源地址</strong></td><td>频道链接被转发出去，源站地址不会暴露</td></tr><tr><td>需要<strong>缓存提速</strong></td><td>切片落盘，多人同时看同一频道时只有一次回源</td></tr><tr><td>源站<strong>限制并发或按 IP 鉴权</strong></td><td>所有请求都从你这一台服务器出去</td></tr><tr><td>想用<strong>本地回看 / 定时录制</strong></td><td>Proxy 和 Remux 是仅有的两种支持本地切片的模式</td></tr><tr><td>想开 <strong>Token 防盗链</strong></td><td>播放地址带 token，未授权请求直接被挡</td></tr></tbody></table></div>
+<p><strong>不确定源是什么格式时的默认选择。</strong> 兼容性和功能覆盖都是最完整的。</p>
+<hr>
+<h2 id="不适用场景">不适用场景</h2>
+<ul><li>源站稳定且你不在意暴露地址 → <a href="mode-redirect.md">Redirect</a> 更省你的带宽</li><li>源是 <code>.mpd</code>（MPEG-DASH）→ 用 <a href="mode-dash.md">DASH</a></li><li>源是 <code>.flv</code> / <code>.ts</code> / MMT 连续流 → 用 <a href="mode-remux.md">Remux</a>，别让 Proxy 硬扛</li><li>服务器内存小 → Proxy 是最吃资源的模式，见下方「代价」</li></ul>
+<hr>
+<h2 id="本模式的全部配置项">本模式的全部配置项</h2>
+<p>通用字段（分组 ID、tvg-id、上游 URL、网络配置等）见 <strong><a href="fields-common.md">通用配置项详解</a></strong>，这里只列 Proxy 独有的。</p>
+<h3 id="分组级">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「Proxy（反向代理）」</td><td>—</td></tr><tr><td><strong>内容格式</strong></td><td>上游给的是 <code>.m3u8</code> 还是 <code>.mpd</code>。<strong>选错会解析失败</strong></td><td>源是 <code>.m3u8</code> → 选 HLS</td></tr><tr><td><strong>MPD 裁剪保留秒数</strong></td><td><strong>只在「内容格式 = MPEG-DASH」时出现</strong></td><td>见下方说明</td></tr></tbody></table></div>
+<blockquote><p><strong>Proxy 分组里找不到的字段</strong></p>
+<div class="tw"><table><thead><tr><th>字段</th><th>原因</th></tr></thead><tbody><tr><td><strong>预载切片上限</strong></td><td>当前版本这个控件整体已隐藏，任何模式下都不显示。预载只能在「系统设置 → 缓存配置」里全局设置</td></tr><tr><td><strong>源容器类型</strong></td><td><a href="mode-remux.md">Remux</a> 专用</td></tr><tr><td><strong>上游缓存时长、跳转方式</strong></td><td><a href="mode-redirect.md">Redirect</a> 专用</td></tr></tbody></table></div></blockquote>
+<h4 id="MPD-裁剪保留秒数">MPD 裁剪保留秒数</h4>
+<p>只在内容格式选 MPEG-DASH 时出现，含义是转换 MPD 时保留多长的时间窗口。</p>
+<div class="tw"><table><thead><tr><th>填法</th><th>效果</th></tr></thead><tbody><tr><td><code>30</code></td><td>播放器能往回拖 30 秒</td></tr><tr><td>更大</td><td>回看范围更长，服务器占用也越大</td></tr></tbody></table></div>
+<blockquote><p>追直播用不着往回拖，30 秒左右足够。</p></blockquote>
+<h4 id="网络配置">网络配置</h4>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>User-Agent</strong></td><td>源报 403 或返回错误页时</td><td><code>Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0</code></td></tr><tr><td><strong>代理类型</strong></td><td>四选一：不使用代理 / HTTP 代理 / SOCKS5 / SOCKS5H（DNS 走代理）</td><td>选了 SOCKS5H</td></tr><tr><td><strong>代理地址</strong></td><td>上面选了代理才填，<strong>不带协议前缀</strong></td><td><code>127.0.0.1:7890</code></td></tr><tr><td><strong>代理用户名</strong></td><td>代理需要鉴权时；留空表示不认证</td><td>—</td></tr><tr><td><strong>代理密码</strong></td><td>同上</td><td>—</td></tr><tr><td><strong>自定义请求头</strong></td><td>点「＋ 添加请求头」逐条加，常用 Referer / Origin / Cookie</td><td><code>Referer: https://example.com/</code></td></tr></tbody></table></div>
+<blockquote><p><strong>这组字段六种模式都会显示</strong>——面板只对 5 个特定字段做了模式区分，网络配置不在其中。</p>
+<p><strong>User-Agent 有独立输入框</strong>，别在「自定义请求头」里再填一次，两处都设会打架。</p></blockquote>
+<hr>
+<h3 id="频道级">频道级</h3>
+<p>Proxy 频道上会显示两组区块：<strong>推流 / 回看</strong> 和 <strong>网络配置</strong>。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>回看保留时长</strong></td><td>想回看多久就填多少小时。<strong>留空 = 不录</strong></td><td>想留 24 小时 → 填 <code>24</code></td></tr><tr><td><strong>最大磁盘占用</strong></td><td>怕磁盘被撑爆就设上限。填 <code>0</code> = 不限，只按时长删</td><td>1TB 硬盘、5 个频道，想最多占 100GB → 填 <code>100</code></td></tr><tr><td><strong>时间偏移</strong></td><td><strong>回看开头对不上节目时调它</strong>，见下</td><td>放出来是上个节目结尾 → 调大</td></tr></tbody></table></div>
+<blockquote><p><strong>磁盘占用估算：一个 1080p 频道大约每小时 1~2 GB。</strong> 算一下：留 24 小时 × 5 个频道 × 1.5 GB ≈ 180 GB。留 48 小时就翻倍。</p></blockquote>
+<h4 id="时间偏移到底怎么调">时间偏移到底怎么调</h4>
+<p>切片是按「录进来那一刻」打的时间戳，而直播本身有延迟，所以这个时间戳<strong>比节目实际播出的时间要快</strong>。</p>
+<ul><li>放出来的是<strong>上一个节目的结尾</strong> → 时间偏移<strong>调大</strong></li><li>放出来的是<strong>下一个节目的开头</strong> → 时间偏移<strong>调小</strong></li><li>填 <code>0</code> = 不偏移</li></ul>
+<p><strong>例子</strong>：你按节目单点 20:00 的节目，播放出来是 19:55 那段的结尾，说明偏了 5 分钟，把偏移填 <code>300</code>（秒）。</p>
+<hr>
+<h4 id="频道级的网络配置">频道级的网络配置</h4>
+<p>和分组级同名，但<strong>留空即继承分组设置</strong>，适合个别源要求不同时单独覆盖。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>User-Agent</strong></td><td>这个源比别的源更严</td><td>单独一套 UA</td></tr><tr><td><strong>代理类型</strong></td><td>选「继承分组设置」则用分组的</td><td>单独指定</td></tr><tr><td><strong>代理地址 / 用户名 / 密码</strong></td><td>同上</td><td>—</td></tr><tr><td><strong>自定义请求头</strong></td><td>与分组级的<strong>合并</strong>，同名以频道级为准</td><td>只补一个 <code>Referer</code></td></tr></tbody></table></div>
+<h4 id="Proxy-MPD-时会多出的-ClearKey-密钥">Proxy + MPD 时会多出的 ClearKey 密钥</h4>
+<p>分组的内容格式选 <strong>MPEG-DASH</strong> 时，频道上会额外出现 <strong>ClearKey 解密密钥</strong> 输入框。</p>
+<p><strong>格式</strong>：<code>kid_hex:key_hex</code>，多个密钥每行一对，KID 和 KEY 都是 32 位十六进制。无加密流留空。</p>
+<pre class="code"><code>a1b2c3d4e5f60718293a4b5c6d7e8f90:00112233445566778899aabbccddeeff</code></pre>
+<blockquote><p>注意这和 <a href="mode-dash.md">DASH 模式</a> 的区别：<strong>内容格式选 MPD ≠ 工作模式选 DASH</strong>。这里是 Proxy 模式 + MPD 内容（面板代码里叫「反代穿本服务」），只做反代不做转封装。</p></blockquote>
+<h3 id="全局预载配置-系统设置-缓存配置">全局预载配置（系统设置 → 缓存配置）</h3>
+<p><strong>仅 Proxy 模式生效</strong>。在播放器来要之前先把切片拉进缓存，起播更快。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>说明</th><th>建议值</th></tr></thead><tbody><tr><td><strong>预载</strong></td><td>开或关。<strong>无人观看时仍产生上游流量</strong></td><td>配置较低的服务器关闭。高带宽服务器开启</td></tr><tr><td><strong>拉取并发</strong></td><td>同时拉几片。越大填缓存越快，也越吃上游带宽和连接数</td><td><code>2</code>~<code>4</code></td></tr><tr><td><strong>拉取超时</strong></td><td>单片下载超过这个时间就放弃，避免一片卡住拖住整轮</td><td><code>10</code></td></tr><tr><td><strong>HLS 预载</strong></td><td>每次刷新清单后，最多提前下载几片。填 <code>0</code> = 整个列表都预载</td><td><code>3</code>~<code>5</code></td></tr><tr><td><strong>MPD 预载</strong></td><td>客户端取走一片之后，提前把后面几片拉好。填 <code>0</code> = 关闭，只按需取</td><td><code>2</code>~<code>4</code></td></tr></tbody></table></div>
+<blockquote><p><strong>预载不看观看人数。</strong> 该功能只检查缓存是否足够。无人在看时仍会持续预载。对流量敏感的服务器应关闭该功能。</p></blockquote>
+<hr>
+<h2 id="上游源应该长什么样">上游源应该长什么样</h2>
+<p><code>.m3u8</code> 结尾的 HLS 播放列表。例如：</p>
+<pre class="code"><code>http://live.example.com/hls/cctv1.m3u8</code></pre>
+<p>在「分组管理 → 新建频道 → 上游 URL」填这个地址。</p>
+<blockquote><p>如果你的源是 <code>.mpd</code>、<code>.flv</code> 或 <code>.ts</code>，Proxy 不是对应模式，看 <a href="mode-dash.md">DASH</a> 或 <a href="mode-remux.md">Remux</a>。</p></blockquote>
+<hr>
+<h2 id="配置步骤">配置步骤</h2>
+<p>第一次用 IPTV Proxy 就按这个来，五分钟能播上。</p>
+<h3 id="1-建分组">1. 建分组</h3>
+<p><strong>分组管理</strong> → 点右上角 <code>＋ 新建分组</code>：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>填什么</th></tr></thead><tbody><tr><td>分组 ID</td><td>英文小写，如 <code>live</code>。<strong>它会出现在订阅地址里，之后改会让旧地址失效</strong></td></tr><tr><td>显示名称</td><td>随便写，如「直播」</td></tr><tr><td>工作模式</td><td><strong>Proxy（反向代理）</strong></td></tr><tr><td>访问范围</td><td>公开</td></tr><tr><td>内容格式</td><td>HLS (.m3u8)</td></tr><tr><td>其余</td><td>先留空</td></tr></tbody></table></div>
+<p>保存。</p>
+<h3 id="2-加频道">2. 加频道</h3>
+<p>两种方式：</p>
+<p><strong>方式 A · 手动加</strong>（用来试单个源）</p>
+<p>分组里点 <code>＋ 添加源</code>，填：频道 ID、频道名称、上游 URL。</p>
+<p><strong>方式 B · 批量导入</strong>（用来导整份订阅，推荐）</p>
+<p>点顶部 <strong>M3U 导入</strong> → <strong>粘贴订阅内容或上传 m3u 文件</strong> → 频道模式选 <strong>Proxy</strong> → 导入策略选 <strong>追加</strong> → 开始导入。</p>
+<blockquote><p>⚠️ 这个弹窗<strong>不能填订阅地址</strong>，只接受文件或内容。地址要先下载成文件，或复制内容粘进去。 想直接填地址让它自动更新，用「订阅聚合」页。</p></blockquote>
+<p>详见 <a href="iptv.md">订阅聚合入门</a>。</p>
+<h3 id="3-补-tvg-id">3. 补 tvg-id</h3>
+<p>导入后部分频道没有节目单。打开一个频道，把 <strong>tvg-id</strong> 填成节目单中的频道 id。</p>
+<blockquote><p>留空则用频道 ID，多数情况下匹配不上。</p></blockquote>
+<h3 id="4-复制订阅地址">4. 复制订阅地址</h3>
+<p>分组列表右边点复制按钮，或直接拼：</p>
+<pre class="code"><code>http://你的IP:19899/live/playlist.m3u</code></pre>
+<h3 id="5-粘进播放器">5. 粘进播放器</h3>
+<p>TVBox / 影视仓 / TiviMate / Kodi 里填这个地址。</p>
+<h3 id="6-播不了的话-按这个顺序查">6. 播不了的话，按这个顺序查</h3>
+<ul><li><strong>源本身能播吗</strong> —— 把上游 URL 丢进 VLC。能播 = 源没问题，继续</li><li><strong>模式选对了吗</strong> —— 源是 <code>.mpd</code> 要用 DASH，<code>.flv</code>/<code>.ts</code> 用 Remux</li><li><strong>UA / Referer 填了吗</strong> —— 源报 403 或返回错误页就是缺这个。见上面「网络配置」</li><li><strong>Token 开了吗</strong> —— 如果开了 Token，地址必须带 token 参数，用面板的「导出全部」而不是手工拼</li></ul>
+<h3 id="7-想回看的话">7. 想回看的话</h3>
+<p>在频道的「回看保留时长」填小时数。<strong>留空 = 不录</strong>。</p>
+<p>一个 1080p 频道每小时约 1~2 GB，先算算磁盘够不够。</p>
+<hr>
+<h2 id="代价">代价</h2>
+<p>Proxy 是<strong>最吃资源</strong>的模式，因为流量真正经过你的服务器：</p>
+<ul><li><strong>出网带宽</strong> = 所有观众的流量总和</li><li><strong>内存</strong> = 缓存中的切片（可在系统设置里设上限）</li><li><strong>CPU</strong> = 转发与缓存维护；预载开启时更高</li></ul>
+<p>要省资源：预载关掉、缓存后端改 <code>memory</code> 并设上限、缓存目录设硬盘上限。</p>
+<h3 id="实测占用">实测占用</h3>
+<p>v0.8.2 实测（1080p / 6.2 Mbps 直播流）：</p>
+<div class="tw"><table><thead><tr><th>并发观众</th><th>CPU（占单核）</th><th>容器内存</th></tr></thead><tbody><tr><td>1 个</td><td>0.86%</td><td>71 MB</td></tr><tr><td>2 个</td><td>1.31%</td><td>77 MB</td></tr><tr><td>5 个</td><td>1.07 – 1.51%</td><td>89 – 117 MB</td></tr></tbody></table></div>
+<p><strong>决定 CPU 的是码率，不是人数</strong>；而<strong>同一频道多人共享缓存</strong>，5 人看同一个频道只占 0.51% 单核——比一个人还省。</p>
+<p>真正的瓶颈是<strong>带宽</strong>：10 个观众看 6.2 Mbps 就是 62 Mbps 出网，比 CPU 重要一个数量级。</p>
+<p>完整的换算方法、VPS 配置建议、内存控制开关、以及怎么自己测，见 <strong><a href="resource.md">资源占用实测</a></strong>。</p>
+<blockquote><p>💡 流量成本敏感的话，Proxy 不一定是最好的选择——<a href="mode-rewrite.md">Rewrite</a> 和 <a href="mode-redirect.md">Redirect</a> 的出网接近于零。</p></blockquote>
+<hr>
+<h2 id="排错-1">排错</h2>
+<p><strong>播不了 / 花屏 / 一直转圈</strong></p>
+<ul><li>源站地址能否直接在 VLC 里播？先排除源本身的问题</li><li>网络配置里的 UA / Referer / Origin 是否填了？部分源站强制校验</li><li>内容格式是不是选错了？源是 <code>.mpd</code> 就该用 <a href="mode-dash.md">DASH</a></li><li>换 <a href="mode-redirect.md">Redirect</a> 试一下——如果 Redirect 能播，说明源没问题，是代理链路上有环节不对</li></ul>
+<p><strong>能播但很卡</strong></p>
+<ul><li>预载开着？关掉试试</li><li>缓存上限是不是太小，一直在淘汰又重新拉</li><li>出口带宽是否已经跑满</li></ul>
+<p><strong>回看时间点不对</strong></p>
+<ul><li>先确认「系统设置 → 时区」配对了（中国大陆填 8）</li><li>再调频道的「时间偏移」，见上文</li></ul>
+<p><strong>磁盘撑爆</strong></p>
+<ul><li>给频道设「最大磁盘占用」上限，或调小「回看保留时长」</li></ul>
+<p><strong>想确认缓存有没有生效</strong></p>
+<ul><li>打开「缓存状态」页，看媒体片段数和磁盘占用是否在涨</li></ul>
+<hr>
+<h2 id="相关文档">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="工作模式-Remux"><a class="src" href="markdown/mode-remux.md">查看 Markdown 源文件</a><h1 id="工作模式-Remux-转封装">工作模式 · Remux 转封装</h1>
+<blockquote><p>模式标识：<code>remux</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：把 FLV、TS、MMT 这类连续流转封装成 HLS，不解码画面。<strong>注意：不需要解码，所以不吃 CPU。</strong></p>
+<blockquote><p>面板的官方说明：「连续流(FLV/裸TS/MMT-TLV)实时切片成 HLS。容器默认自动识别,识别失败可手动指定。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流-1">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy  ──拉流──▶  上游（.flv / .ts / MMT）
+   ▲                    │
+   └──HLS 切片回传──────┘
+              （只换封装，不解码 → CPU 开销极低）</code></pre>
+<hr>
+<h2 id="使用条件-1">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td>源是<strong>连续流</strong></td><td><code>.flv</code>、<code>.ts</code>、MMT 这些没有切片概念的流</td></tr><tr><td>源<strong>不支持 HLS</strong>，但播放器只吃 HLS</td><td>转换封装后大多数播放器都能播</td></tr><tr><td>需要<strong>本地回看 / 定时录制</strong></td><td>Remux 和 Proxy 是仅有的两种支持本地切片的模式</td></tr></tbody></table></div>
+<hr>
+<h2 id="不适用场景-1">不适用场景</h2>
+<ul><li>源已经是 <code>.m3u8</code> → 用 <a href="mode-proxy.md">Proxy</a> 或 <a href="mode-rewrite.md">Rewrite</a>，<strong>不需要转封装这一步</strong></li><li>源是 <code>.mpd</code> → 用 <a href="mode-dash.md">DASH</a></li><li>只想隐藏源地址 → <a href="mode-proxy.md">Proxy</a> 更通用</li></ul>
+<hr>
+<h2 id="Remux-与-Proxy-有什么区别">Remux 与 Proxy 有什么区别</h2>
+<p>两者都能拉本地切片，但起点不同：</p>
+<div class="tw"><table><thead><tr><th></th><th>Proxy</th><th>Remux</th></tr></thead><tbody><tr><td>源类型</td><td>已经是 HLS（<code>.m3u8</code>）</td><td>连续流（FLV / TS / MMT）</td></tr><tr><td>处理动作</td><td>转发 + 缓存</td><td>转封装成 HLS</td></tr><tr><td>CPU 占用</td><td>较高</td><td><strong>低</strong>（不解码）</td></tr><tr><td>预载配置</td><td>有</td><td>无</td></tr><tr><td>内容格式可选</td><td>可选 HLS / MPD</td><td><strong>固定 HLS</strong>（转封装输出一定是 HLS）</td></tr></tbody></table></div>
+<blockquote><p><strong>一个历史坑</strong>：早期面板只给 Proxy 显示推流/回看区块，Remux 频道明明能本地录切片，界面上却只能填一个对它无效的「源站回看天数」。v0.6.9 修正了这点——现在 Remux 分组同样会显示推流/回看区块。</p></blockquote>
+<hr>
+<h2 id="本模式的全部配置项-1">本模式的全部配置项</h2>
+<p>通用字段见 <strong><a href="fields-common.md">通用配置项详解</a></strong>。</p>
+<h3 id="分组级-1">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「Remux（连续流 FLV/TS/MMT → HLS）」</td><td>—</td></tr><tr><td><strong>源容器类型</strong></td><td><strong>Remux 独有</strong>。默认「自动识别」即可，识别不准时再手填</td><td>源是 <code>.ts</code> 裸流 → 选 TS</td></tr></tbody></table></div>
+<h4 id="源容器类型四个选项">源容器类型四个选项</h4>
+<div class="tw"><table><thead><tr><th>选项</th><th>什么源选它</th></tr></thead><tbody><tr><td><strong>自动识别（推荐）</strong></td><td>大多数情况都用这个</td></tr><tr><td><strong>TS（HTTP-TS 裸流，最轻）</strong></td><td>源是 MPEG-TS 传输流，<code>.ts</code> 结尾</td></tr><tr><td><strong>FLV（HTTP-FLV）</strong></td><td>源是 <code>.flv</code> 结尾</td></tr><tr><td><strong>MMT-TLV（ARIB STD-B32 / BS4K）</strong></td><td>日本 BS4K / ARIB 制式的直播源</td></tr></tbody></table></div>
+<blockquote><p><strong>什么时候需要手填</strong>：自动识别把某些源判错了，表现是「能拉流但播不出来」。这时按源的真实格式选一下即可。</p>
+<p><strong>Remux 分组不显示「内容格式」</strong>——转封装输出固定是 HLS，没有得选。 <strong>网络配置（UA / 代理 / 请求头）照常显示</strong>，Remux 同样要回源，遇到源站要 Referer 或要鉴权时照样得填。</p></blockquote>
+<hr>
+<h3 id="频道级-1">频道级</h3>
+<p>Remux 特有的区块与 Proxy 相同：<strong>回看保留时长 / 最大磁盘占用 / 时间偏移</strong>（面板上和网络配置放在一起）。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>回看保留时长</strong></td><td>想回看多久就填多少小时。留空 = 不录</td><td><code>24</code></td></tr><tr><td><strong>最大磁盘占用</strong></td><td>怕磁盘被撑爆就设上限，填 <code>0</code> = 不限</td><td><code>100</code></td></tr><tr><td><strong>时间偏移</strong></td><td>回看开头对不上节目时调</td><td>偏 5 分钟 → <code>300</code></td></tr></tbody></table></div>
+<blockquote><p><strong>磁盘占用估算：一个 1080p 频道大约每小时 1~2 GB。</strong> <strong>时间偏移怎么调</strong>：放出来是上个节目结尾 → 调大；是下个节目开头 → 调小。</p></blockquote>
+<hr>
+<h3 id="不会出现的字段">不会出现的字段</h3>
+<p>Remux 分组/频道上<strong>看不到</strong>这些，别找了：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>为什么没有</th></tr></thead><tbody><tr><td>内容格式、MPD 裁剪保留秒数</td><td>Remux 只输出 HLS</td></tr><tr><td>网络配置（UA / 代理 / 请求头）</td><td><strong>会显示</strong>，Remux 也要回源</td></tr><tr><td>预载配置</td><td>只有 Proxy 有预载</td></tr><tr><td>ClearKey 密钥</td><td>那是 <a href="mode-dash.md">DASH</a> 用的</td></tr><tr><td>源站回看 / 回看天数</td><td>Remux 走本地切片，不用源站回看</td></tr></tbody></table></div>
+<hr>
+<h2 id="上游源应该长什么样-1">上游源应该长什么样</h2>
+<p>以 <code>.flv</code>、<code>.ts</code> 结尾的连续流地址：</p>
+<pre class="code"><code>http://upstream.example/live/channel.flv
+http://upstream.example/live/channel.ts</code></pre>
+<p><strong>怎么确认你的源是什么类型</strong>：</p>
+<pre class="code lang-bash"><code>ffprobe -v quiet -show_streams http://upstream.example/live/channel.flv</code></pre>
+<p>输出里的 <code>codec_type=video</code> 和容器信息能看出格式。</p>
+<hr>
+<h2 id="配置步骤-1">配置步骤</h2>
+<ul><li><strong>分组管理</strong> → 新建分组 → 工作模式选 <strong>Remux</strong></li><li>源容器类型保持「自动识别」</li><li>新建频道，填上游 URL、频道 ID、tvg-id</li><li>想回看就填「回看保留时长」</li><li>复制该分组的订阅地址，导入播放器</li></ul>
+<hr>
+<h2 id="代价-1">代价</h2>
+<ul><li><strong>出网带宽</strong> = 所有观众流量总和（和 Proxy 一样，流量经过服务器）</li><li><strong>CPU</strong> = 很低，这是 Remux 相对 Proxy 的主要优势</li><li><strong>内存</strong> = 缓存中的切片</li></ul>
+<hr>
+<h2 id="排错-2">排错</h2>
+<p><strong>播不了</strong></p>
+<ul><li>上游 URL 真的是连续流吗？用上面的 <code>ffprobe</code> 确认</li><li>「源容器类型」自动识别是不是判错了？按真实格式手选</li><li>源站是不是强制校验 UA</li></ul>
+<p><strong>输出的是 HLS 但播放器不认</strong></p>
+<ul><li>少数播放器对转封装后的编码参数挑剔，换 <a href="mode-proxy.md">Proxy</a> 对比一下是不是 Remux 的问题</li></ul>
+<p><strong>画面出来了但播着播着断</strong></p>
+<ul><li>检查源站本身的稳定性——转封装不会掩盖源流的断流</li></ul>
+<hr>
+<h2 id="相关文档-1">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="工作模式-DASH"><a class="src" href="markdown/mode-dash.md">查看 Markdown 源文件</a><h1 id="工作模式-DASH-转封装">工作模式 · DASH 转封装</h1>
+<blockquote><p>模式标识：<code>dash</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：把 MPEG-DASH（<code>.mpd</code> + <code>.m4s</code> 分片）实时转封装成 HLS，让只吃 HLS 的播放器也能播。支持 ClearKey 解密。</p>
+<blockquote><p>面板的官方说明：「DASH MPD 转封装为 HLS,可选 CENC ClearKey 解密。仅用于 .mpd 源。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流-2">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy  ──拉流──▶  上游（.mpd 清单 + .m4s 分片）
+   ▲                    │
+   └──HLS 切片回传──────┘
+        （MPD → HLS 实时转封装；支持 ClearKey 解密）</code></pre>
+<hr>
+<h2 id="使用条件-2">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td>源是 <strong>MPEG-DASH</strong></td><td>地址以 <code>.mpd</code> 结尾</td></tr><tr><td>需要<strong>给 HLS 播放器</strong>播放</td><td>大量电视端和手机播放器只吃 HLS，DASH 源直连播不了</td></tr><tr><td>源用了 <strong>ClearKey 加密</strong></td><td>自动解密，这是 DASH 模式的主要卖点</td></tr><tr><td>需要<strong>多 CDN 故障切换</strong></td><td>自动的，不需要配</td></tr></tbody></table></div>
+<hr>
+<h2 id="不适用场景-2">不适用场景</h2>
+<ul><li>源是 HLS（<code>.m3u8</code>）→ 用 <a href="mode-proxy.md">Proxy</a>，<strong>别给 DASH 模式喂 HLS 源</strong></li><li>源是 FLV / TS → 用 <a href="mode-remux.md">Remux</a></li><li>怕配置复杂 → DASH 的调优项多，虽然默认值适配大多数源</li></ul>
+<hr>
+<h2 id="DASH-模式自动化了什么">DASH 模式自动化了什么</h2>
+<p>面板原文明确说明，这些<strong>不需要你配置</strong>：</p>
+<ul><li><strong>304 增量刷新</strong>——上游清单没变就跳过重新解析</li><li><strong>多 CDN 故障切换</strong>——主 CDN 挂了自动切备用</li><li><strong>防断流备份</strong>——上游意外断开时的兜底</li><li><strong>片段级容错</strong>——个别分片损坏不影响整体</li></ul>
+<p>真正要你动的是下面的高级参数，而面板的建议是：<strong>不确定用途就不要改，改错会直接影响起播与卡顿。</strong></p>
+<hr>
+<h2 id="本模式的全部配置项-2">本模式的全部配置项</h2>
+<p>通用字段见 <strong><a href="fields-common.md">通用配置项详解</a></strong>。</p>
+<h3 id="分组级-2">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「DASH（MPD → HLS 转封装）」</td><td>—</td></tr><tr><td>内容格式</td><td><strong>不显示</strong>——DASH 输出固定是 HLS，没有得选</td></tr><tr><td>网络配置（UA / 代理 / 请求头）</td><td><strong>会显示</strong>，DASH 同样要回源，源站要 Referer 时照样得填</td></tr></tbody></table></div>
+<blockquote><p>DASH 分组<strong>没有「内容格式」下拉框</strong>。选了 DASH 模式就意味着上游是 <code>.mpd</code>，输出是 <code>.m3u8</code>，不需要你选。</p></blockquote>
+<hr>
+<h3 id="频道级-ClearKey-解密">频道级 · ClearKey 解密</h3>
+<p><strong>只有 DASH 模式、分组格式为 MPD、或 Passthrough 带密钥时，这块才显示。</strong></p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>ClearKey 解密密钥</strong></td><td>源是 ClearKey 加密时才填，<strong>无加密流留空</strong></td><td>见下方格式</td></tr></tbody></table></div>
+<p><strong>格式</strong>：<code>kid_hex:key_hex</code>，<strong>多个密钥每行一对</strong>，KID 和 KEY 都是 <strong>32 位十六进制</strong>。</p>
+<p><strong>例子</strong>（单密钥）：</p>
+<pre class="code"><code>a1b2c3d4e5f60718293a4b5c6d7e8f90:00112233445566778899aabbccddeeff</code></pre>
+<p><strong>例子</strong>（多密钥，拖动清晰度时会用不同密钥）：</p>
+<pre class="code"><code>a1b2c3d4e5f60718293a4b5c6d7e8f90:00112233445566778899aabbccddeeff
+b1c2d3e4f50617283940a1b2c3d4e5f60:112233445566778899aabbccddeeff00</code></pre>
+<blockquote><p><strong>Widevine 等其它加密类型不在这里配</strong>，需要手动处理。M3U 导入时 ClearKey 会自动填进这个字段。</p></blockquote>
+<hr>
+<h3 id="频道级-回看保留">频道级 · 回看保留</h3>
+<p>DASH 频道支持本地录制，和 Proxy / Remux 一样：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>回看保留时长</strong></td><td>想回看多久就填多少小时。留空 = 不录</td><td><code>24</code></td></tr><tr><td><strong>最大磁盘占用</strong></td><td>怕磁盘被撑爆就设上限，填 <code>0</code> = 不限</td><td><code>100</code></td></tr><tr><td><strong>时间偏移</strong></td><td>回看开头对不上节目时调</td><td>偏 5 分钟 → <code>300</code></td></tr></tbody></table></div>
+<blockquote><p><strong>磁盘占用估算：一个 1080p 频道大约每小时 1~2 GB。</strong></p></blockquote>
+<hr>
+<h3 id="频道级-URL-池">频道级 · URL 池</h3>
+<p><strong>解决 CDN 单连接限流的问题。</strong> 默认关闭，需要时才开。</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>说明</th><th>范围</th></tr></thead><tbody><tr><td><strong>池大小</strong></td><td>用几个 token 错峰拉切片</td><td><strong>2 ~ 6，默认 3</strong></td></tr></tbody></table></div>
+<p><strong>它怎么工作</strong>：视频固定用 <code>pool[0]</code>，音频和字幕在 <code>pool[1..]</code> 之间轮询，这样单个连接上的请求压力被摊薄。</p>
+<p><strong>什么时候开</strong>：源站限流（大量观众同时看同一个频道时开始花屏/缓冲），或者切片下载频繁 403。</p>
+<blockquote><p>⚠️ <strong>有封号风险</strong>：部分视频平台会把多 token 并发判定为<strong>多设备登录</strong>并封号。开之前确认你的源不是这类平台的账号。</p></blockquote>
+<hr>
+<h2 id="DASH-调优-系统设置-DASH-调优">DASH 调优（系统设置 → DASH 调优）</h2>
+<p><strong>面板的明确建议：这三组参数默认值已适配绝大多数源，不确定用途就不要改——改错会直接影响起播与卡顿。</strong></p>
+<p>下面按组列出每一项的含义，<strong>只在遇到具体症状时才动对应那一个</strong>。</p>
+<h3 id="播放体验-影响延迟-起播速度-卡顿稳定性">播放体验（影响延迟、起播速度、卡顿稳定性）</h3>
+<div class="tw"><table><thead><tr><th>配置项</th><th>它做什么</th><th>什么时候动</th><th>例子</th></tr></thead><tbody><tr><td><strong>抗卡缓冲</strong></td><td>切片打包好之后先压住几秒再发给播放器，<strong>用延迟换稳定</strong>。填 <code>0</code> = 关闭，最低延迟</td><td>频繁卡顿、且能接受延迟变大时，往上调几秒</td><td>卡得厉害 → <code>3</code>；不能容忍延迟 → <code>0</code></td></tr><tr><td><strong>防断流备份</strong></td><td>比实际需要<strong>多拉几段备用</strong>，上游丢片时顶上。<strong>对客户端不增加延迟</strong></td><td>上游经常掉片、断流</td><td><code>2</code>~<code>3</code></td></tr><tr><td><strong>playlist 最少</strong></td><td>发给播放器的清单里<strong>至少要有多少秒的内容</strong>。太短的话播放器一拖进度条就越界</td><td>播放器拖进度条时列表空白或报错</td><td><code>30</code>~<code>60</code></td></tr><tr><td><strong>快速起播窗口</strong></td><td>刚连上时从<strong>靠近直播边缘</strong>的位置起播，缩短等待。填 <code>0</code> = 关闭，按正常位置起播</td><td>起播慢，但延迟要求不高</td><td><code>10</code>~<code>20</code></td></tr><tr><td><strong>广告空洞裁剪</strong></td><td>上游插广告会留下时间轴空洞，<strong>这个比例决定裁掉多少</strong>。裁太狠会误伤正片</td><td>源有插播广告，播放器遇到空洞卡死</td><td>轻微 → <code>0.1</code>；严重 → <code>0.3</code>，<strong>别超过 0.5</strong></td></tr><tr><td><strong>磁盘最少保留</strong></td><td>切片在磁盘上<strong>至少留这么久</strong>才允许清理。回看和慢速播放器靠它兜底</td><td>网络差的观众播放卡顿、回看时切片已被删</td><td><code>300</code>（5 分钟）</td></tr><tr><td><strong>起播位置偏移</strong></td><td>从直播边缘<strong>往回退多少秒</strong>开始播。填 <code>0</code> = 关闭。退得多更不容易卡，延迟也更大</td><td>首帧花屏、加载中黑屏</td><td><code>5</code>~<code>10</code></td></tr></tbody></table></div>
+<h3 id="网络性能-高级-默认值适用大多数场景">网络性能（高级，默认值适用大多数场景）</h3>
+<div class="tw"><table><thead><tr><th>配置项</th><th>它做什么</th><th>什么时候动</th><th>例子</th></tr></thead><tbody><tr><td><strong>MPD 刷新间隔</strong></td><td>两次拉取 MPD 的<strong>间隔范围</strong>，程序在区间内自适应。<strong>区间给窄更贴合上游，也更容易被限流</strong></td><td>默认值频繁被源站限流时才放宽</td><td>源站 429 → 放宽下限</td></tr><tr><td><strong>并发下载</strong></td><td><strong>单个频道</strong>同时拉几个片。<strong>每个频道都会乘一遍</strong>，频道多时容易把出网连接打满</td><td>频道多、连接数打满时调小</td><td>30 个频道时别超过 <code>2</code></td></tr><tr><td><strong>片段超时</strong></td><td>单个切片下载多久算失败。<strong>太大会拖慢故障切换</strong></td><td>上游很慢时太小会误判失败</td><td><code>10</code></td></tr><tr><td><strong>MPD 超时</strong></td><td>拉取 MPD 清单的超时。<strong>有些源站生成清单本身就慢</strong>，太小会误判成挂了</td><td>清单生成慢的源</td><td><code>10</code>~<code>15</code></td></tr><tr><td><strong>重试次数</strong></td><td>一个片最多重试几次。<strong>频繁返回 403 的源可以调高</strong></td><td>源频繁 403 / 网络抖动</td><td><code>3</code>~<code>5</code></td></tr><tr><td><strong>重试间隔</strong></td><td>两次重试之间等多久，<strong>固定间隔</strong></td><td>上游限流严格时调大</td><td><code>2</code>~<code>5</code></td></tr><tr><td><strong>按需空闲停止</strong></td><td><strong>仅对「按需代理」频道生效</strong>：没人看多久之后彻底停掉，下次有人访问时重新冷启动</td><td>用按需代理模式、想让空闲频道彻底释放资源</td><td><code>60</code></td></tr><tr><td><strong>重建上限</strong></td><td>看门狗连续重建几次仍不恢复，就判定该源当前不可用、转入冷却</td><td>源经常假死时</td><td><code>3</code>~<code>5</code></td></tr><tr><td><strong>重建冷却</strong></td><td>进入冷却后隔多久再自动试一次。<strong>填 <code>0</code> = 永久放弃，只能手动重启</strong></td><td>源挂了之后想让它隔多久自己再试</td><td><code>600</code>（10 分钟）</td></tr></tbody></table></div>
+<h3 id="特殊场景-高级参数">特殊场景（高级参数）</h3>
+<div class="tw"><table><thead><tr><th>配置项</th><th>它做什么</th><th>什么时候动</th><th>例子</th></tr></thead><tbody><tr><td><strong>MPD body 去重</strong></td><td>上游返回的 MPD 内容没变时<strong>跳过重新解析</strong>，省 CPU</td><td>CPU 占用高时保持开启</td><td>保持开启</td></tr><tr><td><strong>整片内存预算</strong></td><td>自动档下，所有正在进行的整片发送加起来<strong>最多占多少内存</strong>。占满之后新请求走流式，占用降下去又自动恢复整片。填 <code>0</code> = <strong>自动：可用内存的 1/8，封顶 512MB</strong></td><td>内存不足时封顶下调</td><td><code>0</code>（自动）最省心</td></tr><tr><td><strong>文件名混淆</strong></td><td>把切片文件名换成<strong>无规律的串</strong>，防止照着规律盗链。<strong>关掉只在抓包调试时有用</strong></td><td>担心切片被推断盗链</td><td>保持开启</td></tr><tr><td><strong>发片方式</strong></td><td>两种都是读本地已落盘的切片，差别只在这一片的字节<strong>要不要整块占住本进程内存</strong>。见下方详解</td><td>带宽与人数需要权衡时</td><td>见下</td></tr></tbody></table></div>
+<h4 id="发片方式怎么选">发片方式怎么选</h4>
+<div class="tw"><table><thead><tr><th>选项</th><th>内存表现</th><th>适合</th></tr></thead><tbody><tr><td><strong>整片</strong></td><td>每个正在下载的连接<strong>占住一整片（1~2 MB）</strong></td><td><strong>带宽大、人不多</strong>。高带宽高延迟链路上更能顶满发送窗口</td></tr><tr><td><strong>流式</strong></td><td>每连接只留 <strong>64 KB 缓冲</strong>，内存与观看人数几乎无关</td><td><strong>人多或内存紧</strong></td></tr></tbody></table></div>
+<blockquote><p><strong>判断方法</strong>：看仪表盘的「在线观众」。十来个人的小圈子用整片；几十上百人同时看就用流式。</p></blockquote>
+<hr>
+<h2 id="上游源应该长什么样-2">上游源应该长什么样</h2>
+<pre class="code"><code>http://upstream.example/dash/channel.mpd</code></pre>
+<p><strong>确认是不是 DASH</strong>：</p>
+<pre class="code lang-bash"><code>curl -sI http://upstream.example/dash/channel.mpd | grep -i content-type
+# application/dash+xml  → 就是 DASH</code></pre>
+<p>也可以直接丢进 ffprobe：</p>
+<pre class="code lang-bash"><code>ffprobe -v quiet -show_streams http://upstream.example/dash/channel.mpd</code></pre>
+<hr>
+<h2 id="配置步骤-2">配置步骤</h2>
+<ul><li><strong>分组管理</strong> → 新建分组 → 工作模式选 <strong>DASH（MPD → HLS 转封装）</strong></li><li>新建频道，填上游 <code>.mpd</code> 地址、频道 ID、tvg-id</li><li>源有 ClearKey 加密就填密钥，没有就留空</li><li>想回看就填「回看保留时长」</li><li>保存后复制订阅地址，导入播放器</li></ul>
+<blockquote><p><strong>M3U 批量导入时会自动识别</strong>：<code>.mpd</code> 开头的频道自动归为 DASH 模式。所以导入 DASH 订阅不用手改。</p></blockquote>
+<hr>
+<h2 id="代价-2">代价</h2>
+<ul><li><strong>出网带宽</strong> = 所有观众流量总和</li><li><strong>CPU</strong> = 转封装 + 清单解析，比 Proxy 重</li><li><strong>内存</strong> = 缓存的 MPD 与分片（用「整片内存预算」封顶）</li><li><strong>配置项最多</strong>，但默认值能覆盖大多数情况</li></ul>
+<hr>
+<h2 id="排错-3">排错</h2>
+<p><strong>播不了 / 花屏</strong></p>
+<ul><li>源真的是 <code>.mpd</code> 吗？用 <code>curl -I</code> 看 Content-Type</li><li>源的加密是不是 ClearKey？Widevine 需要额外处理</li><li>频道的 ClearKey 密钥格式对不对（<code>kid:key</code>，32 位十六进制）</li></ul>
+<p><strong>起播慢</strong></p>
+<ul><li>先看「DASH 调优 → 播放体验 → 快速起播窗口」，但改之前记住默认值适配大多数源</li><li>检查上游 CDN 延迟</li></ul>
+<p><strong>卡顿</strong></p>
+<ul><li>先确认出口带宽跑满没有</li><li>再看「抗卡缓冲」和「磁盘最少保留」</li><li>并发下载别设太高，频道多时会打满连接</li></ul>
+<p><strong>字幕不显示 / 样式不对</strong></p>
+<ul><li>字幕设置<strong>只对 DASH 频道生效</strong>，确认分组模式没选错</li></ul>
+<p><strong>内存占用高</strong></p>
+<ul><li>「整片内存预算」保持自动（0），或手动封顶到 128MB</li><li>「发片方式」改用流式</li></ul>
+<hr>
+<h2 id="相关文档-2">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="工作模式-302-跳转"><a class="src" href="markdown/mode-redirect.md">查看 Markdown 源文件</a><h1 id="工作模式-302-跳转-Redirect">工作模式 · 302 跳转（Redirect）</h1>
+<blockquote><p>模式标识：<code>redirect</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：你的服务器不下发内容，只回一个 302，让播放器自己去源站拉流。<strong>流量不经过你。</strong></p>
+<blockquote><p>面板的官方说明：「客户端按 302 直连上游,本服务仅做调度。带宽零开销,但客户端会暴露上游地址。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流-3">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy  ──302──▶  源站地址
+   ▲                    │
+   └────播放器直接去源站拉流────┘
+
+✅ 你的服务器只出了一次 302，之后完全不承载流量</code></pre>
+<hr>
+<h2 id="使用条件-3">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td><strong>省带宽</strong></td><td>流量直连源站，你的服务器只处理请求</td></tr><tr><td>源站<strong>稳定</strong></td><td>不需要代理层的容错</td></tr><tr><td>源是 <strong>FLV / 直链源</strong></td><td>面板的 M3U 导入里，Redirect 明确标注适合这类源</td></tr><tr><td>源靠 <strong>IP 白名单</strong></td><td>玩家的出口 IP 直连源站，注意得放得下</td></tr></tbody></table></div>
+<hr>
+<h2 id="不适用场景-3">不适用场景</h2>
+<ul><li><strong>需要隐藏源地址</strong> → 302 会把源站地址明明白白交出去，用 <a href="mode-proxy.md">Proxy</a></li><li>需要<strong>缓存加速</strong> → Redirect 不缓存</li><li>需要<strong>本地回看 / 录制</strong> → Redirect 不经过本地拉流，没有切片</li><li>源站<strong>限制单 IP 并发</strong> → 每人从自己的 IP 直连，源站并发压力上升</li></ul>
+<hr>
+<h2 id="本模式的全部配置项-3">本模式的全部配置项</h2>
+<p>通用字段见 <strong><a href="fields-common.md">通用配置项详解</a></strong>。Redirect 独有的是<strong>跳转方式</strong>和<strong>上游缓存时长</strong>两项。</p>
+<h3 id="分组级-3">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「Redirect（302 跳转）」</td><td>—</td></tr><tr><td><strong>跳转方式</strong></td><td>决定跳转前做多少准备工作，见下方详解</td><td>绝大多数情况选「直接跳转」</td></tr><tr><td><strong>上游缓存时长</strong></td><td>解析出来的上游地址缓存多少秒</td><td>源地址带时效 token → 填比 token 有效期短的值</td></tr></tbody></table></div>
+<h4 id="跳转方式-Redirect-独有">跳转方式（Redirect 独有）</h4>
+<div class="tw"><table><thead><tr><th>选项</th><th>它做了什么</th><th>什么时候选</th></tr></thead><tbody><tr><td><strong>直接跳转（默认）</strong></td><td>真正意义的 302：<strong>脚本频道零回源直接跳</strong>；静态地址只跟随重定向拿落地地址，<strong>不下载播放列表</strong></td><td><strong>上游本来就是成品地址（绝大多数情况）</strong>，换台更快</td></tr><tr><td><strong>解析最佳画质</strong></td><td>多下一次播放列表。若上游给的是 master 清单，就替客户端挑<strong>码率最高的那一路</strong>再跳</td><td>上游给的是多码率 master，你想让用户固定看最高画质</td></tr></tbody></table></div>
+<blockquote><p><strong>建议先用默认的「直接跳转」</strong>。只有当你发现用户播到的是低码率、且上游确实是 master 清单时，才改成「解析最佳画质」。后者每次跳转要多一次回源。</p></blockquote>
+<h4 id="上游缓存时长">上游缓存时长</h4>
+<p>缓存的是「解析出来的上游地址」，不是媒体切片。</p>
+<blockquote><p><strong>关键：带时效 token 的源，这里要填得比 token 有效期短。</strong> 例子：源地址里的签名 300 秒就失效 → 上游缓存时长填 <code>240</code>，留 60 秒余量。填太长会拿到已过期的地址，表现为「过一会儿就开始 403」。</p></blockquote>
+<p><strong>默认值是 300 秒</strong>（面板的输入框占位符）。</p>
+<hr>
+<h3 id="网络配置-分组级">网络配置（分组级）</h3>
+<p>Redirect 分组会显示完整的网络配置，和 <a href="mode-proxy.md">Proxy</a> 一样：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>User-Agent</strong></td><td>源报 403 或返回错误页时</td><td><code>Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0</code></td></tr><tr><td><strong>代理类型 / 地址 / 用户名 / 密码</strong></td><td>想隐藏服务器 IP 时</td><td><code>127.0.0.1:7890</code></td></tr><tr><td><strong>自定义请求头</strong></td><td>源要 Referer 才放行时</td><td><code>Referer: https://example.com/</code></td></tr></tbody></table></div>
+<blockquote><p><strong>这里有个反直觉的地方</strong>：Redirect 的 302 响应<strong>不经过你的服务器转发媒体</strong>，但「跟随重定向拿落地地址」这一步会用到你设的 UA 和请求头。所以这两个字段在 Redirect 下<strong>仍然有用</strong>。</p></blockquote>
+<hr>
+<h3 id="频道级-2">频道级</h3>
+<p>Redirect 不经过本地拉流，所以<strong>没有推流 / 回看区块</strong>。取而代之的是<strong>源站回看</strong>：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>上游支持回看</strong></td><td>源站自己能处理回看才选「是」，程序只把 <code>playseek</code> 追加到上游 URL</td><td>源站支持时选「是」</td></tr><tr><td><strong>回看天数</strong></td><td>源站能回看多少天。<strong>填大了播放器会拖到没有内容的时段</strong></td><td>源站支持 7 天 → 填 <code>7</code></td></tr></tbody></table></div>
+<blockquote><p><strong>回看能力来自源站，不是你的服务器。</strong> 这是 Redirect / Rewrite / Passthrough 三种模式共有的特点。</p></blockquote>
+<hr>
+<h3 id="不会出现的字段-1">不会出现的字段</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>为什么没有</th></tr></thead><tbody><tr><td>回看保留时长 / 最大磁盘占用 / 时间偏移</td><td>不录本地切片</td></tr><tr><td>预载配置</td><td>只有 Proxy 有</td></tr><tr><td>ClearKey 密钥</td><td>那是 <a href="mode-dash.md">DASH</a> 用的</td></tr><tr><td>MPD 裁剪保留秒数</td><td>只有 (Proxy 或 Rewrite) 且格式=MPD 时才出现</td></tr><tr><td>源容器类型</td><td>那是 <a href="mode-remux.md">Remux</a> 用的</td></tr></tbody></table></div>
+<hr>
+<h2 id="配置步骤-3">配置步骤</h2>
+<ul><li><strong>分组管理</strong> → 新建分组 → 工作模式选 <strong>Redirect（302 跳转）</strong></li><li>跳转方式选<strong>直接跳转（默认）</strong></li><li>上游缓存时长：源地址不带时效 token 就用默认 300；带 token 就填短一点</li><li>新建频道，填上游 URL、频道 ID、tvg-id</li><li>需要回看就开「上游支持回看」并填回看天数</li><li>复制订阅地址，导入播放器</li></ul>
+<hr>
+<h2 id="代价-3">代价</h2>
+<ul><li><strong>你的出网带宽 ≈ 0</strong>，这是它最大的价值</li><li>服务器只承担 302 响应，CPU 和内存占用都可以忽略</li><li><strong>源站的并发压力由观众承担。</strong> 观众集中访问同一源时，源站可能返回限流响应</li></ul>
+<hr>
+<h2 id="排错-4">排错</h2>
+<p><strong>播放器拿到订阅但播不了</strong></p>
+<ul><li>播放器是否支持 302 跟随？部分电视端播放器对跳转链支持不好</li><li>试试换成 <a href="mode-proxy.md">Proxy</a> 看是不是播放器的问题</li></ul>
+<p><strong>跳过去了但源站拒绝</strong></p>
+<ul><li>源站可能按 IP 鉴权或限制地域。Redirect 让播放器用<strong>自己的出口 IP</strong> 直连。服务器上的 UA 和 Referer 只作用于获取落地地址这一步，<strong>不影响后续的拉流请求</strong></li><li>这是切 Redirect 最常见的翻车点</li></ul>
+<p><strong>刚开机能播，过一会儿开始 403</strong></p>
+<ul><li>上游缓存时长填太长，缓存了已过期的地址。调短它</li></ul>
+<p><strong>想改跳转目标 / 加鉴权</strong></p>
+<ul><li>Redirect 模式本身不适合加鉴权，那需要 <a href="mode-proxy.md">Proxy</a></li></ul>
+<hr>
+<h2 id="相关文档-3">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="工作模式-URL-改写"><a class="src" href="markdown/mode-rewrite.md">查看 Markdown 源文件</a><h1 id="工作模式-URL-改写-Rewrite">工作模式 · URL 改写（Rewrite）</h1>
+<blockquote><p>模式标识：<code>rewrite</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：只把 M3U8 播放列表里的相对地址改成绝对地址，<strong>不转发任何内容</strong>。最轻的一种模式。</p>
+<blockquote><p>面板的官方说明：「改写 M3U8/MPD 中的 URL 为绝对地址,切片由客户端直连上游。轻量代理。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流-4">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy  ──返回改写后的播放列表──▶  源站（只取一次清单）
+   ▲                    │
+   └────播放器自己去源站取切片────┘
+
+✅ 切片不走你的服务器</code></pre>
+<p>服务器只做一件事：拿到 <code>.m3u8</code> 清单，把里面 <code>/live/seg1.ts</code> 这类相对路径改成 <code>http://源站/live/seg1.ts</code>，然后把清单交给播放器。<strong>之后的切片流量完全在播放器和源站之间。</strong></p>
+<hr>
+<h2 id="使用条件-4">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td>源的清单<strong>用了相对路径</strong></td><td>直接喂播放器会解析失败，改写成绝对地址就能播</td></tr><tr><td>需要<strong>极轻量</strong>的整理</td><td>服务器只出流量，不承载媒体</td></tr><tr><td>频道<strong>数量很多</strong>但流量分散</td><td>每个频道各拉各的，你的带宽压力小</td></tr><tr><td>M3U <strong>批量导入的默认落点</strong></td><td>导入时「自动识别」把非 <code>.mpd</code> 的频道都归到这里</td></tr></tbody></table></div>
+<hr>
+<h2 id="不适用场景-4">不适用场景</h2>
+<ul><li>需要<strong>隐藏源地址</strong> → 改写后源站地址明明白白写在清单里</li><li>需要<strong>缓存</strong> → Rewrite 不缓存，每次播放都重新拉</li><li>源站<strong>限制单 IP 并发</strong> → 每个人都从自己的 IP 直连</li><li>需要<strong>本地回看 / 录制</strong> → 不经过本地拉流</li></ul>
+<blockquote><p>M3U 导入的默认策略就是 Rewrite：面板标注「Rewrite - 改写 M3U8 为绝对地址(HLS 通用)」。这是安全的默认值——不代理、不消耗带宽，先保证能播。</p></blockquote>
+<hr>
+<h2 id="本模式的全部配置项-4">本模式的全部配置项</h2>
+<p>通用字段见 <strong><a href="fields-common.md">通用配置项详解</a></strong>。Rewrite 的专属字段很少。</p>
+<h3 id="分组级-4">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「Rewrite（URL 改写）」</td><td>—</td></tr><tr><td><strong>内容格式</strong></td><td>上游给的是 <code>.m3u8</code> 还是 <code>.mpd</code></td><td>源是 <code>.m3u8</code> → HLS</td></tr><tr><td><strong>MPD 裁剪保留秒数</strong></td><td><strong>只在「内容格式 = MPEG-DASH」时出现</strong></td><td><code>30</code></td></tr></tbody></table></div>
+<h4 id="内容格式选-MPD-时会怎样">内容格式选 MPD 时会怎样</h4>
+<p>面板代码里对三种模式 + MPD 的组合有明确区分：</p>
+<div class="tw"><table><thead><tr><th>模式 + 内容格式</th><th>实际行为</th></tr></thead><tbody><tr><td>Proxy + MPD</td><td>反代穿透本服务</td></tr><tr><td>Rewrite + MPD</td><td><strong>直连 CDN</strong></td></tr><tr><td>Redirect + MPD</td><td><strong>直连 CDN</strong></td></tr></tbody></table></div>
+<blockquote><p>也就是说，Rewrite 和 Redirect 选 MPD 时并不转封装，只是把 MPD 地址原样给出去。<strong>如果你真的需要 MPD→HLS 的转换，用 <a href="mode-dash.md">DASH</a> 模式。</strong></p></blockquote>
+<h4 id="网络配置-1">网络配置</h4>
+<p>Rewrite 分组<strong>会显示</strong>完整的网络配置（和 Proxy / Redirect 一样）：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>User-Agent</strong></td><td>取清单时被 403 就填</td><td><code>Mozilla/5.0 ... Chrome/120.0</code></td></tr><tr><td><strong>代理类型 / 地址 / 用户名 / 密码</strong></td><td>想隐藏服务器 IP 时</td><td><code>127.0.0.1:7890</code></td></tr><tr><td><strong>自定义请求头</strong></td><td>源要 Referer 才给清单时</td><td><code>Referer: https://example.com/</code></td></tr></tbody></table></div>
+<blockquote><p><strong>重要</strong>：Rewrite 下你的服务器<strong>只负责取清单</strong>，请求头设置在这一步生效。播放器之后自己取切片，那部分不受你的设置影响——所以<strong>源站要求 Referer 才能取切片时，Rewrite 会失败</strong>，得换 <a href="mode-proxy.md">Proxy</a>。</p></blockquote>
+<hr>
+<h3 id="频道级-3">频道级</h3>
+<p>Rewrite 不经过本地拉流，所以<strong>没有推流 / 回看区块</strong>。取而代之的是<strong>源站回看</strong>：</p>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>上游支持回看</strong></td><td>源站自己能处理回看才选「是」</td><td>源站支持时选「是」</td></tr><tr><td><strong>回看天数</strong></td><td>源站能回看多少天。填大了播放器会拖到没有内容的时段</td><td><code>7</code></td></tr></tbody></table></div>
+<hr>
+<h3 id="不会出现的字段-2">不会出现的字段</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>为什么没有</th></tr></thead><tbody><tr><td>回看保留时长 / 最大磁盘占用 / 时间偏移</td><td>不录本地切片</td></tr><tr><td>上游缓存时长、跳转方式</td><td>那是 <a href="mode-redirect.md">Redirect</a> 独有的</td></tr><tr><td>源容器类型</td><td>那是 <a href="mode-remux.md">Remux</a> 独有的</td></tr><tr><td>预载配置</td><td>只有 Proxy 有</td></tr><tr><td>ClearKey 密钥</td><td>那是 <a href="mode-dash.md">DASH</a> 用的</td></tr></tbody></table></div>
+<hr>
+<h2 id="与-Redirect-的区别">与 Redirect 的区别</h2>
+<p>两个都是「流量不走服务器」，区别在于<strong>服务器出了多少力</strong>：</p>
+<div class="tw"><table><thead><tr><th></th><th>Rewrite</th><th><a href="mode-redirect.md">Redirect</a></th></tr></thead><tbody><tr><td>服务器做什么</td><td>取清单、改写相对地址</td><td>回一个 302</td></tr><tr><td>清单谁去取</td><td>你的服务器取一次</td><td>播放器自己去取</td></tr><tr><td>适合源</td><td>清单用了相对路径的 HLS</td><td>任意直链、<code>.flv</code>、<code>.ts</code></td></tr><tr><td>带宽</td><td>极小（只有清单）</td><td>极小（只有 302）</td></tr></tbody></table></div>
+<p><strong>简单判断</strong>：源的 <code>.m3u8</code> 里写的是相对路径 → Rewrite；源本身要给直链（<code>.flv</code>、<code>.ts</code>）→ Redirect。</p>
+<hr>
+<h2 id="配置步骤-4">配置步骤</h2>
+<ul><li><strong>分组管理</strong> → 新建分组 → 工作模式选 <strong>Rewrite（URL 改写）</strong></li><li>新建频道，填上游 URL、频道 ID、tvg-id</li><li>需要回看就开「上游支持回看」并填回看天数</li><li>复制订阅地址，导入播放器</li></ul>
+<p>导入场景下大多数分组不需要手改——M3U 导入会自动把非 <code>.mpd</code> 的频道放进 Rewrite 分组。</p>
+<hr>
+<h2 id="代价-4">代价</h2>
+<ul><li><strong>带宽接近零</strong>，服务器只承担清单请求</li><li>CPU 和内存占用都极低</li><li>但你<strong>放弃了全部控制</strong>：没有缓存、没有隐藏、没有录制、无法鉴权</li></ul>
+<hr>
+<h2 id="排错-5">排错</h2>
+<p><strong>改写后还是播不了</strong></p>
+<ul><li>打开源站的 <code>.m3u8</code> 看一眼：如果它本来就是绝对地址，Rewrite 没有可改写的东西，问题在源站或播放器</li><li>源是不是加密的？Rewrite 不处理加密，那种情况需要 <a href="mode-dash.md">DASH</a> 或 <a href="mode-proxy.md">Proxy</a></li></ul>
+<p><strong>清单能取到但切片 404</strong></p>
+<ul><li>源站可能校验 Referer。<strong>Rewrite 的请求头只作用于获取清单。</strong> 播放器获取切片时不携带该设置。此类源站需要改用 <a href="mode-proxy.md">Proxy</a></li></ul>
+<p><strong>想改策略但怕破坏现有分组</strong></p>
+<ul><li>切换模式前先在「分组管理」用<strong>导出全部</strong>备份，模式切换后如果有问题可以导回</li></ul>
+<hr>
+<h2 id="相关文档-4">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="工作模式-直链"><a class="src" href="markdown/mode-passthrough.md">查看 Markdown 源文件</a><h1 id="工作模式-直链-Passthrough">工作模式 · 直链（Passthrough）</h1>
+<blockquote><p>模式标识：<code>passthrough</code>　|　面板位置：分组管理 → 编辑分组 → 工作模式</p></blockquote>
+<p><strong>一句话</strong>：不代理、不改写、不加 token，原样把上游 URL 交给播放器。<strong>服务器只负责记账。</strong></p>
+<blockquote><p>面板的官方说明：「原样导出别人的 URL,不经本服务;有 ClearKey 则按 MPD。」</p></blockquote>
+<hr>
+<h2 id="数据怎么流-5">数据怎么流</h2>
+<pre class="code"><code>播放器  ──请求──▶  IPTV Proxy
+   ▲                    │
+   │    返回的就是上游原始地址
+   └────────────────────┘
+
+✅ 订阅里写的地址 = 上游地址</code></pre>
+<p>与其他模式最大的区别：<strong>Passthrough 的播放地址直接就是上游 URL</strong>，不走 <code>/{分组}/{频道}</code> 这套路由。</p>
+<hr>
+<h2 id="使用条件-5">使用条件</h2>
+<div class="tw"><table><thead><tr><th>场景</th><th>说明</th></tr></thead><tbody><tr><td><strong>完全信任的源</strong></td><td>你的官方源、自己的 CDN</td></tr><tr><td>只想<strong>统一管理频道清单</strong></td><td>让这些频道出现在总订阅里，但流量完全不参与</td></tr><tr><td>源本身就是<strong>公开直链</strong></td><td>没有鉴权、没有加密、没有必要代理</td></tr><tr><td>给订阅<strong>做一个占位条目</strong></td><td>频道存在，但由别的途径播放</td></tr></tbody></table></div>
+<hr>
+<h2 id="不适用场景-5">不适用场景</h2>
+<p><strong>任何需要控制的情况都不要用</strong>：</p>
+<ul><li>需要隐藏源地址 → Passthrough 是把地址直接交出去</li><li>需要 Token 防盗链 → <strong>Passthrough 不加 token</strong>，这是它字面意思的一部分</li><li>需要缓存 / 回看 / 录制 → 都不经过本地拉流</li><li>源有鉴权或加密 → 完全暴露</li></ul>
+<blockquote><p>它是唯一一个<strong>默认不套用 Token</strong> 的模式。别在需要防盗链的分组里用。</p></blockquote>
+<hr>
+<h2 id="本模式的全部配置项-5">本模式的全部配置项</h2>
+<p>通用字段见 <strong><a href="fields-common.md">通用配置项详解</a></strong>。Passthrough 的专属字段只有一个——ClearKey 密钥。</p>
+<h3 id="分组级-5">分组级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>工作模式</strong></td><td>固定选「Passthrough（直链）」</td><td>—</td></tr><tr><td>内容格式 / 预载切片上限</td><td><strong>不显示</strong>——直链不选格式，也不需要预载</td></tr><tr><td>网络配置（UA / 代理 / 请求头）</td><td><strong>会显示</strong></td></tr></tbody></table></div>
+<hr>
+<h3 id="频道级-4">频道级</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>什么时候填</th><th>例子</th></tr></thead><tbody><tr><td><strong>上游 URL</strong></td><td><strong>这个模式下最重要的字段</strong>——它会原样出现在播放器的订阅里</td><td><code>http://cdn.example.com/live/cctv1.m3u8</code></td></tr><tr><td><strong>ClearKey 解密密钥</strong></td><td>见下方说明</td><td><code>kid_hex:key_hex</code></td></tr><tr><td><strong>上游支持回看 / 回看天数</strong></td><td>源站自己能处理回看时</td><td><code>7</code></td></tr></tbody></table></div>
+<h4 id="为什么-Passthrough-会有-ClearKey-密钥区">为什么 Passthrough 会有 ClearKey 密钥区</h4>
+<p>面板代码里写得很直白：</p>
+<blockquote><p>直链（有 key 即按 MPD 下发）也显示</p></blockquote>
+<p>也就是说，如果你在 Passthrough 分组里配了密钥，面板会<strong>按 MPD 的形式把地址下发</strong>。这是为「直链 + 加密」这个组合准备的。</p>
+<p><strong>例子</strong>：源是加密的 MPD，你在 Passthrough 频道里填上密钥，订阅里的地址就会带上对应的解密信息。</p>
+<blockquote><p><strong>但要注意</strong>：Passthrough 不做任何解密动作，它只是把密钥信息附在地址里。能不能解开取决于播放器自己。</p></blockquote>
+<hr>
+<h3 id="不会出现的字段-3">不会出现的字段</h3>
+<div class="tw"><table><thead><tr><th>字段</th><th>为什么没有</th></tr></thead><tbody><tr><td>回看保留时长 / 最大磁盘占用 / 时间偏移</td><td>不录本地切片</td></tr><tr><td>预载配置</td><td>只有 Proxy 有</td></tr><tr><td>MPD 裁剪保留秒数</td><td>不做 MPD 转换</td></tr><tr><td>源容器类型</td><td>那是 <a href="mode-remux.md">Remux</a> 用的</td></tr><tr><td>上游缓存时长、跳转方式</td><td>那是 <a href="mode-redirect.md">Redirect</a> 用的</td></tr></tbody></table></div>
+<hr>
+<h2 id="配置步骤-5">配置步骤</h2>
+<ul><li><strong>分组管理</strong> → 新建分组 → 工作模式选 <strong>Passthrough（直链）</strong></li><li>新建频道，<strong>上游 URL</strong> 填完整的直链地址</li><li>tvg-id 照常填，EPG 匹配要用</li><li>源加密的话填上 ClearKey 密钥</li><li>保存后复制订阅地址</li></ul>
+<p>这个模式下上游 URL 是<strong>唯一的关键字段</strong>——它会原样出现在播放器里。</p>
+<hr>
+<h2 id="代价-5">代价</h2>
+<ul><li><strong>带宽、CPU、内存占用全部为零</strong>——服务器只存了一条记录</li><li>但相应地：无法统计真实观看情况之外的东西，也不提供任何转发价值</li></ul>
+<blockquote><p>频道热度统计仍会记录播放列表的请求，这是 IP 管控和热度统计的监控对象。</p></blockquote>
+<hr>
+<h2 id="排错-6">排错</h2>
+<p><strong>订阅里的地址变成了上游原始地址</strong></p>
+<ul><li><strong>这是设计如此</strong>，不是 bug。Passthrough 的播放地址就是上游 URL</li></ul>
+<p><strong>加了 token 但还是被外链盗用</strong></p>
+<ul><li>Passthrough <strong>不套用 Token</strong>。要防盗链必须用 <a href="mode-proxy.md">Proxy</a> 配合 Token + 随机频道 ID</li></ul>
+<p><strong>源是加密的放不了</strong></p>
+<ul><li>Passthrough 不做任何解密。加密源需要 <a href="mode-dash.md">DASH</a>（ClearKey）或 <a href="mode-proxy.md">Proxy</a></li></ul>
+<p><strong>这个分组在总订阅里看不到</strong></p>
+<ul><li>检查分组的「访问范围」是不是设成了<strong>隐藏</strong>（不进总订阅）</li></ul>
+<hr>
+<h2 id="相关文档-5">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="通用字段详解"><a class="src" href="markdown/fields-common.md">查看 Markdown 源文件</a><h1 id="通用配置项详解">通用配置项详解</h1>
+<blockquote><p>六种工作模式<strong>共用</strong>的字段。理解了这里，换任何模式都不用再学一遍。 各模式的专属字段见对应的模式指南。</p></blockquote>
+<hr>
+<h2 id="一-分组级字段">一、分组级字段</h2>
+<p>在 <strong>分组管理 → 编辑分组</strong> 里。分组是一批频道的容器，决定订阅地址长什么样。</p>
+<h3 id="分组-ID">分组 ID</h3>
+<p><strong>这个字段决定了你的订阅地址</strong>，起名要慎重。</p>
+<div class="tw"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>规则</td><td>只用小写字母、数字和短横线 <code>-</code></td></tr><tr><td>作用</td><td>出现在 <code>http://你的IP:19899/<分组ID>/playlist.m3u</code> 里</td></tr><tr><td>后果</td><td><strong>改了会让已分发出去的地址全部失效</strong></td></tr></tbody></table></div>
+<p><strong>例子</strong>：填 <code>cctv</code>，订阅地址就是</p>
+<pre class="code"><code>http://192.168.1.10:19899/cctv/playlist.m3u</code></pre>
+<p><strong>建议</strong>：用英文小写、能看出内容的短词。不要用中文（部分播放器对非 ASCII 的 URL 兼容性差），不要用空格。</p>
+<hr>
+<h3 id="显示名称">显示名称</h3>
+<p>写进 M3U 的 <code>group-title</code>，是播放器里显示的分类名。<strong>改它不影响地址</strong>，随便改。</p>
+<p><strong>例子</strong>：分组 ID 填 <code>cctv</code>，显示名称填「央视套」，播放器的分组列表里就显示「央视套」。</p>
+<hr>
+<h3 id="工作模式">工作模式</h3>
+<p>六选一，决定这组频道怎么转发。这是本手册 <code>mode-*.md</code> 讲的内容。</p>
+<div class="tw"><table><thead><tr><th>模式</th><th>一句话</th></tr></thead><tbody><tr><td>Proxy（反向代理）</td><td>全面，最通用，默认选它</td></tr><tr><td>Remux（连续流 → HLS）</td><td>源是 FLV/TS/MMT 时用</td></tr><tr><td>Redirect（302 跳转）</td><td>最省你的带宽</td></tr><tr><td>Rewrite（URL 改写）</td><td>M3U 导入的默认落点</td></tr><tr><td>DASH（MPD → HLS）</td><td>源是 <code>.mpd</code> 或带 ClearKey</td></tr><tr><td>Passthrough（直链）</td><td>完全信任的源，不加 token</td></tr></tbody></table></div>
+<hr>
+<h3 id="EPG-地址">EPG 地址</h3>
+<p>写进 M3U 头部的 <code>x-tvg-url</code>，告诉播放器去哪取节目单。</p>
+<div class="tw"><table><thead><tr><th>填法</th><th>效果</th></tr></thead><tbody><tr><td>点下方按钮填 <code>/epg.xml.gz</code></td><td>用本机 EPG 页生成的那份（推荐）</td></tr><tr><td>留空</td><td>播放器拿不到节目单</td></tr><tr><td>填外部地址</td><td>用第三方的节目单</td></tr></tbody></table></div>
+<p><strong>例子</strong>：<code>/epg.xml.gz</code></p>
+<blockquote><p>前提是 <strong>EPG 总开关已打开</strong>。关掉的话这个地址返回 404，播放器那边就是「有节目单地址但拉不到内容」。</p></blockquote>
+<hr>
+<h3 id="访问范围">访问范围</h3>
+<div class="tw"><table><thead><tr><th>选项</th><th>行为</th><th>什么时候用</th></tr></thead><tbody><tr><td><strong>公开</strong></td><td>正常出现在总订阅里</td><td>绝大多数分组</td></tr><tr><td><strong>隐藏</strong></td><td>直接访问地址能播，但<strong>不进总订阅</strong></td><td>想分享给特定人、又不出现在大订阅里</td></tr><tr><td><strong>归档</strong></td><td>整组停用，但 <strong>EPG 与台标匹配照常</strong></td><td>暂时下架的频道，保留节目单</td></tr><tr><td><strong>免验证</strong></td><td>不校验 token 的公开入口</td><td>想做免登录的免费入口</td></tr></tbody></table></div>
+<p><strong>例子</strong>：你有一个分组只想给朋友，给它设「隐藏」——朋友直接拿地址能播，但别人翻总订阅看不到这一组。</p>
+<hr>
+<h3 id="网络配置-分组级-1">网络配置（分组级）</h3>
+<p><strong>这组字段在六种模式下都会显示。</strong> 面板只对 5 个特定字段做了模式区分（上游缓存时长、跳转方式、源容器类型、内容格式、MPD 裁剪保留秒数），网络配置不在其中。</p>
+<h4 id="User-Agent">User-Agent</h4>
+<p>回源时用的 UA，<strong>部分源站按 UA 放行</strong>。留空用程序默认值。</p>
+<p><strong>什么时候必须填</strong>：源站报 403、或者直接给你返回一段错误页的时候，八成是 UA 被拦了。</p>
+<p><strong>例子</strong>：</p>
+<pre class="code"><code>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36</code></pre>
+<h4 id="代理类型">代理类型</h4>
+<div class="tw"><table><thead><tr><th>选项</th><th>说明</th></tr></thead><tbody><tr><td>不使用代理</td><td>直连回源（默认）</td></tr><tr><td>HTTP 代理</td><td><code>host:port</code> 形式的 HTTP 代理</td></tr><tr><td>SOCKS5</td><td>SOCKS5 代理，<strong>DNS 走本地</strong></td></tr><tr><td>SOCKS5H</td><td>SOCKS5 代理，<strong>DNS 也走代理</strong></td></tr></tbody></table></div>
+<blockquote><p><strong>选哪个</strong>：想隐藏服务器 IP 就填。访问国内源却要绕到境外才选 SOCKS5H。</p></blockquote>
+<h4 id="代理地址-代理用户名-代理密码">代理地址 / 代理用户名 / 代理密码</h4>
+<p>地址填 <code>host:port</code>，<strong>不带协议前缀</strong>。代理类型选「不使用代理」时不生效。</p>
+<p><strong>例子</strong>：<code>127.0.0.1:7890</code> 或 <code>proxy.example.com:1080</code></p>
+<h4 id="自定义请求头">自定义请求头</h4>
+<p>回源时附加的请求头，常用 <code>Referer</code>、<code>Host</code>、<code>Cookie</code>。<strong>User-Agent 请用上面那个独立输入框</strong>，两处都设会打架。</p>
+<p><strong>例子</strong>（每行一条）：</p>
+<pre class="code"><code>Referer: https://example.com/
+Origin: https://example.com</code></pre>
+<blockquote><p><strong>这是排查「能播但很卡」和「直接 403」的常用武器</strong>。部分源站要求 Referer 匹配，不填就被拒。</p></blockquote>
+<hr>
+<h2 id="二-频道级字段">二、频道级字段</h2>
+<p>在 <strong>分组管理 → 编辑频道</strong> 里。</p>
+<h3 id="频道-ID">频道 ID</h3>
+<p><strong>决定播放地址</strong>。同一分组内不能重复，<strong>改了旧地址立即失效</strong>。</p>
+<p><strong>例子</strong>：分组 <code>cctv</code> 下的频道 <code>cctv1</code>，播放地址是</p>
+<pre class="code"><code>http://192.168.1.10:19899/cctv/cctv1.m3u8</code></pre>
+<hr>
+<h3 id="频道名称">频道名称</h3>
+<p>播放器列表里显示的名字，<strong>EPG 自动匹配也会拿它比对</strong>。随便改，不影响地址。</p>
+<p><strong>例子</strong>：CCTV-1 综合</p>
+<hr>
+<h3 id="上游-URL">上游 URL</h3>
+<p>真正的源地址。</p>
+<p><strong>例子</strong>：</p>
+<pre class="code"><code>http://live.example.com/hls/cctv1.m3u8      ← HLS，Proxy/Rewrite/Redirect 常用
+http://live.example.com/live/cctv1.flv      ← FLV 连续流，Remux 用
+http://live.example.com/dash/cctv1.mpd      ← MPEG-DASH，DASH 模式用</code></pre>
+<blockquote><p>上游类型选了「脚本解析」时<strong>可以留空</strong>——地址由脚本每次播放前算出来。</p></blockquote>
+<hr>
+<h3 id="频道-Logo-URL">频道 Logo URL</h3>
+<p>台标地址。留空则用「台标管理」里匹配到的本地台标。</p>
+<p><strong>例子</strong>：<code>https://example.com/logo/cctv1.png</code></p>
+<blockquote><p><strong>别填外链图床</strong>。填了图标每刷新都要去别人的服务器要一次，很容易被限速或挂掉。用「台标管理」把图存本地，面板会自动帮你填好。</p></blockquote>
+<hr>
+<h3 id="tvg-id">tvg-id</h3>
+<p><strong>EPG 匹配用的标识，必须和节目单里的频道 id 一致。留空则用频道 ID。</strong></p>
+<p><strong>例子</strong>：节目单里的 id 是 <code>CCTV1.com</code>，这里就填 <code>CCTV1.com</code>。</p>
+<blockquote><p><strong>这是 EPG 匹配失败最常见的原因</strong>。频道能播但节目单是空的，八成就是这里没填对。 填完到「节目指南 → 频道匹配」看报告，「未匹配」的数量应该会降下来。</p></blockquote>
+<hr>
+<h3 id="tvg-name">tvg-name</h3>
+<p>EPG 匹配的备用名，留空则用频道名称。tvg-id 对不上时还会拿它再试一次。</p>
+<p><strong>例子</strong>：<code>CCTV-1 综合</code></p>
+<hr>
+<h3 id="上游解析">上游解析</h3>
+<div class="tw"><table><thead><tr><th>选项</th><th>说明</th></tr></thead><tbody><tr><td>静态 URL</td><td>直接用上面填的地址（绝大多数情况）</td></tr><tr><td>脚本解析（PY）</td><td>每次播放前跑一段 Python 算出地址</td></tr></tbody></table></div>
+<p><strong>什么时候用脚本解析</strong>：源站的地址<strong>带时效签名</strong>（每次请求的 URL 里都有不同的 token，过几分钟就失效）。这种源没法把地址写死，得让脚本每次去算。</p>
+<blockquote><p>脚本解析需要系统装了 <strong>python3</strong>。</p></blockquote>
+<hr>
+<h3 id="解析脚本-脚本参数-解析缓存时长">解析脚本 / 脚本参数 / 解析缓存时长</h3>
+<p>选了「脚本解析」才出现。</p>
+<ul><li><strong>解析脚本</strong>：选一个已上传的 <code>.py</code>，脚本要返回一个可直接播放的地址</li><li><strong>脚本参数</strong>：传给脚本的 ID 或参数，<strong>具体填什么取决于脚本自己的约定</strong></li><li><strong>解析缓存时长</strong>：脚本算出的地址缓存多少秒，留空继承分组</li></ul>
+<p><strong>例子</strong>：脚本参数填 <code>channel_id=cctv1</code></p>
+<blockquote><p><strong>解析缓存时长要小于源站签名 token 的有效期</strong>。比如签名 5 分钟就失效，缓存填 300 秒刚好卡在边界，建议填短一点（240）留余量。</p></blockquote>
+<hr>
+<h2 id="三-频道级的通用网络配置">三、频道级的通用网络配置</h2>
+<p>和分组级同名，但<strong>频道级优先</strong>：分组和频道都填了，以频道级的为准；请求头则是合并，同名以频道级为准。</p>
+<ul><li><strong>User-Agent</strong>：留空则继承分组设置</li><li><strong>代理类型</strong>：留空 / 选「继承分组设置」则用分组的</li><li><strong>代理地址 / 用户名 / 密码</strong>：同上</li><li><strong>自定义请求头</strong>：与分组级合并，同名以频道级为准</li></ul>
+<p><strong>例子</strong>：分组里统一设了 UA，但某个源特别严格，在那个频道里单独填它要求的 UA。</p>
+<hr>
+<h2 id="四-通用字段速查">四、通用字段速查</h2>
+<div class="tw"><table><thead><tr><th>字段</th><th>必填？</th><th>填错的后果</th></tr></thead><tbody><tr><td>分组 ID</td><td>✅</td><td>地址变了，别人手上的订阅全废</td></tr><tr><td>显示名称</td><td>建议填</td><td>播放器里显示成英文 ID</td></tr><tr><td>工作模式</td><td>✅</td><td>选错 → 播不了 / 卡顿</td></tr><tr><td>EPG 地址</td><td>可选</td><td>不填 → 播放器没节目单</td></tr><tr><td>访问范围</td><td>✅ 默认公开</td><td>设成「隐藏」→ 订阅里找不到这组</td></tr><tr><td>上游 URL</td><td>✅（静态 URL 时）</td><td>播不了</td></tr><tr><td>频道 ID</td><td>✅</td><td>组内重复 → 保存报错</td></tr><tr><td>频道名称</td><td>建议填</td><td>列表难看，EPG 匹配变难</td></tr><tr><td>tvg-id</td><td>强烈建议填</td><td><strong>能播但没有节目单</strong></td></tr><tr><td>tvg-name</td><td>可选</td><td>多一层保险</td></tr><tr><td>UA / 请求头</td><td>遇到拦截时填</td><td>403 或返回错误页</td></tr></tbody></table></div>
+<hr>
+<h2 id="相关文档-6">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="资源占用实测-1"><a class="src" href="markdown/resource.md">查看 Markdown 源文件</a><h1 id="资源占用实测">资源占用实测</h1>
+<blockquote><p>本文是 <strong>v0.8.2 的实机测量结果</strong>，不是估算。数据来自本地容器实测，方法和局限写在文末。</p></blockquote>
+<hr>
+<h2 id="测试环境">测试环境</h2>
+<div class="tw"><table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>程序</td><td>IPTV Proxy v0.8.2</td></tr><tr><td>部署</td><td>Docker 容器（<code>alpine/curl</code>，无挂载卷）</td></tr><tr><td>机器</td><td>macOS，10 核 / 15.7 GB</td></tr><tr><td>频道源</td><td>Mux 公开测试流，1080p HLS，约 <strong>6.2 Mbps</strong></td></tr><tr><td>缓存后端</td><td><code>disk</code></td></tr><tr><td>切片伪装</td><td>开启（默认）</td></tr><tr><td>Token</td><td>关闭</td></tr></tbody></table></div>
+<p>测量方式：模拟播放器持续拉取播放列表与切片，从容器层（<code>docker stats</code>）和面板 <code>/status/metrics</code> 两边取数。</p>
+<hr>
+<h2 id="实测数据">实测数据</h2>
+<h3 id="三个档位">三个档位</h3>
+<div class="tw"><table><thead><tr><th>并发观众</th><th>CPU（占单核）</th><th>容器内存</th></tr></thead><tbody><tr><td><strong>1 个</strong></td><td><strong>0.86%</strong></td><td><strong>71 MB</strong></td></tr><tr><td><strong>2 个</strong>（不同频道）</td><td><strong>1.31%</strong></td><td><strong>77 MB</strong></td></tr><tr><td><strong>5 个</strong>（不同频道）</td><td><strong>1.07 – 1.51%</strong></td><td><strong>89 – 117 MB</strong></td></tr></tbody></table></div>
+<h3 id="完整对照">完整对照</h3>
+<div class="tw"><table><thead><tr><th>场景</th><th>CPU（占单核）</th><th>容器内存</th><th>回源</th><th>出网</th></tr></thead><tbody><tr><td>空闲</td><td>~0%</td><td>28 MB</td><td>—</td><td>—</td></tr><tr><td>1 观众（冷缓存）</td><td>0.86%</td><td>71 MB</td><td>7.3 MB/s</td><td>0.3 MB/s</td></tr><tr><td>1 观众（热缓存）</td><td>1.06%</td><td>90 MB</td><td>8.8 MB/s</td><td>2.0 MB/s</td></tr><tr><td>2 观众（不同频道）</td><td>1.31%</td><td>77 MB</td><td>9.7 MB/s</td><td>3.4 MB/s</td></tr><tr><td>5 观众（<strong>同一频道</strong>）</td><td><strong>0.51%</strong></td><td>78 MB</td><td>3.9 MB/s</td><td>3.1 MB/s</td></tr><tr><td>5 观众（<strong>不同频道</strong>）</td><td>1.07 – 1.51%</td><td>89 – 117 MB</td><td>5.8 – 13.1 MB/s</td><td>3.5 – 4.2 MB/s</td></tr></tbody></table></div>
+<hr>
+<h2 id="三个反直觉的结论">三个反直觉的结论</h2>
+<h3 id="1-决定-CPU-的是码率-不是人数">1. 决定 CPU 的是码率，不是人数</h3>
+<p>CPU 花在转发字节上。<strong>1 个用户看 4K（20 Mbps）比 5 个用户看 720p（2 Mbps）更费 CPU。</strong></p>
+<p>换算方式（以 1080p / 6.2 Mbps 为基准 1.0）：</p>
+<div class="tw"><table><thead><tr><th>码率</th><th>倍数</th></tr></thead><tbody><tr><td>4K / 20 Mbps</td><td>×3.2</td></tr><tr><td>1080p / 6.2 Mbps</td><td>×1.0</td></tr><tr><td>720p / 2 Mbps</td><td>×0.3</td></tr><tr><td>480p / 1 Mbps</td><td>×0.16</td></tr></tbody></table></div>
+<h3 id="2-同一频道多人-比一个人还省">2. 同一频道多人 ≈ 比一个人还省</h3>
+<p>5 个人看<strong>同一个频道</strong>时 CPU 只要 <strong>0.51% 单核</strong>，比 1 个观众的 0.86% 还低。</p>
+<p>原因是<strong>切片缓存共享</strong>：回源只发生一次，5 个观众共用同一份切片。回源流量从 5.8 MB/s 降到 3.9 MB/s，CPU 减半。</p>
+<blockquote><p>推论：观众扎堆看同一个频道（比如都在看春晚）几乎不增加成本，人分散看不同频道才贵。</p></blockquote>
+<h3 id="3-冷缓存才是直播的真实成本">3. 冷缓存才是直播的真实成本</h3>
+<p>实测里「1 个观众」比「5 人同一频道」还费 CPU，因为那一档是<strong>冷缓存</strong>（首次回源 + 解析清单）。</p>
+<p>而直播场景<strong>永远接近冷缓存</strong>——每个切片只出现一次，播完即弃。</p>
+<p><strong>所以估算直播服务器容量时，要用冷缓存那档的数字，不要用缓存命中的。</strong></p>
+<hr>
+<h2 id="换算到你的-VPS">换算到你的 VPS</h2>
+<p>CPU 按<strong>单核百分比</strong>换算，再乘码率倍数：</p>
+<div class="tw"><table><thead><tr><th>并发观众</th><th>CPU 需求</th><th>内存需求</th><th>最低配置</th><th>建议配置</th></tr></thead><tbody><tr><td>1 – 5</td><td>0.1 – 0.15 核</td><td>70 – 120 MB</td><td>1 核 / 512 MB</td><td>1 核 / 1 GB</td></tr><tr><td>10 – 20</td><td>0.2 – 0.4 核</td><td>200 – 400 MB</td><td>1 核 / 1 GB</td><td>2 核 / 2 GB</td></tr><tr><td>50</td><td>0.8 – 1.5 核</td><td>约 1 GB</td><td>2 核 / 1 GB</td><td>2 核 / 2 GB</td></tr><tr><td>100+</td><td>1.5 – 3 核</td><td>需限缓存</td><td>4 核 / 2 GB</td><td>4 核 / 4 GB</td></tr></tbody></table></div>
+<blockquote><p>⚠️ <strong>只有前三行是实测</strong>。10 / 50 / 100 是外推，模型是：CPU 随总码率线性、随人数略次线性；内存每观众约 15–22 MB（由 28 MB → 117 MB 推得）。 实际以你自己的面板读数为准。</p></blockquote>
+<hr>
+<h2 id="真正的瓶颈是带宽">真正的瓶颈是带宽</h2>
+<p>10 个观众看 6.2 Mbps 直播 = <strong>62 Mbps 出网</strong>。这比 CPU 重要一个数量级——CPU 才 0.4% 单核，带宽却要 62 Mbps。</p>
+<p>控制成本优先看带宽，不是 CPU：</p>
+<div class="tw"><table><thead><tr><th>手段</th><th>效果</th><th>代价</th></tr></thead><tbody><tr><td><strong>切 <a href="mode-rewrite.md">Rewrite</a> 模式</strong></td><td>出网归零</td><td>无缓存、无 Token、无回看</td></tr><tr><td><strong>切 <a href="mode-redirect.md">Redirect</a> 模式</strong></td><td>出网归零</td><td>暴露源地址</td></tr><tr><td>降低码率</td><td>CPU 和带宽同步下降</td><td>画质</td></tr><tr><td>用 <a href="mode-remux.md">Remux</a> 替代 Proxy</td><td>CPU 更低</td><td>仅源为连续流时适用</td></tr></tbody></table></div>
+<hr>
+<h2 id="把内存压住">把内存压住</h2>
+<p>内存增长主要来自缓存。实测每观众约 15–22 MB，两个开关能控制：</p>
+<div class="tw"><table><thead><tr><th>位置</th><th>配置</th><th>效果</th></tr></thead><tbody><tr><td>系统设置 → 缓存配置</td><td><code>内存上限</code></td><td>内存缓存的硬上限，设了就不会无限涨</td></tr><tr><td>系统设置 → DASH 调优 → 特殊场景</td><td><strong>发片方式</strong></td><td>见下</td></tr></tbody></table></div>
+<h3 id="发片方式-整片-vs-流式">发片方式：整片 vs 流式</h3>
+<div class="tw"><table><thead><tr><th>选项</th><th>每连接内存</th><th>适合</th></tr></thead><tbody><tr><td><strong>整片</strong></td><td>1 – 2 MB</td><td>带宽大、人不多。高带宽高延迟链路上更顶满发送窗口</td></tr><tr><td><strong>流式</strong></td><td><strong>64 KB</strong></td><td><strong>人多或内存紧</strong>。内存与观看人数几乎无关</td></tr></tbody></table></div>
+<p><strong>判断方法</strong>：看面板「在线观众」。十来个人的小圈子用整片；几十上百人同时看就用流式。</p>
+<p>整片内存预算默认是「可用内存的 1/8，封顶 512 MB」，小内存机器会自动调低。</p>
+<hr>
+<h2 id="怎么自己测">怎么自己测</h2>
+<p>面板「概览」页有实时指标，但<strong>面板的回源流量统计在 v0.8.2 里失效</strong>（累计回源一直显示 0，而实际在回源）。要用容器层的数据：</p>
+<pre class="code lang-bash"><code># 看容器 CPU / 内存 / 网络
+docker stats --no-stream --format &#x27;{{.CPUPerc}}  {{.MemUsage}}  {{.NetIO}}&#x27; iptv</code></pre>
+<p><code>CPUPerc</code> 以<strong>单核 100%</strong> 为基准（所以 10% 表示用了 0.1 个核）。<code>NetIO</code> 是累计值，两次采样取差值就是速率。</p>
+<p>测的时候注意：</p>
+<ul><li>先在面板建好频道，确认能正常播放</li><li>用多个播放器或脚本持续拉取该频道的播放地址</li><li>间隔 20 秒以上采样两次，算差值</li><li><strong>区分冷/热缓存</strong>：播过一次之后再测是热缓存；换新频道或清空缓存是冷缓存</li></ul>
+<p>面板内的实时指标仍可用于看 CPU 累计秒数和内存（这两个是准的），只有回源流量不准。</p>
+<hr>
+<h2 id="测试局限">测试局限</h2>
+<p>说清楚这份数据的适用范围：</p>
+<ul><li>用的是 <strong>VOD 点播流</strong>，不是真直播。切片长度与刷新节奏和直播有差异</li><li>用 <code>curl</code> 模拟拉取，不是真实播放器（不发 Range 请求、不做缓冲策略）</li><li>macOS 上测的，<strong>Linux VPS 的 CPU 绝对值会有差异</strong>，但相对关系（人数 vs 码率 vs 缓存）可用</li><li>实测回源流量为 3–13 MB/s，高于真实直播场景。原因是该测试的<strong>缓存命中率偏低</strong>。因此内存数值偏保守</li><li>未开启 Token、预载、录制、EPG 等功能。开启后会增加占用</li></ul>
+<p><strong>结论适用于「中低并发 + 单一代理模式」的容量规划。</strong> 高并发（百人以上）或叠了录制、预载时，请以自己面板的实测读数为准。</p>
+<hr>
+<h2 id="相关文档-7">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section><section class="doc" id="面板与运维参考-1"><a class="src" href="markdown/panel.md">查看 Markdown 源文件</a><h1 id="面板与运维参考">面板与运维参考</h1>
+<blockquote><p>IPTV Proxy v0.8.2 面板 13 个页面的逐页说明、可选依赖、配置文件与命令行运维。 新手请先读 <a href="iptv.md">订阅接入入门</a>，需要查配置项时再回到这里。</p></blockquote>
+<hr>
+<h2 id="面板页面逐页说明">面板页面逐页说明</h2>
+<h3 id="概览">📊 概览</h3>
+<p>运行状态总览：运行时长、分组数、频道数、缓存后端、在线观众、缓存磁盘占用。</p>
+<p><strong>实时指标</strong>五项：</p>
+<div class="tw"><table><thead><tr><th>指标</th><th>含义</th></tr></thead><tbody><tr><td>下行 · 回源</td><td>服务器向源站拉流的速度与累计量</td></tr><tr><td>上行 · 出网</td><td>服务器向播放器分发的速度与累计量</td></tr><tr><td>进程内存</td><td>RSS 常驻内存</td></tr><tr><td>CPU 占用</td><td>累计占用秒数 / 核心数</td></tr><tr><td>整片内存峰值</td><td>整段文件在内存中的占用 / 预算</td></tr></tbody></table></div>
+<p><strong>快速操作</strong>：清空缓存、热重载配置、刷新状态、导出全部 M3U。</p>
+<h3 id="缓存状态">💾 缓存状态</h3>
+<div class="tw"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>缓存后端</td><td><code>disk</code> 硬盘缓存（持久化，重启不丢）/ <code>memory</code> 纯内存</td></tr><tr><td>媒体片段 / M3U8 / 子流地址 / 片段映射</td><td>四类缓存条目数</td></tr><tr><td>磁盘占用</td><td>已用 / 上限 / 剩余。硬盘上限填 0 表示不限</td></tr><tr><td>缓存目录</td><td>默认 <code>./cache</code></td></tr></tbody></table></div>
+<p>缓存目录结构：</p>
+<pre class="code"><code>cache/
+├── epg/          EPG 原始数据与脚本
+├── logos/        台标图片
+├── m3u8/         播放列表缓存
+├── recordings/   录制文件（MKV）
+├── seg_bytes/    切片内容（disk 模式）
+├── seg_url/      切片地址映射
+└── sub_url/      字幕地址映射</code></pre>
+<h3 id="分组管理">🗂 分组管理</h3>
+<p><strong>主战场</strong>。管理所有直播分组与频道。</p>
+<p>顶部操作：<code>M3U 导入</code> · <code>JSON 导入</code> · <code>JSON 覆盖</code> · <code>导出全部</code> · <code>多选</code> · <code>＋ 新建分组</code></p>
+<h4 id="新建分组的字段">新建分组的字段</h4>
+<div class="tw"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody><tr><td>分组 ID</td><td>唯一标识，<strong>决定订阅地址</strong>，建议用英文小写（如 <code>cctv</code>）</td></tr><tr><td>显示名称</td><td>播放器里显示的名字</td></tr><tr><td>工作模式</td><td>见上方六种模式</td></tr><tr><td>EPG 地址</td><td>用本地生成的 EPG，或填外部地址</td></tr><tr><td>访问范围</td><td><code>公开</code> / <code>隐藏</code>（不进总订阅）/ <code>归档</code>（整组停用）/ <code>免验证</code>（公开入口，跳过 Token 校验）</td></tr><tr><td>内容格式</td><td>HLS (<code>.m3u8</code>) / MPEG-DASH (<code>.mpd</code>)</td></tr><tr><td>上游缓存时长</td><td><strong>仅 Redirect 显示</strong>。缓存解析出的上游地址多少秒</td></tr><tr><td>跳转方式</td><td><strong>仅 Redirect 显示</strong>。直接跳转（默认）等</td></tr><tr><td>▶ 网络配置</td><td>分组级默认设置，频道可单独覆盖</td></tr></tbody></table></div>
+<h4 id="新建频道的字段">新建频道的字段</h4>
+<div class="tw"><table><thead><tr><th>字段</th><th>说明</th></tr></thead><tbody><tr><td>频道 ID</td><td>唯一标识，<strong>决定播放地址</strong>，建议英文小写</td></tr><tr><td>频道名称</td><td>播放器显示名</td></tr><tr><td>上游 URL</td><td>源站地址，如 <code>http://upstream/index.m3u8</code></td></tr><tr><td>频道 Logo URL</td><td>图标地址，留空则用台标管理里的本地台标</td></tr><tr><td>tvg-id / tvg-name</td><td>EPG 匹配用的标识，<strong>填对才能匹配到节目单</strong></td></tr><tr><td>上游解析</td><td><code>静态 URL</code> 或 <code>脚本解析（PY）</code>（需 python3）</td></tr><tr><td>源站回看</td><td>上游自身支持回看时开启，可设置回看天数</td></tr><tr><td>▶ 网络配置</td><td>留空则继承分组配置（UA、Referer、Origin 等）</td></tr></tbody></table></div>
+<blockquote><p><strong>tvg-id 是 EPG 匹配成败的关键</strong>。EPG 页的「频道匹配」报告会列出未匹配的频道，缺 tvg-id 是最常见原因。</p></blockquote>
+<h4 id="M3U-批量导入">M3U 批量导入</h4>
+<p>导入外部 M3U 订阅，支持选择文件或直接粘贴文本。</p>
+<p><strong>频道模式</strong>（决定导入后的处理方式）：</p>
+<div class="tw"><table><thead><tr><th>选项</th><th>说明</th></tr></thead><tbody><tr><td>自动识别</td><td><code>.mpd</code> → DASH，其余 → Rewrite（<strong>默认</strong>）</td></tr><tr><td>Redirect</td><td>302 跳转，适合 FLV / 直链源、脚本解析源</td></tr><tr><td>Rewrite</td><td>改写 M3U8 为绝对地址，HLS 通用方案</td></tr><tr><td>Proxy</td><td>完整反代 + 片段缓存转发</td></tr><tr><td>DASH</td><td>MPD → HLS 实时代理，支持 ClearKey 解密</td></tr><tr><td>Passthrough</td><td>直链直通，不代理、不加 token</td></tr></tbody></table></div>
+<p><strong>导入策略</strong>：</p>
+<div class="tw"><table><thead><tr><th>策略</th><th>行为</th></tr></thead><tbody><tr><td>追加</td><td>同名分组跳过，新分组追加（<strong>安全</strong>）</td></tr><tr><td>合并</td><td>同名分组保留，新频道追加进去</td></tr><tr><td>覆盖</td><td>同名分组整体替换为新数据，其它分组保留</td></tr></tbody></table></div>
+<p>导入能力细节：</p>
+<ul><li><code>tvg-id</code> / <code>group-title</code> 等元数据全部保留，可在分组里手动微调</li><li>UA / Referer / Origin 自动抓取（支持行内属性、<code>#EXTVLCOPT</code>、<code>#KODIPROP</code>、<code>#EXTHTTP</code>）</li><li>ClearKey 加密自动填入 <code>license_key</code> 字段；Widevine 等其它加密类型需手动配置</li></ul>
+<h3 id="系统设置">⚙️ 系统设置</h3>
+<p>改动后需点「保存设置」生效。</p>
+<h4 id="服务器">服务器</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>监听地址</td><td><code>[::]:端口</code> 双栈 / <code>0.0.0.0:端口</code> 仅 IPv4</td></tr><tr><td>时区</td><td>小时偏移。<strong>中国大陆填 8</strong>，影响回看与 EPG 时间</td></tr><tr><td>回看格式</td><td>见下方说明</td></tr><tr><td>日志级别</td><td><code>debug</code> / <code>info</code>（默认）/ <code>warn</code> / <code>error</code>。排查问题才需要调成 debug</td></tr><tr><td>首页跳转 / 404 跳转 / 错误跳转</td><td>各种情况下的重定向目标</td></tr><tr><td>M3U 头部</td><td>导出订阅时额外写入的行</td></tr></tbody></table></div>
+<p><strong>回看格式</strong>四种（决定播放地址里 <code>playseek</code> 参数的写法）：</p>
+<div class="tw"><table><thead><tr><th>选项</th><th>适用</th></tr></thead><tbody><tr><td>国产 <code>DIYP/影视仓/TVBox/OK</code></td><td>国内播放器（<code>${start}-${end}</code> 形式）</td></tr><tr><td>国外 <code>Televizo/TiviMate/OTT</code></td><td>国外播放器（<code>${start}-${end}</code>）</td></tr><tr><td>国外 <code>Kodi/OTT-Play</code></td><td><code>{utc}-{utcend}</code></td></tr><tr><td>both</td><td>三种都写（<strong>不推荐</strong>，个别播放器会打架）</td></tr></tbody></table></div>
+<h4 id="面板认证">面板认证</h4>
+<p>用户名、新密码、界面语言（跟随浏览器 / 简体中文 / 繁體中文 / English）。改密码后旧会话立即失效，需重新登录。</p>
+<h4 id="备份与迁移">备份与迁移</h4>
+<p>可下载<strong>完整备份</strong>，包含：配置、EPG 映射、两处 Python 脚本、台标库。也可单独打包 EPG 脚本或频道解析脚本。恢复时上传备份包即可。</p>
+<blockquote><p>换服务器、重装系统前，务必先在这里下载一份完整备份。</p></blockquote>
+<h4 id="切片伪装">切片伪装</h4>
+<p>把切片伪装成图片，借 Cloudflare 默认图片缓存规则命中 CDN，<strong>降低被滥用报告的风险</strong>。</p>
+<p><strong>它和反向代理是绑定的</strong>：只有流量真正经过你的服务器时，程序才能把切片地址改写成图片后缀。 所以它只对<strong>代理类模式</strong>有意义——Proxy、Remux、DASH。 Rewrite / Redirect / Passthrough 的切片是上游直连的，改不了；订阅聚合来的频道更是完全不经过本服务。</p>
+<div class="tw"><table><thead><tr><th>选项</th><th>说明</th><th>建议</th></tr></thead><tbody><tr><td><strong>切片伪装</strong></td><td>把切片地址伪装成图片后缀，借 CDN 图片缓存规则提高命中率</td><td>前面有 CDN 时开</td></tr><tr><td><strong>列表伪装</strong></td><td>把 <code>.m3u8</code> / <code>.mpd</code> 也伪装成图片。面板说明：列表刷新频繁，收益大于切片伪装</td><td><strong>开启</strong></td></tr><tr><td><strong>字幕 <code>.vtt</code> 伪装</strong></td><td>字幕体积小，收益有限，<strong>个别播放器会解析失败</strong></td><td>关闭（面板标注推荐）</td></tr><tr><td><strong>主列表伪装</strong></td><td>只影响多码率的 master 列表。<strong>部分 iOS 播放器认不出伪装后的 master</strong></td><td>关闭（面板标注推荐）</td></tr><tr><td><strong>伪装格式</strong></td><td><code>jpg</code> / <code>png</code> / <code>gif</code> / <code>bmp</code> / <code>webp</code>，<strong>多选，按切片稳定轮换</strong></td><td>至少勾两个</td></tr></tbody></table></div>
+<p>##### 实测结果（v0.8.2，单码率 + 多码率两种源对比）</p>
+<p>配置项在 <code>config.toml</code> 的 <code>[cache.disguise]</code> 段：</p>
+<pre class="code lang-toml"><code>[cache.disguise]
+enabled  = true                        # 切片伪装总开关
+playlist = true                        # 列表伪装
+subtitle = false                       # 字幕 .vtt 伪装
+master   = false                       # 主列表伪装
+formats  = [&quot;jpg&quot;,&quot;png&quot;,&quot;gif&quot;,&quot;bmp&quot;,&quot;webp&quot;]</code></pre>
+<p><strong>出厂默认就是 <code>enabled = true</code> + <code>playlist = true</code></strong>，不用手动开。</p>
+<p>实测三层地址的变化（单码率源）：</p>
+<div class="tw"><table><thead><tr><th>层</th><th>伪装关闭</th><th>伪装开启</th></tr></thead><tbody><tr><td>播放入口（订阅里那条）</td><td><code>http://host/组/频道.m3u8</code></td><td><code>http://host/组/频道.m3u8</code> ← <strong>不变</strong></td></tr><tr><td>清单里的切片</td><td><code>..._18e34b....ts</code></td><td><code>..._18e34b....webp</code> / <code>.png</code> / <code>.jpg</code> ← <strong>变</strong></td></tr><tr><td>文件名</td><td>哈希混淆</td><td>哈希混淆（独立设置，不受此开关影响）</td></tr></tbody></table></div>
+<p><strong>结论与常见误解相反：</strong></p>
+<ul><li>✅ <strong>切片后缀确实被改写</strong>，在勾选的图片格式间<strong>轮换</strong>（实测依次出现 <code>.webp</code> → <code>.png</code> → <code>.jpg</code>）</li><li>❌ <strong>播放入口地址永远是 <code>.m3u8</code>，不因开启伪装而改变</strong>。分发出去的订阅地址<strong>不会失效</strong>，不需要重新发地址</li><li>⚠️ 面板源码注释里「入口地址要带扩展名（<code>.m3u8</code> / <code>.mpd</code> / 伪装时 <code>.txt</code>）」中的 <code>.txt</code> 分支，
+<p>在实测中<strong>只出现在多码率 master 的子流地址上</strong>（<code>.../video/index.txt</code>），那是程序对多码率源做规范化 转封装后自己生成的路径，<strong>不是伪装开关的效果</strong>——把它关掉，该地址依然是 <code>.txt</code></p></li></ul>
+<p>补充观察：</p>
+<ul><li><code>playlist</code> / <code>master</code> / <code>subtitle</code> 三个开关在本次实测（单码率源 + 多码率源）中<strong>没有观察到任何地址变化</strong>，
+<p>本次实测未观察到这三个开关对地址的影响。实测生效的设置是总开关 <code>enabled</code></p></li><li>文件名混淆（<code>..._18e34bfbb515537d2bc7054e33d8ecfc</code>）与伪装无关，由 <code>cache.dash.obfuscate_filenames</code> 独立控制</li></ul>
+<p>##### 怎么用</p>
+<ul><li><strong>默认就已经开着</strong>，直接用即可</li><li>要调整：系统设置 → 切片伪装 → 改开关与格式 → 保存</li><li>切换伪装总开关会改变切片 URL。<strong>已缓存切片的播放器需要重新加载播放列表</strong></li><li>播放入口地址不受影响，分发出去的订阅继续有效</li></ul>
+<p>##### 前置条件</p>
+<p>伪装的效果来自 CDN 对图片类文件的缓存规则。<strong>没有 CDN 时收益很有限</strong>——直连场景下程序改后缀也换不来缓存命中。</p>
+<p>##### 出问题时</p>
+<p>伪装会让排错变难：抓包看到的是 <code>.jpg</code>，播放器报「格式不支持」却看不出原因。</p>
+<p><strong>排查时先把「切片伪装」和「列表伪装」关掉</strong>，确认是伪装导致的还是源本身的问题。调通之后再开。</p>
+<h4 id="监控">监控</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>健康探测</td><td>主动探测频道可用性，决定分组页的<strong>频道状态点</strong>和在线人数显示</td></tr><tr><td>探测周期 / 超时 / 并发</td><td>探测参数。周期越长越省资源</td></tr><tr><td>访问统计</td><td>开启后「频道热度」页才有数据</td></tr><tr><td>在线窗口</td><td>统计在线的判定窗口秒数</td></tr></tbody></table></div>
+<h4 id="缓存配置">缓存配置</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>后端</td><td><code>memory</code> / <code>disk</code>。重启不丢选 disk</td></tr><tr><td>缓存目录 / 硬盘上限 / 内存上限</td><td>路径与容量。填 0 或留空为不限</td></tr><tr><td>预载配置</td><td><strong>仅 Proxy 模式生效</strong>，见上文</td></tr></tbody></table></div>
+<h4 id="字幕设置">字幕设置</h4>
+<p><strong>仅 DASH 模式频道生效</strong>。可注入样式（字号、颜色、字重、位置）以及机翻（需 MTranServer 服务）。</p>
+<p>机翻支持目标语言：简体中文、繁體中文、日本語、한국어、English、Español、Français、Deutsch、Русский、ไทย、Tiếng Việt。</p>
+<h4 id="DASH-调优">DASH 调优</h4>
+<p>面板原文明确提示：</p>
+<blockquote><p>304 增量刷新、多 CDN 故障切换、防断流备份、片段级容错等都是<strong>自动的</strong>，无需配置。下面三组参数默认值已适配绝大多数源，<strong>不确定用途就不要改</strong>——改错会直接影响起播与卡顿。</p></blockquote>
+<p>面板提供三组折叠面板。<code>播放体验</code> 影响延迟、起播速度和卡顿稳定性。<code>网络性能</code> 和 <code>特殊场景</code> 属于高级参数。</p>
+<h3 id="安全管控">🛡 安全管控</h3>
+<h4 id="Token-防盗链">Token 防盗链</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>启用 Token 验证</td><td>开启后<strong>所有播放地址需携带 token 参数</strong>，导出 M3U 会自动附加</td></tr><tr><td>随机频道 ID</td><td>需先开启 Token。频道 ID 替换为 6 位随机字符，与 Token 同步轮转</td></tr><tr><td>有效期</td><td>token 有效小时数</td></tr><tr><td>失败跳转</td><td>token 无效时跳转到哪里（可指向自定义提示页）</td></tr></tbody></table></div>
+<blockquote><p><strong>防外链的关键</strong>：开启 Token + 随机频道 ID 后，真实频道 ID 不会出现在任何公开位置，别人拿到链接也播不了。数据分享接口会返回 token 真值，务必用强随机密钥并用 IP 白名单限定对端。</p></blockquote>
+<h4 id="IP-管控">IP 管控</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>启用 IP 管控</td><td>基于 IP 的访问频率限制与封禁机制。<strong>仅监控播放列表请求</strong></td></tr><tr><td>并发会话</td><td>每 IP 允许的并发数</td></tr><tr><td>会话超时</td><td>秒</td></tr><tr><td>限流跳转 / 封禁跳转</td><td>触发后的跳转目标</td></tr><tr><td>白名单</td><td>管理员 IP 不受限</td></tr><tr><td>▸ 频率限制与封禁</td><td>高级项，默认值适用大多数场景</td></tr></tbody></table></div>
+<p>状态区三个数字：<strong>跟踪中的 IP</strong>、<strong>并发会话</strong>、<strong>封禁中的 IP</strong>。注意面板已注明「这里是管控模块看到的 IP，<strong>不是在线人数</strong>」。</p>
+<p><strong>管理员</strong>：可批量封禁 / 解封 IP。 <strong>自助解封入口</strong>：<code>/unban</code>，无需登录，<strong>每月限 3 次</strong>。</p>
+<h4 id="多-VPS-数据分享">多 VPS 数据分享</h4>
+<p>多台 VPS 共享 token 与封禁 IP。开启「同时分享 token」后全网同一 token；关闭则只同步封禁，各机 token 独立。</p>
+<h3 id="频道热度">🔥 频道热度</h3>
+<p>按在线人数排序的热门频道，实时刷新。显示：当前在线、近窗口去重 IP 合计、活跃频道数、累计清单请求。</p>
+<p>需要「系统设置 → 访问统计」开启后才有数据。</p>
+<h3 id="定时录制">⏰ 定时录制</h3>
+<p>为 Proxy / DASH 频道设置定时录制任务。</p>
+<p><strong>运行机制</strong>：</p>
+<ul><li>到达开始时间后系统自动启动该频道的流并录制，<strong>无需提前手动开启推流或回看</strong></li><li>录制结束自动停止：若期间无人观看且频道非常驻，录制结束即回收；若有人观看或为常驻频道，保持运行</li><li>开始时间设为过去时，会尝试从已保留的回看历史补录</li><li>录制完成后切片自动合并为 MKV。支持多音轨。中断后仍可播放</li></ul>
+<blockquote><p>⚠️ <strong>必须安装 ffmpeg</strong>，否则录制任务直接失败（用于封装 MKV，不转码）。 支持 Proxy（HLS，含多音轨/多字幕）和 DASH 两种模式频道。文件保存在 <code>cache/recordings/</code>。</p></blockquote>
+<p>安装：<code>apt install ffmpeg</code> · <code>brew install ffmpeg</code> · Windows 下载后加入 PATH。</p>
+<h3 id="节目指南-EPG">📺 节目指南（EPG）</h3>
+<p>多源采集 → 匹配本机频道 → 生成统一 <code>/epg.xml.gz</code>。</p>
+<h4 id="EPG-设置">EPG 设置</h4>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>总开关</td><td><strong>关闭时 <code>/epg.xml</code>、<code>/epg.xml.gz</code>、<code>/epg</code> 全部返回 404，导出的 M3U 也不带 <code>x-tvg-url</code></strong></td></tr><tr><td>公开查看器</td><td>开放 / 关闭</td></tr><tr><td>历史天数</td><td>采集保留的历史天数</td></tr><tr><td>名称匹配</td><td>开启时按频道名辅助匹配</td></tr><tr><td>脚本源</td><td>允许 / 禁止使用 Python 脚本源</td></tr><tr><td>脚本超时</td><td>秒</td></tr><tr><td>采集节奏</td><td>每 4 小时 / 每 6 小时 / 每天 4 点 / 每天 3/5/12 点 / 每 30 分钟。面板会显示下次触发时间</td></tr></tbody></table></div>
+<h4 id="翻译设置">翻译设置</h4>
+<p>非中文标题可自动翻译。</p>
+<div class="tw"><table><thead><tr><th>配置</th><th>说明</th></tr></thead><tbody><tr><td>翻译开关</td><td>开启后，下次生成 EPG 时非中文标题自动进入待译队列</td></tr><tr><td>目标语言</td><td>14 种（含中日韩、欧美、俄语、阿拉伯语、泰语、越南语、印尼语）</td></tr><tr><td>引擎</td><td><code>Google 免费端点（无需 Key）</code> / <code>Gemini（需要 API Key）</code> / <code>MTranServer（自部署 · 无限量 · 离线）</code></td></tr><tr><td>翻译简介</td><td>否（只翻标题）/ 是</td></tr></tbody></table></div>
+<p>高级的「模型参数」折叠区含节奏、节流、代理与各引擎专属设置，可用「套用当前引擎推荐参数」一键配置。</p>
+<h4 id="采集源与频道匹配">采集源与频道匹配</h4>
+<ul><li><strong>采集源</strong>：顺序即优先级</li><li><strong>频道匹配报告</strong>：列出 <code>需要处理</code> / <code>映射失效</code> / <code>未匹配</code> / <code>手动源无数据</code> / <code>无节目</code> / <code>数据过期</code> / <code>正常</code> 各类数量</li><li><strong>额外频道</strong>：本机没有、但要带进输出的频道，可从源添加</li></ul>
+<h3 id="台标管理">🖼 台标管理</h3>
+<p>自己托管频道图标，M3U 的 <code>tvg-logo</code> 与 EPG 的 <code>icon</code> 都指向它。</p>
+<div class="tw"><table><thead><tr><th>功能</th><th>说明</th></tr></thead><tbody><tr><td>上传台标</td><td>拖拽或点选，支持多选。png / jpg / webp / bmp / avif，浏览器内转码，<strong>保留透明背景</strong>；动图跳过转码</td></tr><tr><td>打开公开图库</td><td>从内置图库选</td></tr><tr><td>一键全部动态化</td><td>批量生成动态台标</td></tr><tr><td>全部还原静态</td><td>取消动态化</td></tr><tr><td>匹配到频道时一并设为台标</td><td>上传后自动匹配并应用</td></tr></tbody></table></div>
+<p><strong>生成动效</strong>可选：斜向扫光（最百搭）、竖向扫光、来回扫光、光点掠过（最省体积）、边缘辉光、呼吸明暗（体积最大）。 <strong>画质</strong>三档：省流量 256px/5帧、均衡 384px/8帧、高清 512px/10帧。</p>
+<p>列表可按 <code>全部</code> / <code>已被频道使用</code> / <code>未被使用</code> 筛选，并提示缺台标的频道数和仍用外部图床的频道数。</p>
+<h3 id="订阅聚合">📥 订阅聚合</h3>
+<p>合并外部 M3U 订阅，按分组与关键词筛选。添加多个订阅源后可生成一份汇总订阅。</p>
+<blockquote><p>⚠️ <strong>订阅聚合不做反向代理。</strong> 它的频道在 <code>/playlist.m3u</code> 里输出<strong>上游原始地址</strong>， 播放器直连源站，不经过本服务——因此套不上工作模式、Token、缓存、录制，也隐藏不了源地址。 （实测：手动添加的频道输出 <code>http://host/mygroup/HOY77.m3u8</code>， 订阅聚合来的频道输出 <code>https://上游域名/...</code>）</p>
+<p><strong>想让订阅走代理，用「分组管理 → M3U 导入」。</strong> 导入的频道会变成你的分组和频道，获得代理地址。 多份订阅就各导入一次，会成为不同分组，总订阅自动合并。</p></blockquote>
+<ul><li><strong>顺序即优先级</strong></li><li>「保存订阅配置」保存全局设置</li><li>支持 <code>预览</code> 订阅内容的效果</li></ul>
+<h3 id="回看管理">⏪ 回看管理</h3>
+<p>Proxy / DASH 模式频道的推流与回看。</p>
+<p><strong>启用步骤</strong>：</p>
+<ul><li>在「分组管理」编辑频道，Proxy 模式开启「推流模式 / 回看」，DASH 模式开启「开启回看」</li><li>程序启动时自动开始推流，也可在此手动控制</li></ul>
+<p><strong>回看播放地址格式</strong>（随「系统设置 → 回看格式」自动变化）：</p>
+<pre class="code"><code>http://host/&lt;分组&gt;/&lt;频道&gt;?playseek=&lt;开始时间&gt;-&lt;结束时间&gt;</code></pre>
+<p>时间格式 <code>20240101120000</code>（<code>yyyyMMddHHmmss</code>），<strong>使用本地时间</strong>——需在系统设置里配好时区偏移（UTC+8 填 <code>8</code>）。</p>
+<p>切片存储在 <code>cache/livestream/</code>。</p>
+<h3 id="视频素材">🎬 视频素材</h3>
+<p>把 404 / 错误重定向用的 MP4 转成本地 HLS，解决某些播放器不显示的问题。</p>
+<p>内置 5 个占位资源：404 跳转、上游错误跳转、Token 失效跳转、IP 限流跳转、IP 封禁跳转。</p>
+<blockquote><p>⚠️ <strong>需要 ffmpeg</strong>。未安装时该项显示警告，且无法转换。 未转换的条目在重定向时仍发送原 MP4 URL。</p></blockquote>
+<h3 id="运行日志">📜 运行日志</h3>
+<p>实时查看系统运行日志，可按级别过滤（调试/信息/警告/错误）、控制显示条数（50/100/200/500/1000）、自动滚动。</p>
+<p>日志同时写入 <code>iptv-proxy.log</code>，<strong>最大 5MB</strong>。</p>
+<hr>
+<hr>
+<h2 id="订阅与播放地址">订阅与播放地址</h2>
+<div class="tw"><table><thead><tr><th>用途</th><th>地址格式</th></tr></thead><tbody><tr><td>分组订阅</td><td><code>http://host:19899/<分组ID>/playlist.m3u</code></td></tr><tr><td>频道播放</td><td><code>http://host:19899/<分组ID>/<频道ID>.m3u8</code>（扩展名见下）</td></tr><tr><td>回看播放</td><td><code>http://host:19899/<分组>/<频道>?playseek=<开始>-<结束></code></td></tr><tr><td>EPG（XMLTV）</td><td><code>http://host:19899/epg.xml</code> 或 <code>/epg.xml.gz</code></td></tr><tr><td>频道图标</td><td><code>http://host:19899/logo/<文件名></code></td></tr><tr><td>自助解封</td><td><code>http://host:19899/unban</code></td></tr><tr><td>面板</td><td><code>http://host:19899/panel</code></td></tr></tbody></table></div>
+<blockquote><p><strong>播放地址的扩展名由后端计算</strong>（<code>/status</code> 返回的 <code>entry_exts</code> 字段），随分组模式与伪装设置变化：HLS 模式是 <code>.m3u8</code>，MPEG-DASH 格式是 <code>.mpd</code>，<strong>开启切片伪装时变成 <code>.txt</code></strong>。前端只查表不自行判断，保证面板显示的地址和 M3U 导出的始终一致。</p>
+<p>路由本身<strong>不带</strong> <code>/index.m3u8</code> 这样的路径段（v0.5.1 起 <code>/:gid/:cid</code> 直接分发）。</p>
+<p><strong>Passthrough 模式是例外</strong>：它的播放地址直接返回上游原始 URL，不走 <code>/{分组}/{频道}</code> 路由。 订阅地址在「分组管理」页每个分组旁点击复制按钮获取；「导出全部」可一次导出所有分组。 开启 Token 后，导出的地址会自动附加 token 参数；手工拼地址访问则需要自行带 token。</p></blockquote>
+<hr>
+<h2 id="可选依赖">可选依赖</h2>
+<div class="tw"><table><thead><tr><th>依赖</th><th>是否必需</th><th>装它干嘛</th></tr></thead><tbody><tr><td><strong>ffmpeg</strong></td><td>可选</td><td>①「视频素材」MP4 → HLS 转码 ② 定时录制合成 MKV。<strong>不装不影响正常代理，但录制任务会直接失败</strong></td></tr><tr><td><strong>python3</strong></td><td>可选</td><td>EPG 的 Python 脚本源。不装则该类源不可用</td></tr><tr><td><strong>MTranServer</strong></td><td>可选</td><td>字幕机翻（自部署、无限量、离线）</td></tr><tr><td><strong>python3-pip</strong></td><td>可选</td><td>配合脚本源安装依赖</td></tr></tbody></table></div>
+<p>安装：</p>
+<pre class="code lang-bash"><code>apt install ffmpeg
+apt install python3 python3-pip</code></pre>
+<p>安装后需<strong>重启 iptv-proxy</strong> 才会被检测到。</p>
+<hr>
+<h2 id="配置文件">配置文件</h2>
+<p>面板里改的设置最终都写入 <code>/opt/iptv-proxy/config.toml</code>。文件只写最小必要项，其余走内置默认值——在面板改任何设置并保存后，后端会把完整配置回写。</p>
+<pre class="code lang-toml"><code>[server]
+bind = &quot;[::]:19899&quot;          # [::] 双栈；只要 IPv4 写 0.0.0.0:PORT
+timezone_offset_hours = 8    # 中国大陆填 8，影响回看/EPG 时间
+log_level = &quot;info&quot;           # trace / debug / info / warn / error
+
+[panel]
+enabled         = true
+username        = &quot;admin&quot;
+password_sha256 = &quot;...&quot;      # SHA-256，明文不落盘
+session_ttl     = 86400      # 会话有效期（秒），默认 24 小时
+
+[cache]
+backend             = &quot;disk&quot;
+disk_path           = &quot;./cache&quot;
+m3u8_max_entries    = 500
+segment_max_entries = 2000
+disk_max_mb         = 0      # 0 = 不限
+
+[auth]
+token_enabled = false        # 建议公网部署时改为 true</code></pre>
+<p>配置文件有<strong>热重载监视</strong>，直接改文件也能生效（前提是热重载未被关闭）。</p>
+<hr>
+<h2 id="命令行运维">命令行运维</h2>
+<p>装好后脚本已软链到 <code>PATH</code>，可全局使用 <code>iptv-proxy</code>。</p>
+<div class="tw"><table><thead><tr><th>命令</th><th>作用</th></tr></thead><tbody><tr><td><code>iptv-proxy</code></td><td>打开管理菜单</td></tr><tr><td><code>iptv-proxy update</code></td><td>更新二进制到最新版</td></tr><tr><td><code>iptv-proxy port <N></code></td><td>改面板端口</td></tr><tr><td><code>iptv-proxy pass <密码> [账号]</code></td><td>改面板密码 / 账号（<strong>忘密码也能改</strong>，不用进面板）</td></tr><tr><td><code>iptv-proxy restart</code></td><td>重启服务</td></tr><tr><td><code>iptv-proxy log</code></td><td>看运行日志</td></tr><tr><td><code>iptv-proxy url</code></td><td>打印面板地址</td></tr><tr><td><code>iptv-proxy uninstall</code></td><td>卸载</td></tr></tbody></table></div>
+<blockquote><p>改端口和改密码都是直接改 <code>config.toml</code> 并重启服务，<strong>改完旧登录会话失效</strong>，需重新登录。</p></blockquote>
+<h3 id="文件位置">文件位置</h3>
+<pre class="code"><code>/opt/iptv-proxy/
+├── iptv-proxy          二进制
+├── config.toml         配置（面板里改的东西都存这）
+├── iptv-proxy.sh       安装/管理脚本
+├── iptv-proxy.log      运行日志
+└── cache/              切片缓存、台标、EPG 数据、录制文件</code></pre>
+<p>卸载时会问要不要一起删 <code>/opt/iptv-proxy</code>，选 <code>N</code> 就只停服务、保留数据，重装即恢复。</p>
+<h3 id="Docker-部署-本环境">Docker 部署（本环境）</h3>
+<p>本环境以容器方式运行，服务由容器内的启动脚本拉起：</p>
+<pre class="code"><code>容器名：iptv        镜像：alpine/curl:latest
+端口映射：0.0.0.0:19899 -&gt; 19899/tcp
+工作目录：/opt/iptv-proxy
+启动命令：./iptv-proxy config.toml</code></pre>
+<p>进程实际监听 <code>[::]:19899</code>。数据全在容器内 <code>/opt/iptv-proxy</code>，<strong>容器内没有挂载卷——重建容器会丢失配置与缓存</strong>，需要持久化请自行 <code>docker cp</code> 或改用 bind mount。</p>
+<hr>
+<hr>
+<h2 id="相关文档-8">相关文档</h2>
+<div class="tw"><table><thead><tr><th>文档</th><th>内容</th></tr></thead><tbody><tr><td><a href="README.md"><code>README.md</code></a></td><td>文档导航 · 模式速查 · 安全清单</td></tr><tr><td><a href="iptv.md"><code>iptv.md</code></a></td><td>订阅接入入门（新手从这篇开始）</td></tr><tr><td><a href="fields-common.md"><code>fields-common.md</code></a></td><td>六种模式共用的字段详解</td></tr><tr><td><a href="panel.md"><code>panel.md</code></a></td><td>面板 13 页逐页说明 · 配置 · 运维</td></tr><tr><td><a href="resource.md"><code>resource.md</code></a></td><td>资源占用实测</td></tr></tbody></table></div></section></main>
+</div>
+
+<footer class="ft"><div class="tw">
+  IPTV Proxy v0.8.2 · 采集于 2026-10-02<br>
+  本文件由 <span class="mono">markdown/</span> 下的 11 篇文档生成。内容与源文件一致。
+</div></footer>
+
+<script>
+document.querySelectorAll('a[data-d]').forEach(function (a) {
+  a.addEventListener('click', function () {
+    document.querySelectorAll('.side a.on').forEach(function (x) { x.classList.remove('on'); });
+    a.classList.add('on');
+  });
+});
+var secs = [].map.call(document.querySelectorAll('.content h2[id]'), function (h) {
+  return { el: h, doc: h.closest('.doc').id, top: h.offsetTop, name: h.textContent.trim() };
+});
+var links = {};
+document.querySelectorAll('.side .ns2, .side .ns3').forEach(function (a) {
+  (links[links[a.dataset.d]] = links[a.dataset.d] || []).push(a);
+});
+var ticking = false;
+function sync() {
+  var y = window.scrollY + 120, cur = null;
+  secs.forEach(function (s) { if (s.top <= y) cur = s; });
+  var d = cur ? cur.doc : secs[0].doc;
+  document.querySelectorAll('.side .nd').forEach(function (a) {
+    a.classList.toggle('on', a.dataset.d === d);
+  });
+  if (links[d] && cur) {
+    var target = null;
+    links[d].forEach(function (a) {
+      var el = document.getElementById(a.getAttribute('href').slice(1));
+      if (el && el.offsetTop <= y) target = a;
+    });
+    links[d].forEach(function (a) { a.classList.toggle('on2', a === target); });
+  }
+  ticking = false;
+}
+window.addEventListener('scroll', function () {
+  if (!ticking) { ticking = true; requestAnimationFrame(sync); }
+}, { passive: true });
+sync();
+</script>

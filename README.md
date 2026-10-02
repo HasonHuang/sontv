@@ -68,14 +68,18 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | bash
 ```
 
-支持 Debian / Ubuntu / Alpine，会自动认架构（`amd64` / `arm64`）与 libc、按 `checksums.txt` 校验 sha256，下载失败或校验不过就直接退出。装完只放两样东西：
+支持 Debian / Ubuntu / Alpine，会自动认架构（`amd64` / `arm64`）与 libc、按 `checksums.txt` 校验 sha256，下载失败或校验不过就直接退出。
+
+**一条命令装完全套**：补齐配置、缺凭据就生成一条 token、建服务用户、按 init 系统注册服务并启动。装完的东西：
 
 ```
 /opt/sontv/sontv-go        二进制
 /opt/sontv/config.json     配置（docs/config.example.json 的内容）
+/opt/sontv/tokens.txt      凭据（缺失时自动生成一条，明文只在终端打印一次）
+/etc/systemd/system/sontv.service   或   /etc/init.d/sontv（按 init 系统二选一）
 ```
 
-`tokens.txt` 脚本不会碰，需要你自己建（见[生成 token](#生成-token)）。重跑脚本是升级：二进制直接覆盖，**已存在的 `config.json` 与 `tokens.txt` 保持不变**。
+重跑脚本是升级：二进制直接覆盖，**已存在的 `config.json` 与 `tokens.txt` 保持不变**——自动生成凭据只在缺失时发生，不会覆盖你手写的 token 表；服务单元每次重写并重启。
 
 常用选项（通过管道传参要放在 `-s --` 之后）：
 
@@ -86,14 +90,33 @@ curl -fsSL .../install.sh | bash -s -- --version v0.1.0
 # 换安装目录
 curl -fsSL .../install.sh | bash -s -- --dir /usr/local/sontv
 
-# 连带注册成 systemd 服务并启动
-curl -fsSL .../install.sh | bash -s -- --service
+# 只装文件，不注册/启动服务（默认是装完就起）
+curl -fsSL .../install.sh | bash -s -- --no-service
 
 # 覆盖已有配置（默认保留）
 curl -fsSL .../install.sh | bash -s -- --force-config
+
+# 不自动生成 tokens.txt，自己管凭据
+curl -fsSL .../install.sh | bash -s -- --no-token
+
+# 自动生成的那条 token 用什么标签
+curl -fsSL .../install.sh | bash -s -- --token-label 客厅电视
 ```
 
-`./install.sh --help` 可看全部选项；同名环境变量（`SONTV_VERSION`、`SONTV_INSTALL_DIR`、`SONTV_SERVICE` …）等价。不带参数直接跑 `./install.sh` 也行，适合先下载再执行。`--service` 会建一个 `sontv` 系统用户、写 `/etc/systemd/system/sontv.service` 并 `enable --now`；非 systemd 系统（Alpine 的 OpenRC）会跳过并提示。
+`./install.sh --help` 可看全部选项；同名环境变量（`SONTV_VERSION`、`SONTV_INSTALL_DIR`、`SONTV_SERVICE` …）等价。不带参数直接跑 `./install.sh` 也行，适合先下载再执行。
+
+> **自动生成的 token**：明文只在安装结束时打印一次，`tokens.txt` 里只存 sha256；丢了只能换发，重装不会再次打印。订阅地址形如 `http://<listen>/sub?token=<明文>`，详见[生成 token](#生成-token)。想自己填表就加 `--no-token`。
+
+服务注册会建一个 `sontv` 系统用户（token 表 0600，非属主读不到会直接 503），再按 init 系统二选一：
+
+| init | 写入 | 开机自启 | 热重载 |
+| --- | --- | --- | --- |
+| systemd | `/etc/systemd/system/sontv.service` | `systemctl enable --now sontv` | `systemctl reload sontv` |
+| OpenRC（Alpine/Gentoo） | `/etc/init.d/sontv` | `rc-update add sontv default` + `rc-service sontv start` | `rc-service sontv reload` |
+
+判定依据是 `/run/systemd/system` 是否存在（只在 systemd 真正作为 PID 1 时才有）加 `rc-service` / `openrc-run` 是否可用，所以**纯容器里装了 systemctl 也不会被误判成 systemd**。两个都没有时只装文件并提示手动运行，不留半个坏单元。
+
+OpenRC 服务脚本默认用 `supervise-daemon` 托管（崩溃 5 秒后拉起，日志在 `/var/log/sontv/sontv.log`）；OpenRC 版本太老没有 `supervise-daemon`，或容器内核上 `supervise-daemon` 报 `failed to acquire lock` 起不来时，脚本会当场降级成 `start-stop-daemon` 后台模式重写一遍再启动。
 
 > **Alpine 上用 `| sh` 代替 `| bash`**：Alpine 默认不带 bash。脚本本身是 POSIX sh，`sh` 与 `bash` 都能跑：
 >
@@ -101,6 +124,8 @@ curl -fsSL .../install.sh | bash -s -- --force-config
 > apk add --no-cache curl   # 或者直接用 busybox 自带的 wget
 > wget -qO- https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | sh
 > ```
+>
+> Alpine 容器里没有 systemd，服务走 OpenRC 分支；`rc-update add` 在非交互式容器里可能失败（只提示，不影响手动 `rc-service sontv start`）。
 
 ### 从源码构建
 
@@ -139,7 +164,7 @@ cd /opt/sontv && sudo -u sontv ./sontv-go   # 直接起，二进制同级已有 
 
 ### 生成 token
 
-token 明文由你自己生成，服务端只认它的 sha256：
+用一键安装脚本时，`tokens.txt` 缺失会自动生成一条，明文在安装结束时打印一次（`--no-token` 可关掉）。要自己生成等价的一组：
 
 ```bash
 TOKEN="$(openssl rand -hex 24)"                 # 或任何足够随机的字符串
@@ -248,6 +273,8 @@ kill -USR1 "$(pidof sontv-go)"   # 改完 tokens.txt 后热重载
 
 ### systemd 单元示例
 
+`install.sh --service` 生成的就是下面这个（多了 `Group`、`WorkingDirectory` 与几个加固项）：
+
 ```ini
 [Unit]
 Description=sontv-go IPTV subscription proxy
@@ -268,6 +295,44 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 ```
+
+### OpenRC 服务脚本示例
+
+`install.sh --service` 在 Alpine/Gentoo 上写的是 `/etc/init.d/sontv`：
+
+```sh
+#!/sbin/openrc-run
+name="sontv"
+description="sontv - IPTV subscription proxy"
+
+command="/opt/sontv/sontv-go"
+directory="/opt/sontv"
+command_user="sontv:sontv"
+retry="SIGTERM/5"
+
+supervisor=supervise-daemon
+output_log="/var/log/sontv/sontv.log"
+error_log="/var/log/sontv/sontv.log"
+respawn_delay=5
+respawn_max=0
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	checkpath --directory --owner "sontv:sontv" --mode 0755 /var/log/sontv
+}
+
+reload() {
+	ebegin "重载 $name"
+	start-stop-daemon --signal USR1 --name sontv-go
+	eend $?
+}
+```
+
+`rc-update add sontv default` 加开机自启，`rc-service sontv start|reload|status` 管日常。
 
 ### Nginx 反向代理
 

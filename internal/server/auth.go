@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/HasonHuang/mytv/go/internal/temp"
+	"github.com/HasonHuang/mytv/go/internal/temptoken"
 	"github.com/HasonHuang/mytv/go/internal/tokens"
 )
 
@@ -55,7 +55,7 @@ func (s *Server) authURL(w http.ResponseWriter, r *http.Request) *tokens.Row {
 	}
 	q := r.URL.Query()
 	if tok := q.Get(tempParam); tok != "" {
-		row, err := temp.VerifyTempToken(snap, tok, s.now())
+		row, err := temptoken.Verify(snap, tok, s.now())
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "临时凭据无效")
 			return nil

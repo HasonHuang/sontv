@@ -1,4 +1,4 @@
-package temp
+package temptoken
 
 import (
 	"crypto/sha256"
@@ -27,17 +27,17 @@ func testSnapshot(t *testing.T) (*tokens.Snapshot, *tokens.Row) {
 	return snap, &snap.Rows[0]
 }
 
-// 临时 token 的验证顺序（temp.go）：先查 uid 还在不在表里、再比签名、最后看 exp。
+// 临时 token 的验证顺序（temptoken.go）：先查 uid 还在不在表里、再比签名、最后看 exp。
 // 查行是第一步，因为签名 key 就是该行的 hash；行没了就无从验签，直接判吊销。
 // 这里几个测试各钉住其中一环：任何一环被绕过都会在此处暴露。
 
-func TestIssueVerifyTempTokenRoundTrip(t *testing.T) {
+func TestIssueVerifyRoundTrip(t *testing.T) {
 	snap, row := testSnapshot(t)
 	now := time.Unix(1_700_000_000, 0)
-	tok := IssueTempToken(row, now, time.Hour)
+	tok := Issue(row, now, time.Hour)
 
 	// TTL 内验签应通过，且返回的行就是签发它的那一行
-	got, err := VerifyTempToken(snap, tok, now.Add(30*time.Minute))
+	got, err := Verify(snap, tok, now.Add(30*time.Minute))
 	if err != nil {
 		t.Fatalf("校验应通过: %v", err)
 	}
@@ -46,25 +46,25 @@ func TestIssueVerifyTempTokenRoundTrip(t *testing.T) {
 	}
 }
 
-func TestVerifyTempTokenExpired(t *testing.T) {
+func TestVerifyExpired(t *testing.T) {
 	snap, row := testSnapshot(t)
 	now := time.Unix(1_700_000_000, 0)
-	tok := IssueTempToken(row, now, time.Hour)
+	tok := Issue(row, now, time.Hour)
 	// 恰在 exp 时刻即过期（边界取「不晚于」而非「早于」）
-	if _, err := VerifyTempToken(snap, tok, now.Add(time.Hour)); err != errTempExpired {
+	if _, err := Verify(snap, tok, now.Add(time.Hour)); err != errExpired {
 		t.Fatalf("恰到期应过期: %v", err)
 	}
-	if _, err := VerifyTempToken(snap, tok, now.Add(2*time.Hour)); err != errTempExpired {
+	if _, err := Verify(snap, tok, now.Add(2*time.Hour)); err != errExpired {
 		t.Fatalf("过时后应过期: %v", err)
 	}
 }
 
-// TestVerifyTempTokenSignature 是防篡改契约：改动 token 任一可被攻击者
+// TestVerifySignature 是防篡改契约：改动 token 任一可被攻击者
 // 触碰的部分，签名就不再成立。此处穷举畸形输入的正确拒绝。
-func TestVerifyTempTokenSignature(t *testing.T) {
+func TestVerifySignature(t *testing.T) {
 	snap, row := testSnapshot(t)
 	now := time.Unix(1_700_000_000, 0)
-	tok := IssueTempToken(row, now, time.Hour)
+	tok := Issue(row, now, time.Hour)
 
 	cases := []struct {
 		name string
@@ -78,7 +78,7 @@ func TestVerifyTempTokenSignature(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := VerifyTempToken(snap, c.tok, now); err == nil {
+			if _, err := Verify(snap, c.tok, now); err == nil {
 				t.Fatalf("非法 token 应被拒: %q", c.tok)
 			}
 		})
@@ -93,30 +93,30 @@ func flipLast(s string) string {
 	return "a"
 }
 
-// TestVerifyTempTokenRowGone 钉住「删行即吊销」：签名仍对、未过期，
+// TestVerifyRowGone 钉住「删行即吊销」：签名仍对、未过期，
 // 但 uid 已不在表里 → 拒。这是封人的唯一手段，不能被绕过。
-func TestVerifyTempTokenRowGone(t *testing.T) {
+func TestVerifyRowGone(t *testing.T) {
 	_, row := testSnapshot(t)
 	now := time.Unix(1_700_000_000, 0)
-	tok := IssueTempToken(row, now, time.Hour)
+	tok := Issue(row, now, time.Hour)
 
 	// 换一张没有该行的表（模拟删行）
 	empty, err := tokens.ParseTokenTable([]byte("# 空表\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := VerifyTempToken(empty, tok, now); err != errTempRowGone {
-		t.Fatalf("删行后应 errTempRowGone，实际 %v", err)
+	if _, err := Verify(empty, tok, now); err != errRowGone {
+		t.Fatalf("删行后应 errRowGone，实际 %v", err)
 	}
 }
 
 // TestSplitTempToken 分段解析的边界：段数对但 uid 长度不对要拒。
 func TestSplitTempToken(t *testing.T) {
-	if _, _, _, ok := splitTempToken("a.b.c"); ok {
+	if _, _, _, ok := split("a.b.c"); ok {
 		t.Fatalf("uid 长度不符应 false")
 	}
 	uid := strings.Repeat("0", tokens.UIDLen)
-	exp, gotUID, sig, ok := splitTempToken("123." + uid + ".sig")
+	exp, gotUID, sig, ok := split("123." + uid + ".sig")
 	if !ok || exp != "123" || gotUID != uid || sig != "sig" {
 		t.Fatalf("正常三段应解析: %q %q %q %v", exp, gotUID, sig, ok)
 	}

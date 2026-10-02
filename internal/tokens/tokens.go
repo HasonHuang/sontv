@@ -50,7 +50,7 @@ func (s *Snapshot) Empty() bool {
 	return s == nil || len(s.Rows) == 0
 }
 
-// UIDLen 是 UID 段的十六进制长度（sha256 前 16 位）。导出是给 temp 包复用，
+// UIDLen 是 UID 段的十六进制长度（sha256 前 16 位）。导出是给 temptoken 包复用，
 // 免得两处各写一份 16 的魔数。
 const UIDLen = 16
 

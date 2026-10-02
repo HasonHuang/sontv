@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/HasonHuang/mytv/go/internal/config"
-	"github.com/HasonHuang/mytv/go/internal/temp"
+	"github.com/HasonHuang/mytv/go/internal/temptoken"
 	"github.com/HasonHuang/mytv/go/internal/tokens"
 )
 
@@ -172,10 +172,10 @@ func TestURLSelfRef400(t *testing.T) {
 	if row == nil {
 		t.Fatal("找不到行")
 	}
-	temp := temp.IssueTempToken(row, s.now(), time.Hour)
+	tok := temptoken.Issue(row, s.now(), time.Hour)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/url?t="+temp+"&u=http%3A%2F%2Fself.example.com%2Fx.ts", nil)
+	req := httptest.NewRequest("GET", "/url?t="+tok+"&u=http%3A%2F%2Fself.example.com%2Fx.ts", nil)
 	req.Host = "self.example.com"
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {

@@ -1,4 +1,4 @@
-package temp
+package temptoken
 
 import (
 	"crypto/hmac"
@@ -23,60 +23,60 @@ import (
 // 用 hash 当 key 不降低安全性，却省掉一个密钥文件的运维。
 
 var (
-	// errTempExpired 覆盖「exp 已过」与「exp 格式坏」两件事：对外都是 401。
-	errTempExpired = errors.New("临时 token 已过期")
-	// errTempSig 表示签名不匹配（伪造或篡改）。
-	errTempSig = errors.New("临时 token 签名错误")
-	// errTempRowGone 表示 uid 已不在表中——稳定 token 被删后旧临时 token 即刻失效。
-	errTempRowGone = errors.New("临时 token 对应的行已不存在")
+	// errExpired 覆盖「exp 已过」与「exp 格式坏」两件事：对外都是 401。
+	errExpired = errors.New("临时 token 已过期")
+	// errSig 表示签名不匹配（伪造或篡改）。
+	errSig = errors.New("临时 token 签名错误")
+	// errRowGone 表示 uid 已不在表中——稳定 token 被删后旧临时 token 即刻失效。
+	errRowGone = errors.New("临时 token 对应的行已不存在")
 )
 
-// IssueTempToken 为某一行签发临时 token。
+// Issue 为某一行签发临时 token。
 // now 与 ttl 显式传入，测试里无需等待真实时钟。
-func IssueTempToken(row *tokens.Row, now time.Time, ttl time.Duration) string {
+func Issue(row *tokens.Row, now time.Time, ttl time.Duration) string {
 	exp := strconv.FormatInt(now.Add(ttl).Unix(), 10)
 	payload := exp + "." + row.UID
-	return payload + "." + tempSign(row.Hash, payload)
+	return payload + "." + sign(row.Hash, payload)
 }
 
-// VerifyTempToken 校验一条临时 token，成功时返回它对应的行。
+// Verify 校验一条临时 token，成功时返回它对应的行。
 // 三条全过才放行（设计 §2.3）：签名正确、未过期、uid 仍在表。
 //
 // 写成自由函数而非 Snapshot 的方法：Go 不许在别的包里给外部类型挂方法。
-func VerifyTempToken(snap *tokens.Snapshot, tok string, now time.Time) (*tokens.Row, error) {
-	expPart, uid, sig, ok := splitTempToken(tok)
+func Verify(snap *tokens.Snapshot, tok string, now time.Time) (*tokens.Row, error) {
+	expPart, uid, sig, ok := split(tok)
 	if !ok {
-		return nil, errTempSig
+		return nil, errSig
 	}
 	row := snap.LookupUID(uid)
 	if row == nil {
 		// 先查行再验签：行已删的行需要先用当前表判断，
 		// 否则「删行后旧 token 仍生效」那条要求落空。
-		return nil, errTempRowGone
+		return nil, errRowGone
 	}
 	payload := expPart + "." + uid
-	if !hmac.Equal([]byte(sig), []byte(tempSign(row.Hash, payload))) {
-		return nil, errTempSig
+	if !hmac.Equal([]byte(sig), []byte(sign(row.Hash, payload))) {
+		return nil, errSig
 	}
 	exp, err := strconv.ParseInt(expPart, 10, 64)
 	if err != nil {
-		return nil, errTempExpired
+		return nil, errExpired
 	}
 	if now.Unix() >= exp {
-		return nil, errTempExpired
+		return nil, errExpired
 	}
 	return row, nil
 }
 
-// tempSign 计算 base64url(raw, 无 padding) 的签名。
-func tempSign(key, payload string) string {
+// sign 计算 base64url(raw, 无 padding) 的签名。
+func sign(key, payload string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(payload))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// splitTempToken 拆成 exp / uid / sig 三段，任一段缺失或形态不对都返回 false。
-func splitTempToken(tok string) (exp, uid, sig string, ok bool) {
+// split 拆成 exp / uid / sig 三段，任一段缺失或形态不对都返回 false。
+func split(tok string) (exp, uid, sig string, ok bool) {
 	parts := strings.Split(tok, ".")
 	if len(parts) != 3 {
 		return "", "", "", false

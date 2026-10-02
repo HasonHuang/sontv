@@ -90,11 +90,11 @@ $RECYCLE.BIN/
 
 # ---------- 日志与临时文件 ----------
 *.log
-logs/
-tmp/
-temp/
-# 上面的 temp/ 会匹配任意层级的同名目录，但 internal/temp 是真实源码包，必须纳入版本管理。
-!internal/temp/
+# 这几个都锚定到仓库根：一旦不锚定，任意层级的同名目录都会被吞掉——
+// 历史上就因为 unanchored 的 temp/ 把 internal/temp 整个源码包漏提交过。
+/tmp/
+/temp/
+/logs/
 *.tmp
 *.bak
 

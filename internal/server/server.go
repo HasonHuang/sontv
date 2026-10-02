@@ -11,7 +11,7 @@ import (
 
 	"github.com/HasonHuang/mytv/go/internal/config"
 	"github.com/HasonHuang/mytv/go/internal/playlist"
-	"github.com/HasonHuang/mytv/go/internal/temp"
+	"github.com/HasonHuang/mytv/go/internal/temptoken"
 	"github.com/HasonHuang/mytv/go/internal/tokens"
 )
 
@@ -181,7 +181,7 @@ func (s *Server) rewriteOpts(r *http.Request, upstream *url.URL, row *tokens.Row
 	root, dir := baseOf(upstream)
 	return playlist.RewriteOptions{
 		FilterKeywords: kws,
-		TempToken:      temp.IssueTempToken(row, s.now(), temp.TTL(row, s.cfg.DefaultTTLHours)),
+		TempToken:      temptoken.Issue(row, s.now(), temptoken.TTL(row, s.cfg.DefaultTTLHours)),
 		BaseRoot:       root,
 		BaseDir:        dir,
 		SelfHost:       hostOnly(r.Host),

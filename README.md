@@ -337,8 +337,8 @@ gofmt -l .
 ```
 cmd/sontv-go/          入口：命令行参数、信号监督、优雅退出
 internal/config/       配置装载（JSON 叠加缺省值）
-internal/tokens/        token 表解析与原子热重载（只存 sha256）
-internal/temp/         临时 token 的签发与校验
+internal/tokens/       token 表解析与原子热重载（只存 sha256）
+internal/temptoken/    临时 token 的签发与校验
 internal/playlist/     播放列表改写（纯函数，不碰网络）
 internal/server/       HTTP 路由、认证、/sub 与 /url 的实现
   └── curl/             端到端测试

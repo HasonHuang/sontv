@@ -21,23 +21,31 @@ const maxPlaylistBytes = 8 << 20 // 8 MiB
 // 认证只认稳定 token（ADR-0002）：订阅地址由用户主动配置，长期凭据落在这里。
 // 改写盖章用一条响应一枚临时 token（子链接只带短命凭据）。
 func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
-	row := s.authStable(w, r)
+	// 与 /url 同一套日志：编号 + 脱敏地址，认证失败也留痕（订阅拉不到内容同样是故障）。
+	lg := newReqLog("订阅", "", r.URL.Query().Get(subParam))
+
+	row := s.authStable(w, r, lg)
 	if row == nil {
 		return
 	}
+	lg.label = row.Label
+	lg.debugf("开始 目标=%s", lg.target)
 
 	upstream, err := s.subUpstream(r)
 	if err != nil {
+		lg.warnf("上游非法 原因=%s", err)
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if s.isSelfRef(upstream, r) {
+		lg.warnf("拒绝自引用 上游=%s", safeURL(upstream.String()))
 		writeErr(w, http.StatusBadRequest, "上游不可指向本站")
 		return
 	}
 
 	body, err := s.fetchPlaylist(r.Context(), upstream)
 	if err != nil {
+		lg.errorf("上游抓取失败 原因=%s 耗时=%dms", safeErr(err), lg.ms())
 		writeErr(w, http.StatusBadGateway, "上游抓取失败")
 		return
 	}
@@ -50,6 +58,8 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, out)
+	lg.infof("改写完成 上游字节=%d 出=%dB 入口=%s 过滤=%v 耗时=%dms",
+		len(body), len(out), safeURL(selfRoot(r)+"/sub"), kws, lg.ms())
 }
 
 // subUpstream 解析 /sub 的上游：有 url= 用它，否则用配置的缺省上游。

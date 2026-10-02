@@ -54,6 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 - **热重载 token 表**：`SIGUSR1` 信号原子换表，无需重启、不中断长流（Windows 无此信号，只能重启进程）。
 - **优雅退出**：`SIGTERM`（systemd/容器）与 `SIGINT`（Ctrl+C）。
 - **启动自检**：`-check` 只做配置与 token 表校验，不启动服务。
+- **分级日志**：默认 `info`，逐分片的细节沉到 `debug`，排查时才用 `-log-level debug` 打开，详见[日志](#日志)。
 - 支持 Linux / macOS / Windows（信号处理按平台分文件构建）。
 
 ---
@@ -232,11 +233,47 @@ printf '%s' "$TOKEN" | sha256sum                # Linux
 | 参数 | 缺省值 | 说明 |
 | --- | --- | --- |
 | `-config` | `config.json` | 配置文件路径；相对路径以二进制所在目录为基准。传空串（`-config ""`）表示全部使用缺省值 |
+| `-log-level` | `info` | 日志级别 `debug` / `info` / `warn` / `error`。未指定时读环境变量 `SONTV_LOG_LEVEL`，详见[日志](#日志) |
 | `-check` | `false` | 只做配置与 token 表校验，不启动服务 |
 
 缺省就是读二进制同级的 `config.json`，所以把二进制和配置放在一起即可免参数启动。指定了路径但文件不存在或 JSON 非法时，启动失败并退出（退出码非 0）。
 
 token 表装载失败**不会**阻止启动，只在日志里提示——服务照常起，但认证必然 `503`（fail closed）。因此 `-check` 也只保证「配置合法」：token 表有问题时它会打印错误日志，但退出码仍为 0，请以日志内容为准。
+
+### 日志
+
+日志走 stderr，格式为 `时间 级别 [#编号 凭据种类 标签] 正文`：
+
+```
+13:28:18.545 DEBUG [#4 临时 repro] 直传完成 字节=4096B 探测头="G@..." 耗时=0ms
+13:28:18.539 INFO  [#1 订阅 repro] 改写完成 上游字节=84 出=196B 入口=http://127.0.0.1:9901/sub 过滤=[] 耗时=1ms
+13:20:57.025 ERROR [#7 订阅 repro] 上游抓取失败 原因=EOF 耗时=5054ms
+```
+
+`[#N]` 是请求编号，把同一次播放的上下游日志串成一条线；`标签` 取自 token 表第一列，分辨是哪个用户在播。
+
+分级是**默认安静、按需全开**——播一路电视每分钟要打几十行分片日志，与启动、改配置、凭据失效这些真正稀有的事混在一起，出问题时反而找不到重点：
+
+| 级别 | 内容 | 一次播放的行数 |
+| --- | --- | --- |
+| `DEBUG` | 逐请求、逐分片：开始 / 上游响应 / 直传完成 / 改写完成 | ~12 行/分钟 |
+| `INFO` | 稀有的状态变化：订阅改写结果、启动、重载、退出 | ~1 行/次订阅 |
+| `WARN` | 有人在做无效的事：凭据不对、目标非法、自引用 | — |
+| `ERROR` | 链路真的断了：上游抓不到、读不了、列表超限 | — |
+
+排查播放问题时把级别调到 `debug`：
+
+```bash
+# systemd：改 ExecStart 加参数，或用 drop-in
+systemctl edit sontv          # 写入 [Service] Environment= 或 ExecStart 追加
+# 裸机手工跑
+./sontv-go -log-level debug
+SONTV_LOG_LEVEL=debug ./sontv-go
+```
+
+**systemd 部署下请用 `-log-level` 参数。** systemd 给服务进程的是它自己的干净环境，容器里 `docker run -e SONTV_LOG_LEVEL=debug` 传进去的变量**不会**传给 unit 起的进程（实测：PID 1 有，`sontv-go` 没有）。环境变量只在手工跑二进制时可靠。参数优先于环境变量。
+
+日志从不打印凭据明文：目标地址只保留 scheme/host/path 与参数名、参数值一律抹成 `***`，错误只取内层原因（`*url.Error` 会把完整 URL 拼进 `Error()`）。响应正文也从不落盘，只留探测块开头的若干字符用于分辨「HTML 错误页 / 文本提示 / 二进制流」。
 
 ---
 

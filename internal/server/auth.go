@@ -33,13 +33,17 @@ func (s *Server) snapshot(w http.ResponseWriter) *tokens.Snapshot {
 }
 
 // authStable 只接受稳定 token（/sub）。返回 nil 表示已写出错误响应。
-func (s *Server) authStable(w http.ResponseWriter, r *http.Request) *tokens.Row {
+// lg 可为 nil（测试直接调 handler 时）；认证失败一律留痕——
+// 「拉不到内容」十有八九是凭据过期或打错，日志里必须有。
+func (s *Server) authStable(w http.ResponseWriter, r *http.Request, lg *reqLog) *tokens.Row {
 	snap := s.snapshot(w)
 	if snap == nil {
+		lgAuth(lg, "token 表为空")
 		return nil
 	}
 	row := snap.LookupToken(r.URL.Query().Get(stableParam))
 	if row == nil {
+		lgAuth(lg, "稳定 token 不匹配")
 		writeErr(w, http.StatusForbidden, "凭据无效")
 		return nil
 	}
@@ -48,15 +52,19 @@ func (s *Server) authStable(w http.ResponseWriter, r *http.Request) *tokens.Row 
 
 // authURL 接受稳定或临时 token（/url）。判定优先级：有 t 按临时校验，
 // 否则按稳定校验，都没有则 403（ADR-0002）。
-func (s *Server) authURL(w http.ResponseWriter, r *http.Request) *tokens.Row {
+func (s *Server) authURL(w http.ResponseWriter, r *http.Request, lg *reqLog) *tokens.Row {
 	snap := s.snapshot(w)
 	if snap == nil {
+		lgAuth(lg, "token 表为空")
 		return nil
 	}
 	q := r.URL.Query()
 	if tok := q.Get(tempParam); tok != "" {
 		row, err := temptoken.Verify(snap, tok, s.now())
 		if err != nil {
+			// err 已区分过期/签名错/行已删，是「播不了」最常见的三种原因之一，
+			// 原样落日志即可，不必再包装。
+			lgAuth(lg, "临时凭据无效: %v", err)
 			writeErr(w, http.StatusUnauthorized, "临时凭据无效")
 			return nil
 		}
@@ -64,8 +72,17 @@ func (s *Server) authURL(w http.ResponseWriter, r *http.Request) *tokens.Row {
 	}
 	row := snap.LookupToken(q.Get(stableParam))
 	if row == nil {
+		lgAuth(lg, "缺少 t= 且稳定 token 不匹配")
 		writeErr(w, http.StatusForbidden, "凭据无效")
 		return nil
 	}
 	return row
+}
+
+// lgAuth 记一条认证失败；lg 为 nil 时静默（测试直调 handler 的路径）。
+func lgAuth(lg *reqLog, format string, args ...any) {
+	if lg == nil {
+		return
+	}
+	lg.warnf("认证失败 "+format, args...)
 }

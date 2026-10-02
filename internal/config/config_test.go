@@ -13,7 +13,7 @@ func TestDefaultConfig(t *testing.T) {
 	if c.TokensFile != "/opt/sontv/tokens.txt" || c.DefaultTTLHours != 24 {
 		t.Fatalf("凭据缺省不符: %+v", c)
 	}
-	if c.UpstreamM3U != "https://cdn.qd.je/mytv0.m3u" || c.Listen != "127.0.0.1:9900" {
+	if c.UpstreamM3U != "https://cdn.qd.je/mytv0.m3u" || c.Listen != "0.0.0.0:9900" {
 		t.Fatalf("上游/监听缺省不符: %+v", c)
 	}
 	if !c.UnwrapRemoteProxy {
@@ -69,7 +69,7 @@ func TestLoadConfigSanitizes(t *testing.T) {
 	if c.DefaultTTLHours != 24 {
 		t.Fatalf("负 TTL 应回落 24，实际 %d", c.DefaultTTLHours)
 	}
-	if c.Listen != "127.0.0.1:9900" {
+	if c.Listen != "0.0.0.0:9900" {
 		t.Fatalf("空 listen 应回落缺省，实际 %q", c.Listen)
 	}
 }

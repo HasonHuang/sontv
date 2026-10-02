@@ -9,7 +9,10 @@ import (
 
 // 缺省监听地址。抽成常量：它同时出现在 DefaultConfig、LoadConfig 的兜底与测试里，
 // 改一处漏一处就会让「空 listen 回落」和缺省对不上。
-const DefaultListen = "127.0.0.1:9900"
+// 绑 0.0.0.0 而非 127.0.0.1：容器里 `-p 9900:9900` 是把流量转发到容器 IP 的，
+// 只听回环的话转发进来的连接无人应答（宿主机侧表现为 Empty reply，不是 refused）。
+// 裸机部署因此默认对全网卡开放，鉴权由 token 把关（无有效 token 时 fail closed）。
+const DefaultListen = "0.0.0.0:9900"
 
 // DefaultConfigName 是缺省配置文件名，与二进制同级放置。
 const DefaultConfigName = "config.json"

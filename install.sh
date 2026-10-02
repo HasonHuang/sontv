@@ -481,7 +481,7 @@ if [ -n "$NEW_TOKEN" ]; then
 $C_WARN你的 token 明文（只打印这一次，tokens.txt 里只存了它的 sha256）：$C_OFF
   $NEW_TOKEN
 
-订阅地址（listen 缺省 127.0.0.1:9900，按你的 config.json 为准）：
+订阅地址（listen 缺省 0.0.0.0:9900，按你的 config.json 为准；下面是本机入口，局域网请换成实际 IP）：
   http://127.0.0.1:9900/sub?token=$NEW_TOKEN
 
 明文丢了只能换发：重装脚本不会再次打印它。

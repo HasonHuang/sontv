@@ -2,7 +2,7 @@
 
 IPTV Proxy 是一个直播流代理服务。它把直播源中转一遍，播放器只跟你的服务器通信。
 
-文档基于 **v0.8.2** 实机采集写成。采集日期：2026-10-02。
+文档基于 **v0.8.2** 实机采集写成。采集日期：2026-10-02。切片伪装一章的采集日期为 2026-10-03。
 
 ---
 
@@ -43,6 +43,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/YanG-1989/rust/main/IPTV%20P
 | 完全信任源地址 | [Passthrough](mode-passthrough.md) |
 | 设置 Token 或 IP 封禁 | [面板与运维参考](panel.md) |
 | 设置缓存、伪装或备份 | [面板与运维参考](panel.md) |
+| 弄清切片伪装到底改了什么 | [切片伪装的实现方式](disguise-analysis.md) |
 | 选择服务器规格 | [资源占用实测](resource.md) |
 | 查询配置项名称 | [面板与运维参考](panel.md) |
 | 更改端口或重置密码 | [面板与运维参考](panel.md) |
@@ -135,6 +136,7 @@ docs/iptv-proxy/
 ├── mode-passthrough.md          ┘
 ├── resource.md                  ← 资源占用实测
 ├── panel.md                     ← 面板 13 个页面逐页说明、配置、运维命令
+├── disguise-analysis.md         ← 切片伪装的字节级验证、流结构、缓存窗口
 ├── iptv-proxy-handbook.html     ← 可视化上手页
 └── ui/                          ← 界面截图
 ```

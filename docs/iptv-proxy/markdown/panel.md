@@ -195,6 +195,36 @@ formats  = ["jpg","png","gif","bmp","webp"]
   本次实测未观察到这三个开关对地址的影响。实测生效的设置是总开关 `enabled`
 - 文件名混淆（`..._18e34bfbb515537d2bc7054e33d8ecfc`）与伪装无关，由 `cache.dash.obfuscate_filenames` 独立控制
 
+##### 伪装到底改了什么（字节级结论）
+
+**切片伪装不修改切片内容。** 程序只改写 URL 后缀和 Content-Type。
+
+下载四种后缀的同一切片，前 32 字节逐字节相同。首字节是 `0x47`，这是 MPEG-TS 的同步字节。
+
+每 188 字节都是 `0x47`。文件大小是 188 的整数倍。文件里没有 JPEG、PNG、WebP、BMP 或 fMP4 的特征字节。
+
+把 `.png` 改名成 `.ts`，ffprobe 直接识别为 MPEG-TS，1920x1080 H.264 + AAC。
+
+| 层 | 值 | 是否改变字节 |
+| --- | --- | --- |
+| URL 后缀 | `png` `jpg` `gif` `bmp` `webp` | 否 |
+| Content-Type | `image/png` `image/jpeg` 等 | 否 |
+| 路径形状 | 清单写成 `.txt`，切片平铺在频道目录下 | 否 |
+| 切片载荷 | 原始 MPEG-TS，188 字节一个包 | 否 |
+
+另外三个实测结论：
+
+- **后缀不参与校验。** 清单写 `.png` 时，你请求 `.jpg` 也能拿到同一份字节，MD5 相同
+- **轮换稳定且按频道独立。** 同一频道重复拉清单，扩展名序列不变；同一切片哈希在不同频道拿到不同后缀
+- **`Cache-Control` 会切换。** 切片刚写入缓存时短暂返回 `public, max-age=300`，之后长期返回 `private, max-age=300`。公开窗口让 CDN 按图片规则收下对象，随后的 `private` 让 CDN 不再存储它。这层收益需要 CDN
+
+切片还带有两项特征：
+
+- 每个切片是自包含的 MPEG-TS，自带 PAT / PMT / SDT 和约 10 秒媒体
+- 每个切片的第 0 个包携带 SDT，其描述符载荷是字符串 `lumberjack`（两次）。这是来源水印，与伪装无关
+
+完整验证步骤、字节证据、扩展名分布表和 PID 表见 **[切片伪装的实现方式](disguise-analysis.md)**。
+
 ##### 怎么用
 
 1. **默认就已经开着**，直接用即可
@@ -533,3 +563,4 @@ token_enabled = false        # 建议公网部署时改为 true
 | [`fields-common.md`](fields-common.md) | 六种模式共用的字段详解 |
 | [`panel.md`](panel.md) | 面板 13 页逐页说明 · 配置 · 运维 |
 | [`resource.md`](resource.md) | 资源占用实测 |
+| [`disguise-analysis.md`](disguise-analysis.md) | 切片伪装的字节级验证 · 缓存窗口 · 流结构 |

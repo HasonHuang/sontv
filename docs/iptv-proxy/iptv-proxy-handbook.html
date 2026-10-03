@@ -398,6 +398,16 @@ footer .mono{color:var(--text2)}
         <p>打开「节目指南」页。检查总开关。检查频道的 <code>tvg-id</code>。打开「频道匹配」，查看「未匹配」的数量。</p>
       </div>
     </div>
+    <div>
+      <span class="n">06</span>
+      <div>
+        <h3>播放器报「格式不支持」</h3>
+        <p>抓包时你会看到切片地址以 <code>.jpg</code> 或 <code>.png</code> 结尾。这不是故障。这是<b>切片伪装</b>的正常行为。</p>
+        <p>伪装只改写 URL 后缀和响应头。<b>它不修改切片内容。</b>切片实际是原始 MPEG-TS 流。</p>
+        <p>先关闭「系统设置 → 切片伪装」和「列表伪装」。再复测。关闭后切片恢复为 <code>.ts</code>。若仍失败，问题在源本身。</p>
+        <p>字节级验证见 <a href="markdown/disguise-analysis.md">切片伪装的实现方式</a>。</p>
+      </div>
+    </div>
   </div>
   <div class="note" style="margin-top:16px">
     <b>日志中的「未检测到 ffmpeg」和「未检测到 python3」是警告。</b>该警告不影响播放。仅在使用<b>定时录制</b>或 EPG 脚本源时需要安装。
@@ -406,7 +416,7 @@ footer .mono{color:var(--text2)}
 
 <section class="step">
   <div class="step-head"><span class="step-n">参考</span><h2>完整文档</h2></div>
-  <p class="sub">以下文件与本页面位于同一目录。</p>
+  <p class="sub">以下文件与本页面位于同一目录。想弄清切片伪装到底改了什么，先读最后一份。</p>
   <div class="more">
     <a href="markdown/README.md"><span class="f">README.md</span><span class="d">文档导航、工作模式速查、上线安全清单</span></a>
     <a href="markdown/iptv.md"><span class="f">iptv.md</span><span class="d">订阅接入入门。含排错与功能配合</span></a>
@@ -414,6 +424,7 @@ footer .mono{color:var(--text2)}
     <a href="markdown/panel.md"><span class="f">panel.md</span><span class="d">面板 13 个页面说明、配置项、运维命令</span></a>
     <a href="markdown/mode-proxy.md"><span class="f">mode-*.md</span><span class="d">六种工作模式各自的配置与调优</span></a>
     <a href="markdown/resource.md"><span class="f">resource.md</span><span class="d">资源占用实测数据。用于选择服务器规格</span></a>
+    <a href="markdown/disguise-analysis.md"><span class="f">disguise-analysis.md</span><span class="d">切片伪装的字节级验证、流结构、缓存窗口</span></a>
   </div>
 </section>
 

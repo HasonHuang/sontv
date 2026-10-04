@@ -8,10 +8,10 @@ import (
 )
 
 // 查询参数名。凭据形态分离（ADR-0002）：
-//   - token：稳定 token（永久、可吊销），/sub 与 /play 都可
-//   - t：临时 token（短命），只出现在响应体的子链接里
-//   - url：目标地址。/sub 取上游播放列表、/play 取待代理资源，同名同义
-//   - filter：订阅过滤词
+//   - token：稳定 token（永久、可吊销），/sub、/proxy 与 /play 都可
+//   - t：临时 token（短命），只出现在 /play 响应的子链接里
+//   - url：目标地址。/sub 取上游播放列表、/play 与 /proxy 取待代理资源，同名同义
+//   - filter：订阅过滤词（/sub）
 const (
 	stableParam = "token"
 	tempParam   = "t"

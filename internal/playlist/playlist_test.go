@@ -349,3 +349,67 @@ func TestTruncUTF8NeverSplitsRune(t *testing.T) {
 		t.Fatalf("截断破坏了 UTF-8: %d %q", len(got[0]), got[0])
 	}
 }
+
+// ---------- ExtractURLs ----------
+
+// 属性行里裹着的地址不是资源行：url-tvg / catchup-source 指向的是 EPG 与回看，
+// 混进「频道地址清单」就是错数据。URI= 同理（它承载分片，属 #EXT-X-KEY 行内）。
+func TestExtractURLsSkipsAttrAddresses(t *testing.T) {
+	body := "#EXTM3U\n" +
+		"#EXTINF:-1 tvg-name=\"A\",A\n" +
+		"http://cdn/a.ts\n" +
+		"#EXTINF:-1 url-tvg=\"http://epg.example.com/a.xml\" tvg-name=\"B\",B\n" +
+		"http://cdn/b.ts\n" +
+		"#EXTINF:-1 catchup-source=http://cdn/catchup?x={YYYY},C\n" +
+		"http://cdn/c.ts\n"
+	got := ExtractURLs(body)
+	want := []string{"http://cdn/a.ts", "http://cdn/b.ts", "http://cdn/c.ts"}
+	if len(got) != len(want) {
+		t.Fatalf("得到 %d 条，期望 %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("第 %d 条 = %q，期望 %q", i, got[i], want[i])
+		}
+	}
+}
+
+// 混合换行、末尾无分隔符、空行与 BOM 都不能让地址行漏掉或多出空串。
+func TestExtractURLsMixedDelimsAndBOM(t *testing.T) {
+	body := "\ufeff" + "#EXTM3U\r\n#EXTINF:-1,A\r\na.ts\n\n#EXTINF:-1,B\n/b.ts" // BOM 不能直接写在源码里
+	got := ExtractURLs(body)
+	if len(got) != 2 || got[0] != "a.ts" || got[1] != "/b.ts" {
+		t.Fatalf("得到 %#v，期望 [a.ts /b.ts]", got)
+	}
+}
+
+// 过滤后仅返回 URL：TempToken 留空时 RewritePlaylist 只补全地址、不包装，
+// 串上 ExtractURLs 就是两步。
+func TestFilterThenExtractGivesPlainURLs(t *testing.T) {
+	body := "#EXTM3U\n" +
+		"#EXTINF:-1 tvg-name=\"翡翠台\",翡翠台\n" +
+		"翡翠.ts\n" +
+		"#EXTINF:-1 tvg-name=\"其它\",其它\n" +
+		"http://cdn/other.ts\n"
+	opts := RewriteOptions{
+		FilterKeywords: []string{"翡翠"},
+		BaseRoot:       "https://up.example.com",
+		BaseDir:        "https://up.example.com/live/",
+	}
+	got := ExtractURLs(RewritePlaylist(body, opts))
+	if len(got) != 1 {
+		t.Fatalf("得到 %#v，期望只剩 1 条", got)
+	}
+	if got[0] != "https://up.example.com/live/翡翠.ts" {
+		t.Fatalf("相对地址应按 BaseDir 补成绝对: %q", got[0])
+	}
+	if strings.Contains(got[0], "/play?") {
+		t.Fatalf("TempToken 为空时不该包装成本站链接: %q", got[0])
+	}
+}
+
+func TestExtractURLsEmptyBody(t *testing.T) {
+	if got := ExtractURLs(""); got != nil {
+		t.Fatalf("空正文应返回 nil，得到 %#v", got)
+	}
+}

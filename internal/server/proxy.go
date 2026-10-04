@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/HasonHuang/sontv/internal/playlist"
@@ -94,6 +96,180 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.streamRewritten(w, resp, probe, row, r, lg)
+}
+
+// handleProxy 处理 /proxy：取 url= 指定的内容，逐字节原样吐回。
+//
+// 与 handlePlay 的分工：/play 是播放链路，m3u8 会被缓冲改写、给子链接盖临时
+// token；/proxy 不做任何加工，连列表也不碰——要「上游给什么就是什么」时走这条。
+// 带 filter= 时则另走列表模式（见 proxyFiltered）：抓播放列表、过滤、只吐地址。
+// 典型用途是把第三方 m3u8 挂在本域名下给外部播放器直取：改写在那种场合是负作用。
+//
+// 认证只认稳定 token（同 /sub，ADR-0002）：临时 token 只服务于 /play 的子链接，
+// 本端点不产生子链接，签临时 token 没有对象可指。
+//
+// 「原样」的落实就在下面：不做探测块、不进 #EXTM3U 分支、不缓冲，
+// WriteHeader 之后直接 io.Copy。一个字节都不经本站的手，任意大小的响应体都成立，
+// 因此没有 4 MB 上限可言（那是 /play 改写路径的约束，不是透传路径的）。
+// 重定向由客户端侧自动跟随（≤5 跳），Location 不外泄。
+func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
+	// 与另两个端点同一套日志：编号 + 脱敏地址，认证失败也留痕。
+	lg := newReqLog("原样代理", "", r.URL.Query().Get(targetParam))
+
+	row := s.authStable(w, r, lg)
+	if row == nil {
+		return
+	}
+	lg.label = row.Label
+
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		lg.warnf("方法不支持 方法=%s", r.Method)
+		writeErr(w, http.StatusMethodNotAllowed, "只支持 GET/HEAD")
+		return
+	}
+	lg.debugf("开始 方法=%s 目标=%s", r.Method, lg.target)
+
+	target, err := parseTarget(r.URL.Query().Get(targetParam))
+	if err != nil {
+		lg.warnf("目标非法 原因=%s", err)
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if s.isSelfRef(target, r) {
+		lg.warnf("拒绝自引用 目标=%s", lg.target)
+		writeErr(w, http.StatusBadRequest, "目标不可指向本站")
+		return
+	}
+
+	// filter= 分流：带了它就谈不上「原样」，语义完全另成一支。
+	// 按「参数在不在」判，不按去空白后有没有值——filter= 、filter=%20 这类
+	// 空壳同样进了这支，交给 proxyFiltered 报 400，绝不落回原样透传：
+	// 调用方要了过滤却拿到 200 加一份未经筛选的完整内容，是这里最坏的失败方式。
+	if _, ok := r.URL.Query()[filterParam]; ok {
+		s.proxyFiltered(w, r, target, lg)
+		return
+	}
+
+	resp, err := s.doUpstream(r, target)
+	if err != nil {
+		lg.errorf("上游请求失败 原因=%s 耗时=%dms", safeErr(err), lg.ms())
+		writeErr(w, http.StatusBadGateway, "上游请求失败")
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	lg.debugf("上游 状态=%d 类型=%q 长度=%d 耗时=%dms 最终=%s%s",
+		resp.StatusCode, resp.Header.Get("Content-Type"), resp.ContentLength, lg.ms(),
+		safeURL(resp.Request.URL.String()), redirectMark(target, resp))
+
+	copyRespHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+
+	// HEAD 无正文，直接透传状态与头即止。
+	if r.Method == http.MethodHead {
+		lg.debugf("HEAD 透传完成 耗时=%dms", lg.ms())
+		return
+	}
+	// 先推一次：长流别憋在 ResponseWriter 的缓冲里等第一片。
+	flush(w)
+
+	n, err := io.Copy(w, resp.Body)
+	if err != nil {
+		// 客户端中途断开是长流的常态，不必响亮，但要留痕
+		// （否则「传到一半断了」在日志里无从查）。
+		lg.debugf("透传中断 原因=%s 已写=%dB 耗时=%dms", safeErr(err), n, lg.ms())
+		return
+	}
+	lg.debugf("透传完成 字节=%dB 耗时=%dms", n, lg.ms())
+}
+
+// proxyFiltered 是 /proxy 的列表模式：抓上游播放列表，按 filter= 过滤，
+// 每条一行只吐地址（text/plain）。
+//
+// 能不能过滤，看的是「有没有条目块可滤」，判据只有一条：正文是否以 #EXTM3U
+// 开头（startsWithEXTM3U）。不看后缀、不看 Content-Type——那两样在真实源站上
+// 不可靠（扩展名错、内容类型错都有），ADR-0004 早就把它们排除在判定之外。
+// 不是播放列表就 400 明确拒绝，不静默忽略 filter：悄悄把一份未经筛选的完整
+// 内容吐回去，是这类功能最坏的失败方式——调用方无从分辨自己到底滤没滤。
+//
+// 返回原样上游地址，不盖 token。这份清单的用处是喂给测活脚本、导入别的播放器，
+// 包一层本站入口反而碍事；原样返回也意味着响应体里不含任何凭据，与 /sub
+// 「只发临时 token」的取向一致。代价是这条路径绕过了本站代理，上游地址对
+// 请求方可见——但请求方本就把 url= 明文写在请求里，可见性没有新增。
+//
+// 整段缓冲是这条路径的固有代价：过滤要看到全部条目。上限沿用 /sub 的 8 MiB
+// （maxPlaylistBytes），超限 502，不静默截断。
+func (s *Server) proxyFiltered(w http.ResponseWriter, r *http.Request, target *url.URL, lg *reqLog) {
+	lg.kind = "代理过滤"
+
+	kws := playlist.ParseFilterKeywords(r.URL.Query().Get(filterParam))
+	if len(kws) == 0 {
+		lg.warnf("过滤词为空 filter=%q", r.URL.Query().Get(filterParam))
+		writeErr(w, http.StatusBadRequest, "过滤词为空")
+		return
+	}
+
+	final, src, err := s.fetchPlaylist(r.Context(), target)
+	if err != nil {
+		lg.errorf("上游抓取失败 原因=%s 耗时=%dms", safeErr(err), lg.ms())
+		writeErr(w, http.StatusBadGateway, "上游抓取失败")
+		return
+	}
+
+	if !startsWithEXTM3U([]byte(src)) {
+		lg.warnf("目标不是播放列表 无法过滤 字节=%d", len(src))
+		writeErr(w, http.StatusBadRequest, "目标不是播放列表，无法过滤")
+		return
+	}
+
+	// TempToken 留空即不包装：rewriteLink 在此退化为「只把相对地址补成绝对」。
+	root, dir := baseOf(final)
+	kept := playlist.RewritePlaylist(src, playlist.RewriteOptions{
+		FilterKeywords: kws,
+		BaseRoot:       root,
+		BaseDir:        dir,
+	})
+	urls := dedupURLs(playlist.ExtractURLs(kept))
+
+	var b strings.Builder
+	for _, u := range urls {
+		b.WriteString(u)
+		b.WriteByte('\n')
+	}
+	out := b.String()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(out)))
+	w.WriteHeader(http.StatusOK)
+
+	lg.infof("列表完成 上游字节=%d 基准=%s 保留=%d 过滤=%v 出=%dB 耗时=%dms",
+		len(src), safeURL(final.String()), len(urls), kws, len(out), lg.ms())
+
+	if r.Method == http.MethodHead {
+		// 头已按最终正文长度发准，不必再写。仍要抓完上游才知道这个长度，
+		// 但调用方要的多半就是它。
+		return
+	}
+	_, _ = io.WriteString(w, out)
+}
+
+// dedupURLs 去重并保持首次出现顺序：同一地址在列表里出现多次是常事
+// （多个频道名指向同一源、源站本身重复），清单里重复行只会碍事。
+func dedupURLs(in []string) []string {
+	if len(in) < 2 {
+		return in
+	}
+	seen := make(map[string]bool, len(in))
+	out := in[:0]
+	for _, u := range in {
+		if seen[u] {
+			continue
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	return out
 }
 
 // redirectMark 在发生重定向时补一句标记：最终地址与请求地址不同即跳转过。

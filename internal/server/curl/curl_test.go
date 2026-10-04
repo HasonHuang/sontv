@@ -199,6 +199,27 @@ func TestE2EHappyPathAndChild(t *testing.T) {
 	}
 }
 
+// TestE2EProxyPassthrough 起真进程 + 模拟上游，验证 /proxy 原样透传：
+// 上游的 m3u8 一个字节都不改地回到客户端（同样的正文走 /play 是会被改写的）。
+func TestE2EProxyPassthrough(t *testing.T) {
+	const src = "#EXTM3U\n#EXTINF:-1,翡翠台\nhttp://cdn/live/a.ts?u=1&p=2\n"
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(src))
+	}))
+	defer up.Close()
+
+	cfg := e2eConfig(t, "http://127.0.0.1:9/none.m3u")
+	es := startE2E(t, cfg, "主,"+hashOf("good"))
+
+	code, body := es.get("/proxy?token=good&url=" + url.QueryEscape(up.URL+"/a.m3u8"))
+	if code != http.StatusOK {
+		t.Fatalf("/proxy 应 200，实际 %d: %s", code, body)
+	}
+	if body != src {
+		t.Fatalf("/proxy 应原样返回上游正文:\n得到 %q\n期望 %q", body, src)
+	}
+}
+
 // TestE2ESelfRef400 起真进程，验证目标指向本站自身 → 400。
 func TestE2ESelfRef400(t *testing.T) {
 	cfg := e2eConfig(t, "http://127.0.0.1:9/none.m3u")

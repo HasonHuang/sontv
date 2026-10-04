@@ -69,11 +69,12 @@ func newHTTPClient() *http.Client {
 	}
 }
 
-// Handler 返回路由。两个端点显式注册，各自认证。
+// Handler 返回路由。三个端点显式注册，各自认证。
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sub", s.handleSub)
 	mux.HandleFunc("/play", s.handlePlay)
+	mux.HandleFunc("/proxy", s.handleProxy)
 	return mux
 }
 

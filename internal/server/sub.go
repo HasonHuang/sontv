@@ -43,7 +43,7 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := s.fetchPlaylist(r.Context(), upstream)
+	final, body, err := s.fetchPlaylist(r.Context(), upstream)
 	if err != nil {
 		lg.errorf("上游抓取失败 原因=%s 耗时=%dms", safeErr(err), lg.ms())
 		writeErr(w, http.StatusBadGateway, "上游抓取失败")
@@ -51,15 +51,16 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kws := playlist.ParseFilterKeywords(r.URL.Query().Get(filterParam))
-	opts := s.rewriteOpts(r, upstream, row, kws)
+	// 基准取最终地址：重定向后的 URL 才是相对路径的真身。
+	opts := s.rewriteOpts(r, final, row, kws)
 	out := playlist.RewritePlaylist(body, opts)
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, out)
-	lg.infof("改写完成 上游字节=%d 出=%dB 入口=%s 过滤=%v 耗时=%dms",
-		len(body), len(out), safeURL(selfRoot(r)+"/sub"), kws, lg.ms())
+	lg.infof("改写完成 上游字节=%d 出=%dB 基准=%s 入口=%s 过滤=%v 耗时=%dms",
+		len(body), len(out), safeURL(final.String()), safeURL(selfRoot(r)+"/sub"), kws, lg.ms())
 }
 
 // subUpstream 解析 /sub 的上游：有 url= 用它，否则用配置的缺省上游。
@@ -74,34 +75,48 @@ func (s *Server) subUpstream(r *http.Request) (*url.URL, error) {
 	return parseTarget(raw)
 }
 
-// fetchPlaylist 拉取上游正文，限制大小与整体超时（设计 §2.7）。
+// fetchPlaylist 拉取上游正文，限制大小与整体超时（设计 §2.7），
+// 并一并交出跟随重定向后的最终地址。
+//
+// 最终地址是列表里相对路径的补全基准：重定向到 CDN 子目录的源站，
+// 按请求地址补全会得到另一套路径。/play 的改写路径一直用 resp.Request.URL，
+// 此处与它对齐。
+//
 // 错误消息保持笼统——上游细节只进日志语义，不出现在响应正文。
-func (s *Server) fetchPlaylist(ctx context.Context, upstream *url.URL) (string, error) {
+func (s *Server) fetchPlaylist(ctx context.Context, upstream *url.URL) (*url.URL, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream.String(), nil)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	req.Header.Set("User-Agent", UserAgent)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("上游返回 %d", resp.StatusCode)
+		return nil, "", fmt.Errorf("上游返回 %d", resp.StatusCode)
 	}
 	// 多读 1 字节以区分「恰好 = 上限」与「超出上限」；超限即无法保证列表完整，宁可报错。
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistBytes+1))
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if len(body) > maxPlaylistBytes {
-		return "", errors.New("上游播放列表过大")
+		return nil, "", errors.New("上游播放列表过大")
 	}
-	return string(body), nil
+	return finalURL(resp, upstream), string(body), nil
+}
+
+// finalURL 取响应最终落到的地址；client 总会填 Request，缺失时回落到请求地址。
+func finalURL(resp *http.Response, fallback *url.URL) *url.URL {
+	if resp.Request != nil && resp.Request.URL != nil {
+		return resp.Request.URL
+	}
+	return fallback
 }

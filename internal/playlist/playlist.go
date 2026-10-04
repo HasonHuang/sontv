@@ -167,6 +167,33 @@ func splitLine(s string, i int) (line, delim string) {
 	return line, s[j : j+1]
 }
 
+// ---------- 只取地址 ----------
+
+// ExtractURLs 从一份播放列表里逐条取出资源行（地址行），丢弃 # 行与空行。
+//
+// 行类型判定与 rewriter.feed 完全一致（剥 BOM、去首尾空白、# 开头算属性行），
+// 因此 url-tvg= / catchup-source= 这些属性里裹着的地址不会被误当成资源行。
+//
+// 抽出来的是原样地址，既不补全也不包装。要绝对地址，先过一遍 RewritePlaylist：
+// 带 TempToken 空值调用时它只做「相对地址补全 + 按 FilterKeywords 丢弃条目块」，
+// 两步串起来就是「过滤后仅返回 URL」。
+func ExtractURLs(body string) []string {
+	if body == "" {
+		return nil
+	}
+	var out []string
+	for i := 0; i < len(body); {
+		line, delim := splitLine(body, i)
+		i += len(line) + len(delim)
+		trimmed := strings.TrimRight(strings.TrimPrefix(line, "\ufeff"), " \t\r")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		out = append(out, strings.TrimSpace(line))
+	}
+	return out
+}
+
 // rewriteResourceLine 处理一条资源行：第三方直连也要包装，凭据才落在本站链接上。
 // （属性行相反，见 rewriteLink 的 onlyOwn。）
 func rewriteResourceLine(line string, opts RewriteOptions) string {

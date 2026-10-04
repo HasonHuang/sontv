@@ -1,0 +1,3102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CharmingStreamer 用户手册</title>
+<style>
+/* 设计取向：沿用 CharmingStreamer 控制台自身的紫色系，让说明书与产品同源。
+   排版遵循 ASD-STE100：正文只写动作与事实，条件一律进表格，装饰性图形一律不用。
+   布局是单列阅读宽度 + 吸顶进度条；每个操作段做成带「完成标志」的卡片。 */
+:root{
+  --bg:#f6f5fa; --bg2:#ece9f5; --card:#ffffff; --card2:#faf9fd;
+  --text:#171225; --text2:#4b4560; --text3:#7d7691;
+  --line:#e2ddec; --line2:#cdc5de;
+  --accent:#6d28d9; --accent-soft:#ede9fe; --accent-line:#7c3aed;
+  --warn:#a45b09; --warn-soft:#fdf3e3; --warn-line:#d99b3a;
+  --ok:#15803d; --ok-soft:#e2f5e9;
+  --code-bg:#15111f; --code-fg:#e6e1f0; --code-dim:#8f86a6; --code-key:#c4b5fd;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --wrap:min(100% - 2.5rem, 860px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d0b14; --bg2:#151220; --card:#16131f; --card2:#1c1927;
+  --text:#ece8f5; --text2:#a79fbe; --text3:#7d7593;
+  --line:#272236; --line2:#39324b;
+  --accent:#a78bfa; --accent-soft:#241c3d; --accent-line:#7c3aed;
+  --warn:#fbbf24; --warn-soft:#33260c; --warn-line:#a16207;
+  --ok:#4ade80; --ok-soft:#0f2e1e;
+  --code-bg:#08060e; --code-fg:#e6e1f0; --code-dim:#8f86a6; --code-key:#c4b5fd;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d0b14; --bg2:#151220; --card:#16131f; --card2:#1c1927;
+  --text:#ece8f5; --text2:#a79fbe; --text3:#7d7593;
+  --line:#272236; --line2:#39324b;
+  --accent:#a78bfa; --accent-soft:#241c3d; --accent-line:#7c3aed;
+  --warn:#fbbf24; --warn-soft:#33260c; --warn-line:#a16207;
+  --ok:#4ade80; --ok-soft:#0f2e1e;
+  --code-bg:#08060e; --code-fg:#e6e1f0; --code-dim:#8f86a6; --code-key:#c4b5fd;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f6f5fa; --bg2:#ece9f5; --card:#ffffff; --card2:#faf9fd;
+  --text:#171225; --text2:#4b4560; --text3:#7d7691;
+  --line:#e2ddec; --line2:#cdc5de;
+  --accent:#6d28d9; --accent-soft:#ede9fe; --accent-line:#7c3aed;
+  --warn:#a45b09; --warn-soft:#fdf3e3; --warn-line:#d99b3a;
+  --ok:#15803d; --ok-soft:#e2f5e9;
+  --code-bg:#15111f; --code-fg:#e6e1f0; --code-dim:#8f86a6; --code-key:#c4b5fd;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:17px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.bar{position:fixed;top:0;left:0;height:3px;width:100%;background:transparent;z-index:60}
+.bar i{display:block;height:100%;width:0;background:var(--accent-line);transition:width .1s linear}
+.topbar{
+  position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line);
+}
+/* 顶栏宽度与正文阅读宽度解耦：正文 860px 装不下标题加导航，导航必须完整可见 */
+.topbar .wrap{display:flex;align-items:center;gap:1rem;height:52px;width:min(100% - 2rem,1180px)}
+.topbar .tt{font-weight:650;font-size:.95rem;letter-spacing:.01em;white-space:nowrap}
+.topbar .sp{flex:1}
+.topbar nav{display:flex;flex:0 1 auto;min-width:0;gap:.15rem;overflow-x:auto;scrollbar-width:none}
+.topbar nav::-webkit-scrollbar{display:none}
+.topbar nav a{
+  color:var(--text2);text-decoration:none;font-size:.82rem;padding:.3rem .48rem;
+  border-radius:7px;white-space:nowrap;letter-spacing:-.01em;
+}
+/* 导航项较多，容器可横向滚动。右缘渐隐提示还有内容未显示 */
+.topbar nav{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);
+  mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+.topbar nav.at-end{-webkit-mask-image:none;mask-image:none}
+@media (max-width:1180px){.topbar nav a{font-size:.78rem;padding:.28rem .38rem}}
+.wrap{width:var(--wrap);margin-inline:auto}
+
+.hero{padding:3.2rem 0 1.2rem}
+.hero .eyebrow{
+  font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+  font-weight:650;margin:0 0 .8rem;
+}
+.hero h1{font-size:clamp(1.85rem,5.2vw,2.7rem);line-height:1.24;margin:0 0 1rem;letter-spacing:-.02em;font-weight:700}
+.hero .lede{font-size:1.08rem;color:var(--text2);margin:0;max-width:62ch}
+.hero .ver{
+  display:inline-flex;gap:.5rem;align-items:center;margin-top:1.4rem;font-size:.8rem;
+  color:var(--text3);font-family:var(--mono);
+}
+
+.toc{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:1.35rem 1.5rem;margin:2rem 0 1rem;
+}
+.toc h2{margin:0 0 .85rem;font-size:.82rem;letter-spacing:.11em;text-transform:uppercase;color:var(--text3);font-weight:650}
+.toc ol{margin:0;padding-left:1.3rem;columns:2;column-gap:2.4rem;font-size:.93rem}
+.toc li{margin:.3rem 0;break-inside:avoid}
+.toc a{color:var(--text);text-decoration:none;border-bottom:1px solid transparent}
+.toc a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+
+.glossary{margin:2rem 0;scroll-margin-top:66px}
+.glossary table{min-width:640px}
+.glossary td:first-child{white-space:normal;font-weight:600}
+
+section{padding:2.6rem 0 0;scroll-margin-top:66px}
+h2{
+  font-size:1.42rem;margin:0 0 .3rem;letter-spacing:-.012em;font-weight:680;
+  padding-bottom:.55rem;border-bottom:1px solid var(--line);
+}
+h2 .num{color:var(--accent);font-family:var(--mono);font-size:1.05rem;margin-right:.55rem;font-weight:600}
+h3{font-size:1.08rem;margin:2rem 0 .6rem;font-weight:650}
+h4{font-size:.96rem;margin:1.5rem 0 .4rem;font-weight:650;color:var(--text2)}
+p{margin:0 0 1rem;max-width:68ch}
+ul,ol{margin:0 0 1rem;padding-left:1.4rem;max-width:68ch}
+li{margin:.34rem 0}
+b,strong{font-weight:650;color:var(--text)}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em;background:var(--accent-soft);color:var(--accent);padding:.12em .4em;border-radius:5px;word-break:break-all}
+pre{font-family:var(--mono);font-size:.84rem;line-height:1.62;margin:0;white-space:pre-wrap;word-break:break-word}
+pre .p{color:var(--code-dim)}
+pre .k{color:var(--code-key)}
+pre .c{color:var(--code-dim);font-style:italic}
+pre .s{color:#86efac}
+pre .w{color:#fbbf24}
+
+.sub{color:var(--text2);margin:.2rem 0 1.3rem}
+.lead{font-size:1.02rem;color:var(--text2);max-width:66ch}
+
+.step{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:1.5rem 1.65rem;margin:1.4rem 0;
+}
+.step-head{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.5rem}
+.step-n{
+  font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  color:var(--accent);background:var(--accent-soft);padding:.22rem .55rem;border-radius:6px;white-space:nowrap;
+}
+.step-head h3{margin:0;font-size:1.12rem}
+.done{
+  display:flex;gap:.7rem;align-items:flex-start;margin-top:1.2rem;padding:.85rem 1rem;
+  background:var(--ok-soft);border-radius:10px;font-size:.9rem;color:var(--text2);
+}
+.done .mk{color:var(--ok);font-weight:800;flex:none;line-height:1.5}
+
+.code{
+  background:var(--code-bg);border:1px solid var(--line);border-radius:11px;
+  overflow:hidden;margin:1rem 0;
+}
+.code .hd{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:.5rem .5rem .5rem .9rem;border-bottom:1px solid rgba(255,255,255,.08);
+  font-size:.75rem;color:var(--code-dim);
+}
+.code .hd .tag{font-family:var(--mono)}
+.code pre{padding:.95rem 1.1rem;color:var(--code-fg);overflow-x:auto}
+.cp{
+  background:rgba(255,255,255,.09);color:var(--code-fg);border:0;border-radius:6px;
+  padding:.26rem .7rem;font-size:.75rem;cursor:pointer;font-family:var(--sans);
+}
+.cp:hover{background:rgba(255,255,255,.17)}
+
+.note{
+  border-left:3px solid var(--accent-line);background:var(--accent-soft);
+  padding:.85rem 1.05rem;border-radius:0 9px 9px 0;margin:1.1rem 0;font-size:.93rem;color:var(--text2);
+}
+.note b{color:var(--text)}
+.note.warn{border-left-color:var(--warn-line);background:var(--warn-soft)}
+.note.warn b{color:var(--warn)}
+.note.info b{color:var(--accent)}
+
+.tw{overflow-x:auto;margin:1.1rem 0;border:1px solid var(--line);border-radius:11px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.89rem;min-width:520px}
+th,td{text-align:left;padding:.6rem .85rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--card2);font-weight:650;font-size:.82rem;color:var(--text2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--card2)}
+td code{font-size:.84em}
+td:first-child{white-space:nowrap}
+.glossary td:first-child{white-space:normal}
+
+figure{margin:1.4rem 0}
+figure img{
+  width:100%;border:1px solid var(--line);border-radius:11px;display:block;
+  background:var(--card2);
+}
+figcaption{font-size:.83rem;color:var(--text3);margin-top:.5rem}
+
+dl.kv{margin:1rem 0;display:grid;grid-template-columns:auto 1fr;gap:.15rem .9rem;font-size:.92rem;max-width:68ch}
+dl.kv dt{font-family:var(--mono);font-size:.85rem;color:var(--accent);white-space:nowrap}
+dl.kv dd{margin:0 0 .5rem;color:var(--text2)}
+dl.kv dd code{font-size:.85em}
+
+footer{
+  margin-top:3.5rem;padding:1.6rem 0 3rem;border-top:1px solid var(--line);
+  color:var(--text3);font-size:.85rem;
+}
+footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 1.5rem;align-items:center}
+
+@media (max-width:720px){
+  body{font-size:16px}
+  .toc ol{columns:1}
+  .step{padding:1.2rem 1.1rem}
+  .hero{padding-top:2.2rem}
+}
+@media print{
+  .topbar,.bar,.cp{display:none}
+  body{background:#fff;color:#000;font-size:11pt}
+  .step,.toc,.code,.tw{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="bar"><i id="prog"></i></div>
+
+<div class="topbar"><div class="wrap">
+  <span class="tt">CharmingStreamer 手册</span>
+  <span class="sp"></span>
+  <nav>
+    <a href="#s1">概述</a>
+    <a href="#s2">安装</a>
+    <a href="#s3">登录</a>
+    <a href="#s4">概念</a>
+    <a href="#s5">License Key</a>
+    <a href="#s6">上手</a>
+    <a href="#s7">频道</a>
+    <a href="#s8">Provider</a>
+    <a href="#s9">分发</a>
+    <a href="#s10">接入</a>
+    <a href="#s11">录制定时</a>
+    <a href="#s12">EPG</a>
+    <a href="#s14">脚本</a>
+    <a href="#s15">用户</a>
+    <a href="#s16">监控</a>
+    <a href="#s17">备份升级</a>
+    <a href="#trouble">排错</a>
+    <a href="#ref">参考</a>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">多协议直播网关 · 用户手册</p>
+  <h1>把任意上游直播源<br>汇聚成一条稳定的 HLS 播放地址</h1>
+  <p class="lede">CharmingStreamer 把 MPEG-DASH、HLS、TS、FLV 与 RTMP 上游统一转封装成 HLS。
+  它提供频道管理、EPG 节目单、录制、定时启停、字幕处理与 Telegram 告警。
+  管理界面是一个 Web 控制台，播放内容通过独立的令牌地址分发。</p>
+  <p class="ver"><span>文档对应版本 v1.4.1</span><span>·</span><span>界面语言 简体中文</span></p>
+</header>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#glossary">术语表</a></li>
+    <li><a href="#s1">概述</a></li>
+    <li><a href="#s2">安装部署</a></li>
+    <li><a href="#s3">首次登录</a></li>
+    <li><a href="#s4">核心概念</a></li>
+    <li><a href="#s5">License Key 与解密密钥</a></li>
+    <li><a href="#s6">五分钟上手</a></li>
+    <li><a href="#s7">频道管理</a></li>
+    <li><a href="#s8">分组与 Provider</a></li>
+    <li><a href="#s9">播放与分发</a></li>
+    <li><a href="#s10">设备端接入</a></li>
+    <li><a href="#s11">录制与定时</a></li>
+    <li><a href="#s12">EPG 与节目预约</a></li>
+    <li><a href="#s13">字幕、字体与命名模板</a></li>
+    <li><a href="#s14">脚本管线</a></li>
+    <li><a href="#s15">用户与令牌</a></li>
+    <li><a href="#s16">监控与告警</a></li>
+    <li><a href="#s17">备份、恢复与升级</a></li>
+    <li><a href="#trouble">排错</a></li>
+    <li><a href="#ref">参考数据</a></li>
+  </ol>
+</div>
+<div class="toc glossary" id="glossary">
+  <h2>术语表</h2>
+  <p class="sub">正文出现的英文缩写在此对照。可随时回查。</p>
+  <div class="tw">
+  <table>
+  <thead><tr><th>术语</th><th>全称</th><th>含义</th></tr></thead>
+  <tbody>
+  <tr><td>HLS</td><td>HTTP Live Streaming</td><td>基于 HTTP 的直播流格式，由一个不断更新的 m3u8 播放列表加若干分片组成。本系统统一输出的格式</td></tr>
+  <tr><td>DASH</td><td>Dynamic Adaptive Streaming over HTTP</td><td>另一种直播流格式，扩展名 .mpd。可自适应码率</td></tr>
+  <tr><td>MPD</td><td>Media Presentation Description</td><td>DASH 的清单文件。描述有哪些轨道、分片地址与加密信息</td></tr>
+  <tr><td>m3u8</td><td>—</td><td>HLS 的播放列表文件。记录最近若干分片的地址</td></tr>
+  <tr><td>TS</td><td>MPEG Transport Stream</td><td>传统的单一流封装格式。录制为 TS 时单文件可含多音轨</td></tr>
+  <tr><td>连续流</td><td>Continuous stream</td><td>没有清单的单一字节流，如 TS、FLV、AAC、MP3</td></tr>
+  <tr><td>DRM</td><td>Digital Rights Management</td><td>数字版权保护。内容加密，需要密钥才能播放</td></tr>
+  <tr><td>ClearKey</td><td>—</td><td>最简单的 DRM。密钥以 KID:KEY 明文形式给出，可直接填写</td></tr>
+  <tr><td>KID</td><td>Key ID</td><td>密钥标识。16 字节，写在 MPD 的 default_KID 里。公开可见</td></tr>
+  <tr><td>KEY</td><td>Content Key</td><td>解密密钥。16 字节。通常不公开，需向授权服务器换取</td></tr>
+  <tr><td>PSSH</td><td>Protected System Specific Header</td><td>加密初始化信息。Key 脚本据此向 CDM 请求 challenge</td></tr>
+  <tr><td>CDM</td><td>Content Decryption Module</td><td>解密模块。执行 DRM 协议握手并产出密钥。内置支持 Widevine 与 PlayReady</td></tr>
+  <tr><td>Widevine</td><td>—</td><td>Google 的 DRM。Android、Chromecast、电视盒子常用</td></tr>
+  <tr><td>PlayReady</td><td>—</td><td>微软的 DRM。Windows 生态与部分电视平台使用</td></tr>
+  <tr><td>license</td><td>—</td><td>授权服务器返回的许可证。CDM 用它换出 KEY</td></tr>
+  <tr><td>challenge</td><td>—</td><td>CDM 为换取 license 而生成的随机数据。提交给授权服务器</td></tr>
+  <tr><td>EPG</td><td>Electronic Program Guide</td><td>电子节目表。XMLTV 格式，含频道列表与节目时间表</td></tr>
+  <tr><td>XMLTV</td><td>—</td><td>EPG 的标准数据格式。扩展名 .xml 或 .xml.gz</td></tr>
+  <tr><td>tvg-id</td><td>—</td><td>M3U 中用于关联 EPG 的频道标识。绑定 EPG 后播放器据此匹配</td></tr>
+  <tr><td>tvg-logo</td><td>—</td><td>M3U 中频道台标的图片地址</td></tr>
+  <tr><td>CDN</td><td>Content Delivery Network</td><td>内容分发网络。源站方的加速节点，分片实际从 CDN 节点取</td></tr>
+  <tr><td>反代 / 反向代理</td><td>Reverse proxy</td><td>替客户端访问上游并转发内容。本系统的一种下发模式</td></tr>
+  <tr><td>302</td><td>HTTP 302 Found</td><td>重定向。服务端返回 302 让客户端自行去取。零开销的一种下发模式</td></tr>
+  <tr><td>直通</td><td>Passthrough</td><td>跳过 HLS 切片，直接把上游字节转发给客户端</td></tr>
+  <tr><td>ffmpeg</td><td>—</td><td>音视频处理工具。本系统录制 MKV 格式时调用它</td></tr>
+  <tr><td>PGS</td><td>Presentation Graphic Stream</td><td>图形字幕。烧录或内嵌到视频流中，不依赖客户端字体</td></tr>
+  <tr><td>WebVTT</td><td>—</td><td>文本字幕。网页视频标准，可被翻译。某些播放器选它会丢声音</td></tr>
+  <tr><td>OCR</td><td>Optical Character Recognition</td><td>文字识别。从图形字幕中识别出文本，生成 WebVTT 副本</td></tr>
+  <tr><td>hardlink</td><td>—</td><td>硬链接。同一文件系统的零拷贝引用。录制暂存用它省磁盘</td></tr>
+  <tr><td>M3U</td><td>—</td><td>频道列表文件。播放器读取它得到全部频道</td></tr>
+  <tr><td>令牌 / token</td><td>—</td><td>不透明字符串。替代账号密码嵌入地址，可单独吊销</td></tr>
+  <tr><td>Xtream Codes</td><td>—</td><td>一类上游账号体系。用服务器地址加用户名密码取频道目录</td></tr>
+  <tr><td>Stalker Portal</td><td>—</td><td>一类上游账号体系。用 MAC 地址握手换取短期令牌</td></tr>
+  <tr><td>tvg 源</td><td>—</td><td>本手册中指 Xtream、Stalker、M3U 三类上游账号</td></tr>
+  </tbody>
+  </table>
+  </div>
+</div>
+
+<section id="s1">
+<h2><span class="num">1</span>概述</h2>
+<p class="sub">这一章说明 CharmingStreamer 做什么，以及它把上游转换成什么。</p>
+
+<h3>1.1 系统做什么</h3>
+<p>CharmingStreamer 是一个上游直播网关。系统接收一条上游直播流，转封装成 HLS 播放列表，
+再通过带鉴权的地址分发给播放器。系统在转封装过程中完成解密、字幕处理、多音轨封装与 EPG 绑定。</p>
+
+<p>系统由两部分组成：</p>
+<ul>
+<li><b>管理界面</b>——浏览器打开的 Web 控制台。所有配置都在这里完成。</li>
+<li><b>播放服务</b>——对外提供播放列表与分片。播放器只连接这部分，不接触上游地址。</li>
+</ul>
+
+<figure>
+  <img src="ui/dashboard.png" alt="概览页面：系统状态、播放流量、资源占用">
+  <figcaption>概览页面。页面顶部的四张卡片显示频道总数、活跃推流、主机 CPU 与运行时长。</figcaption>
+</figure>
+
+<h3>1.2 支持的上游类型</h3>
+<p>系统按上游是否带清单把源分成两类。两类的处理方式不同。</p>
+<div class="tw">
+<table>
+<thead><tr><th>上游类型</th><th>说明</th><th>系统行为</th></tr></thead>
+<tbody>
+<tr><td>MPEG-DASH</td><td>清单后缀 <code>.mpd</code></td><td>解析清单，解密分片，重新封装为 fMP4 并发布 HLS</td></tr>
+<tr><td>HLS</td><td>清单后缀 <code>.m3u8</code></td><td>按请求反代并改写清单，或直接透传上游分片</td></tr>
+<tr><td>连续流</td><td>TS、FLV、AAC、MP3 等单一流</td><td>按字节流接入，切成 HLS 分片发布。此类源不走 DRM</td></tr>
+<tr><td>RTMP 推流</td><td>OBS、ffmpeg 主动推入</td><td>接收推流并转成 HLS。无需填写源地址</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>DRM 处理</h4>
+<p>加密流需要解密密钥。密钥有三种来源：</p>
+<ul>
+<li><b>ClearKey</b>——在频道的 License Key 字段填写 <code>KID:KEY</code>。格式详见<a href="#s5">第 5 章</a>。</li>
+<li><b>内置 CDM</b>——Widevine 与 PlayReady。系统向授权服务器换取密钥。</li>
+<li><b>脚本</b>——挂 Key 脚本，由脚本产出密钥。详见<a href="#s15">第 15 章</a>。</li>
+</ul>
+
+<h3>1.3 三种下发模式</h3>
+<p>下发模式决定系统如何把内容交给客户端。模式在频道或分组上设置。三个模式的取舍如下表。</p>
+<div class="tw">
+<table>
+<thead><tr><th>模式</th><th>系统行为</th><th>占用</th><th>支持录制</th><th>适用场景</th></tr></thead>
+<tbody>
+<tr><td>转封装推流</td><td>系统主动拉流并切片，客户端读本机文件</td><td>占 CPU、带宽与磁盘</td><td>支持</td><td>加密流、需要录制、需要统一下发格式</td></tr>
+<tr><td>HLS 反向代理</td><td>按客户端请求反代上游清单并改写</td><td>占带宽，不占磁盘</td><td>不支持</td><td>公网 HLS 源、源站已有 CDN</td></tr>
+<tr><td>302 重定向</td><td>返回 302，把上游地址交给客户端</td><td>几乎为零</td><td>不支持</td><td>把上游地址隐藏在自有域名之后</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>模式不可混用。</b>HLS 反向代理与 302 重定向不支持录制。
+把频道切到这两种模式会清除该频道的录制格式与直通设置。
+已有的录制计划在触发时也会被后端阻止。302 频道没有启动与停止生命周期。
+</div>
+</section>
+
+<section id="s2">
+<h2><span class="num">2</span>安装部署</h2>
+<p class="sub">这一章说明如何把系统装到一台服务器上。</p>
+
+<h3>2.1 系统要求</h3>
+<div class="tw">
+<table>
+<thead><tr><th>项目</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td>运行时</td><td>Docker 与 Docker Compose</td></tr>
+<tr><td>镜像</td><td><code>charmingcheung000/mpd-hls:latest</code></td></tr>
+<tr><td>管理端口</td><td>9100（Web 控制台与播放服务）</td></tr>
+<tr><td>推流端口</td><td>1935（RTMP，仅推流模式使用）</td></tr>
+<tr><td>磁盘</td><td>按 HLS 缓存与录制体积预留。缓存目录可与录制目录分开</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.2 创建部署文件</h3>
+<p>在服务器上建立一个目录，并在该目录内保存 <code>docker-compose.yml</code>。</p>
+
+<div class="step">
+<div class="code">
+  <div class="hd"><span class="tag">docker-compose.yml</span><button class="cp" data-cp="networks:
+  ipv6net:
+    driver: bridge
+    enable_ipv6: true
+
+services:
+  mpd-hls:
+    image: charmingcheung000/mpd-hls:latest
+    container_name: mpd-hls
+    networks:
+      - ipv6net
+    ports:
+      - &quot;9100:9100&quot;
+      - &quot;1935:1935&quot;
+    volumes:
+      - ./var:/app/var
+    extra_hosts:
+      - &quot;host.docker.internal:host-gateway&quot;
+    restart: unless-stopped
+">复制</button></div>
+<pre><span class="c"># 端口 9100 提供管理界面与播放服务。端口 1935 接收 RTMP 推流。</span>
+<span class="c"># 变量 ./var 是数据目录。系统把数据库、HLS 缓存、录制、脚本与 EPG 全部写入此目录。</span>
+networks:
+  ipv6net:
+    driver: bridge
+    enable_ipv6: true
+
+services:
+  mpd-hls:
+    image: charmingcheung000/mpd-hls:latest
+    container_name: mpd-hls
+    networks:
+      - ipv6net
+    ports:
+      - <span class="s">&quot;9100:9100&quot;</span>
+      - <span class="s">&quot;1935:1935&quot;</span>
+    volumes:
+      - ./var:/app/var
+    extra_hosts:
+      - <span class="s">&quot;host.docker.internal:host-gateway&quot;</span>
+    restart: unless-stopped</pre>
+</div>
+</div>
+
+<div class="note info">
+<b>关于 IPv6 网络。</b>Compose 文件中的 <code>ipv6net</code> 启用双栈网络。
+很多直播源只提供 IPv6 地址。启用后容器可同时访问 IPv4 与 IPv6 上游。
+</div>
+
+<h3>2.3 启动服务</h3>
+<p>执行以下命令启动容器。</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose up -d">复制</button></div>
+<pre><span class="p">$</span> docker compose up -d</pre>
+</div>
+<p>容器首次启动会初始化数据库，并生成管理员账号。等待几秒后检查状态。</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose ps
+docker compose logs -f --tail=50">复制</button></div>
+<pre><span class="p">$</span> docker compose ps
+<span class="p">$</span> docker compose logs -f --tail=50</pre>
+</div>
+
+<h3>2.4 取得初始账号</h3>
+<p>容器首次启动时生成一组随机密码，并写入数据目录。执行以下命令读取账号。</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker exec mpd-hls cat /app/var/admin_initial_credentials.txt">复制</button></div>
+<pre><span class="p">$</span> docker exec mpd-hls cat /app/var/admin_initial_credentials.txt
+username: admin
+password: <span class="k">&lt;随机生成的密码&gt;</span></pre>
+</div>
+<p>记录密码。控制台内可以随时修改密码，详见<a href="#s16">第 16 章</a>。</p>
+
+<div class="note warn">
+<b>立即修改初始密码。</b>此密码以明文保存在数据目录中，且首次部署时未对外保密。
+</div>
+
+<h3>2.5 数据目录结构</h3>
+<p>系统把全部可变数据写入挂载目录 <code>./var</code>。目录结构如下。</p>
+<div class="tw">
+<table>
+<thead><tr><th>路径</th><th>内容</th><th>可否删除</th></tr></thead>
+<tbody>
+<tr><td><code>var/mpd-hls.db</code></td><td>SQLite 主数据库，保存全部配置</td><td>不可。删除会丢失所有配置</td></tr>
+<tr><td><code>var/hls/</code></td><td>HLS 切片缓存</td><td>可。系统按缓存上限自动清理</td></tr>
+<tr><td><code>var/recordings/</code></td><td>录制暂存与成品文件</td><td>不可。成品文件是用户资产</td></tr>
+<tr><td><code>var/epg/</code></td><td>EPG 源快照与缓存</td><td>可。删除后重新抓取</td></tr>
+<tr><td><code>var/scripts/</code></td><td>用户上传的 Python 脚本</td><td>不可。频道配置引用此目录</td></tr>
+<tr><td><code>var/cdm/</code></td><td>Widevine 与 PlayReady 设备文件</td><td>不可</td></tr>
+<tr><td><code>var/admin_initial_credentials.txt</code></td><td>初始账号密码</td><td>修改密码后可删除</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.6 放入 CDM 设备文件</h3>
+<p>需要解密 DRM 流时，把设备文件放入 <code>var/cdm/</code> 目录。系统支持以下文件。</p>
+<div class="tw">
+<table>
+<thead><tr><th>DRM 类型</th><th>文件名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Widevine</td><td><code>device_client_id_blob</code><br><code>device_private_key</code></td><td>成对放置。两者都在时优先使用 blob</td></tr>
+<tr><td>Widevine</td><td><code>device.wvd</code></td><td>pywidevine 格式。blob 不完整时回退到此文件</td></tr>
+<tr><td>PlayReady</td><td><code>device.prd</code></td><td>playready-rs 格式</td></tr>
+</tbody>
+</table>
+</div>
+<p>不使用 DRM 时跳过本步骤。把 <code>var/cdm/</code> 目录留空即可。</p>
+
+<h3>2.7 检查安装结果</h3>
+<p>执行健康检查。返回 <code>ok</code> 表示服务正常。</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="curl -s http://服务器IP:9100/healthz">复制</button></div>
+<pre><span class="p">$</span> curl -s http://<span class="k">服务器IP</span>:9100/healthz
+ok</pre>
+</div>
+<p>在浏览器打开 <code>http://服务器IP:9100/</code>，进入下一步。</p>
+
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>健康检查返回 <code>ok</code>。浏览器显示登录页。</span>
+</div>
+</section>
+
+<section id="s3">
+<h2><span class="num">3</span>首次登录</h2>
+<p class="sub">这一章说明如何进入控制台并修改初始密码。</p>
+
+<h3>3.1 登录控制台</h3>
+<p>在浏览器打开 <code>http://服务器IP:9100/</code>。输入初始账号与密码，单击「登录控制台」。</p>
+<p>控制台会话有有效期。会话失效后回到登录页，重新输入凭据即可。</p>
+
+<div class="note">
+<b>会话安全。</b>控制台使用受保护的 Cookie 会话。密码不保存在浏览器中。
+左侧栏底部的「退出登录」立即结束当前会话。
+</div>
+
+<h3>3.2 修改密码</h3>
+<p>按以下步骤修改管理员密码。</p>
+<ol>
+<li>打开左侧导航的「用户」。</li>
+<li>找到 <code>admin</code> 行，单击操作列的重置密码按钮。</li>
+<li>输入新密码，单击「更新」。</li>
+</ol>
+<p>密码修改后立即生效。当前会话保持登录状态。</p>
+
+<h3>3.3 熟悉左侧导航</h3>
+<p>控制台按功能划分导航。导航分三段。</p>
+<div class="tw">
+<table>
+<thead><tr><th>分组</th><th>菜单项</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td rowspan="5">内容</td><td>概览</td><td>系统状态、推流情况、资源占用</td></tr>
+<tr><td>频道</td><td>创建、启停、监控频道</td></tr>
+<tr><td>Provider</td><td>管理 Xtream、Stalker 与 M3U 账号</td></tr>
+<tr><td>流量统计</td><td>播放人数、客户端 IP 与流量</td></tr>
+<tr><td>录制</td><td>录制任务与成品文件</td></tr>
+<tr><td rowspan="6">配置</td><td>定时</td><td>定时启停频道的计划任务</td></tr>
+<tr><td>EPG</td><td>节目表浏览与节目预约</td></tr>
+<tr><td>EPG 配置</td><td>EPG 源、频道绑定与关键字规则</td></tr>
+<tr><td>分组</td><td>频道分组与共享配置</td></tr>
+<tr><td>字幕</td><td>PGS 渲染样式与 OCR 开关</td></tr>
+<tr><td>命名模板</td><td>录制文件命名模板</td></tr>
+<tr><td rowspan="4">系统</td><td>字体</td><td>上传字幕字体</td></tr>
+<tr><td>脚本</td><td>上传与编辑 Python 脚本</td></tr>
+<tr><td>用户</td><td>管理员与观众账号</td></tr>
+<tr><td>Telegram</td><td>告警、事件与 Bot 命令</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>3.4 切换界面语言</h3>
+<p>单击右上角的账号菜单可切换界面语言与深浅主题。设置保存在浏览器本地。</p>
+
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>控制台显示概览页面。左侧栏列出全部功能菜单。</span>
+</div>
+</section>
+
+<section id="s4">
+<h2><span class="num">4</span>核心概念</h2>
+<p class="sub">这一章说明五个贯穿全部页面的概念。理解这五项后，后续章节只做字段对照。</p>
+
+<h3>4.1 分组</h3>
+<p>分组是一组频道的容器。分组不只是分类，它同时承载一组共享配置。</p>
+<p>组内频道的以下设置留空时继承分组值：</p>
+<ul>
+<li>上游代理 URL、User-Agent、自定义请求头</li>
+<li>字幕配置</li>
+<li>强制 IPv6</li>
+<li>缓存、并发与超时等调优参数</li>
+</ul>
+
+<div class="note">
+<b>修改分组会重启组内推流。</b>分组配置保存后，正在推流的频道自动重启以应用新设置。
+</div>
+
+<p>新建频道前必须先建分组。频道的分组字段为必填项。</p>
+
+<h3>4.2 频道与生命周期</h3>
+<p>频道是一条推流任务。每个频道有一个生命周期模式。模式决定频道何时拉流、何时停止。</p>
+<div class="tw">
+<table>
+<thead><tr><th>模式</th><th>拉流时机</th><th>停止时机</th><th>适用条件</th></tr></thead>
+<tbody>
+<tr><td>常驻</td><td>手动启动后持续推流</td><td>手动停止</td><td>任何模式</td></tr>
+<tr><td>按需</td><td>收到首个播放请求后拉流</td><td>无人观看后自动停止</td><td>转封装推流与 HLS 反代</td></tr>
+<tr><td>302 启用</td><td>不拉流，直接返回 302</td><td>不适用</td><td>仅 302 重定向模式</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>频道列表的「按需」列可切换常驻与按需。切换会改变频道的拉流时机。</p>
+<div class="note warn">
+<b>切换到常驻时注意当前推流。</b>频道正在推流时，控制台询问如何处理本次推流：
+停止推流后立即切换，或保持推流并脱离自动停止。
+</div>
+
+<h3>4.3 播放地址与令牌</h3>
+<p>每个频道分配一条播放地址。地址中包含一段不透明令牌，替代上游地址与账号密码。</p>
+<dl class="kv">
+<dt>播放地址</dt><dd><code>/l/&lt;令牌&gt;/index.m3u8</code>——转封装推流与 HLS 反代模式的播放入口</dd>
+<dt>直通地址</dt><dd><code>/raw/&lt;stream_key&gt;</code>——直通模式直接转发上游字节，不切片</dd>
+<dt>订阅地址</dt><dd><code>/sub/&lt;令牌&gt;/playlist.m3u</code>——用户维度的 M3U 订阅</dd>
+<dt>EPG 地址</dt><dd><code>/sub/&lt;令牌&gt;/epg.xml.gz</code>——用户维度的 gzipped XMLTV</dd>
+</dl>
+
+<p>令牌是设备访问凭证。同一频道对不同用户生成不同令牌。详见<a href="#s16">第 16 章</a>。</p>
+
+<div class="note warn">
+<b>不要分发带账号密码的旧式地址。</b>令牌地址不含用户名与密码。失窃时可单独吊销。
+优先使用令牌，不要使用 <code>?u=&amp;p=</code> 形式。
+</div>
+
+<h3>4.4 下发模式与频道设置的关系</h3>
+<p>下发模式决定一批频道字段是否生效。对照如下。</p>
+<div class="tw">
+<table>
+<thead><tr><th>功能</th><th>转封装推流</th><th>HLS 反向代理</th><th>302 重定向</th></tr></thead>
+<tbody>
+<tr><td>手动启动 / 停止</td><td>支持</td><td>支持</td><td>不支持</td></tr>
+<tr><td>自动启动</td><td>支持</td><td>支持</td><td>不支持</td></tr>
+<tr><td>按需启动</td><td>支持</td><td>支持</td><td>不支持</td></tr>
+<tr><td>录制</td><td>支持</td><td>不支持</td><td>不支持</td></tr>
+<tr><td>轨道选择</td><td>支持</td><td>不支持</td><td>不支持</td></tr>
+<tr><td>字幕渲染与 OCR</td><td>支持</td><td>不支持</td><td>不支持</td></tr>
+<tr><td>DRM 解密</td><td>支持</td><td>源自身解密</td><td>源自身解密</td></tr>
+<tr><td>分片磁盘缓存</td><td>支持</td><td>支持</td><td>不适用</td></tr>
+<tr><td>原始流直通</td><td>仅连续流</td><td>不支持</td><td>不支持</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.5 站点品牌</h3>
+<p>控制台支持自定义站点名称与图标。品牌设置影响登录页、侧边栏、浏览器标题与站点图标。
+所有登录用户看到同一套品牌。详见<a href="#s17">第 17 章</a>。</p>
+</section>
+
+<section id="s5">
+<h2><span class="num">5</span>License Key 与解密密钥</h2>
+<p class="sub">这一章说明 License Key 字段填什么、从哪里取、以及填错时的现象。</p>
+
+<div class="note info">
+<b>读法：先判断要不要填，再看格式。</b>多数场景留空即可。
+判断表见 <a href="#s5-decide">5.2 需要填写 License Key 的情形</a>，格式见 <a href="#s5-format">5.3 接受的四种格式</a>。
+</div>
+
+<h3 id="s5-what">5.1 这个字段是什么</h3>
+<p>直播流的分片可能经过加密。没有密钥就无法把分片还原成可播放的内容。
+License Key 字段存放解密所需的密钥信息。</p>
+<p>该字段不是必填项。它的作用随上游类型而变。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>上游情况</th><th>是否填写</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>源不加密（公开 HLS、ClearKey 已解的源）</td><td>留空</td><td>分片本身可读。系统直接封装</td></tr>
+<tr><td>连续流（TS、FLV、AAC、MP3）</td><td>留空</td><td>字节流路径不走 DRM。界面显示「连续流不适用」</td></tr>
+<tr><td>加密流，且已拿到 KID 与 KEY</td><td>填写 <code>KID:KEY</code></td><td>系统用密钥解密分片</td></tr>
+<tr><td>加密流，只有 KID，KEY 需要向授权服务器换取</td><td>挂 Key 脚本</td><td>没有现成密钥可填。脚本负责换取</td></tr>
+<tr><td>加密流，使用 Widevine 或 PlayReady</td><td>挂 Key 脚本</td><td>密钥由 DRM 协议协商产生，无法预先填写</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>不要把 KEY 猜出来或随便填。</b>填错的密钥不会让系统报错，只会让分片解出乱码，
+表现为「频道显示运行中，播放器一直转圈或花屏」。见 <a href="#s5-symptom">5.6 填错时的现象</a>。
+</div>
+
+<h3 id="s5-decide">5.2 需要填写 License Key 的情形</h3>
+<p>按下表选择动作。前三行覆盖绝大多数情况。</p>
+<div class="tw">
+<table>
+<thead><tr><th>你的情况</th><th>动作</th><th>填什么</th></tr></thead>
+<tbody>
+<tr><td>不确定源是否加密</td><td>先留空启动</td><td>能播则无需处理。不能播时看 <a href="#s5-symptom">5.6</a></td></tr>
+<tr><td>源提供方给了 ClearKey</td><td>直接填写</td><td>提供方给出的 <code>KID:KEY</code></td></tr>
+<tr><td>源是 Widevine / PlayReady 商业流</td><td>挂 Key 脚本</td><td>字段留空。见<a href="#s15">第 15 章</a></td></tr>
+<tr><td>源需要登录才能取 MPD</td><td>挂 Source 脚本</td><td>字段留空</td></tr>
+<tr><td>已挂 Key 脚本</td><td>字段留空</td><td>脚本在运行时生成密钥</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s5-format">5.3 接受的四种格式</h3>
+<p>License Key 是多行文本。每行一条。系统按下表识别格式。</p>
+<div class="tw">
+<table>
+<thead><tr><th>格式</th><th>示例</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td>KID 与 KEY</td><td><code>0123456789abcdef0123456789abcdef:fedcba9876543210fedcba9876543210</code></td><td>ClearKey。最常用</td></tr>
+<tr><td>License URL</td><td><code>https://license.example/keys</code></td><td>源提供方给出取密钥地址</td></tr>
+<tr><td>留空</td><td>（不填）</td><td>不加密，或由脚本生成</td></tr>
+<tr><td>JWK Set JSON</td><td><code>{"keys":[{"kid":"...","k":"..."}]}</code></td><td><b>仅 M3U 导入</b>。见下方说明</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>KID 与 KEY 的写法</h4>
+<p>KID 与 KEY 各为 16 字节，各写 32 个十六进制字符，中间用冒号分隔。</p>
+<div class="code">
+  <div class="hd"><span class="tag">正确</span><button class="cp" data-cp="0123456789abcdef0123456789abcdef:fedcba9876543210fedcba9876543210">复制</button></div>
+<pre><span class="c"># 冒号前是 KID，冒号后是 KEY。两者各 32 个十六进制字符</span>
+0123456789abcdef0123456789abcdef:fedcba9876543210fedcba9876543210</pre>
+</div>
+<p>以下写法都有效。系统保存时统一规范为小写、无连字符的形式。</p>
+<div class="tw">
+<table>
+<thead><tr><th>写法</th><th>示例</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>标准</td><td><code>0123456789abcdef…:fedcba98…</code></td><td>接受</td></tr>
+<tr><td>带连字符</td><td><code>01234567-89ab-cdef-0123-456789abcdef:fedcba98-…</code></td><td>接受。连字符被去除</td></tr>
+<tr><td>大写</td><td><code>0123456789ABCDEF…</code></td><td>接受。转为小写</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>以下写法会被后端拒绝，保存时直接返回错误。</p>
+<div class="tw">
+<table>
+<thead><tr><th>写法</th><th>示例</th><th>错误信息</th></tr></thead>
+<tbody>
+<tr><td>长度不足</td><td><code>aaaa:bbbb</code></td><td><code>KID must be 16 bytes hex</code></td></tr>
+<tr><td>带 0x 前缀</td><td><code>0x0123456789abcdef…</code></td><td><code>license key contains non-hex characters</code></td></tr>
+<tr><td>含空格</td><td><code>0123456789abcdef… : fedcba98…</code></td><td><code>license key contains non-hex characters</code></td></tr>
+<tr><td>非十六进制</td><td><code>zzzz:wwww</code></td><td><code>license key contains non-hex characters</code></td></tr>
+<tr><td>缺冒号</td><td><code>0123456789abcdef0123456789abcdef</code></td><td><code>license key contains non-hex characters</code></td></tr>
+<tr><td>多个冒号</td><td><code>aaa:bbb:ccc</code></td><td>拒绝</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>校验在保存时发生。</b>格式错误时保存失败，并返回具体原因。
+已保存的频道不受影响。
+</div>
+
+<h4 id="s5-multi">多条密钥</h4>
+<p>视频轨与音频轨可能使用不同的密钥。此时按行填写多条。系统按 KID 自动匹配对应轨道，匹配不到时逐条尝试解密。</p>
+<div class="code">
+  <div class="hd"><span class="tag">多条密钥</span></div>
+<pre><span class="c"># 第一条：视频轨</span>
+aaaa…:bbbb…
+<span class="c"># 第二条：音频轨，与视频不同</span>
+cccc…:dddd…
+<span class="c"># 第三条也可以是 license URL，与上面两条共存</span>
+https://license.example/keys</pre>
+</div>
+<p>以 <code>#</code> 开头的行作为注释。保存时注释行被剥离，不参与解密。</p>
+
+<h4 id="s5-jwk">关于 JWK Set JSON</h4>
+<p>M3U 导入时，前端接受 JWK Set JSON 格式，取 <code>keys</code> 数组的第一项，转成 <code>KID:KEY</code> 后再提交。</p>
+<div class="note warn">
+<b>手动填写时不支持 JWK JSON。</b>在频道表单的 License Key 字段直接粘贴 JWK JSON，保存会失败。
+该格式只经由「导入 m3u」路径生效。
+需要该格式时，先确认导入后的频道里 License Key 已是 <code>KID:KEY</code> 形式。
+</div>
+
+<h3 id="s5-kid">5.4 KID 从哪里来</h3>
+<p>KID 是内容密钥的标识，写在 MPD 里。KEY 是解密密钥，通常不公开。</p>
+
+<h4>从 MPD 中读取 KID</h4>
+<p>KID 出现在 MPD 的 <code>default_KID</code> 属性中。在服务器上直接查看：</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="curl -s <源地址> | grep -o 'default_KID="[^"]*"' | head">复制</button></div>
+<pre><span class="p">$</span> curl -s <span class="k">源地址</span> | grep -o <span class="s">'default_KID="[^"]*"'</span> | head
+default_KID=<span class="s">"0123456789abcdef0123456789abcdef"</span></pre>
+</div>
+<p>输出中引号内的 32 个字符即为 KID。去掉连字符后即为可填写的形式。</p>
+<div class="note">
+<b>只有 KID 不够。</b>KEY 不在 MPD 中。它需要向授权服务器换取。
+拿到 KID 而拿不到 KEY 时，改用 Key 脚本。
+</div>
+
+<h4>三种密钥来源对照</h4>
+<div class="tw">
+<table>
+<thead><tr><th>来源</th><th>KID 可见</th><th>KEY 可见</th><th>做法</th></tr></thead>
+<tbody>
+<tr><td>ClearKey</td><td>MPD 公开</td><td>通常随源一并提供</td><td>直接填入</td></tr>
+<tr><td>Widevine</td><td>MPD 公开</td><td>否。需与授权服务器握手</td><td>Key 脚本 + 内置 CDM</td></tr>
+<tr><td>PlayReady</td><td>MPD 公开</td><td>否</td><td>Key 脚本 + 内置 CDM</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s5-cdm">5.5 使用内置 CDM</h3>
+<p>Key 脚本通过内置 CDM 完成解密协议握手。需要先把设备文件放入数据目录。</p>
+<ol>
+<li>把设备文件放入 <code>var/cdm/</code> 目录。</li>
+<li>重启服务使 CDM 加载设备。</li>
+<li>在频道上挂 Key 脚本。License Key 字段留空。</li>
+</ol>
+<div class="tw">
+<table>
+<thead><tr><th>DRM</th><th>文件名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Widevine</td><td><code>device_client_id_blob</code><br><code>device_private_key</code></td><td>成对放置</td></tr>
+<tr><td>Widevine</td><td><code>device.wvd</code></td><td>blob 不完整时使用</td></tr>
+<tr><td>PlayReady</td><td><code>device.prd</code></td><td>playready-rs 格式</td></tr>
+</tbody>
+</table>
+</div>
+<p>文件缺失时，频道状态显示「失败」，错误分类为「CDM 错误」。详见<a href="#s15">第 15 章</a>。</p>
+
+<h3 id="s5-symptom">5.6 填错时的现象</h3>
+<p>License Key 相关的错误多数不发生在保存时，而发生在推流时。按下表定位。</p>
+<div class="tw">
+<table>
+<thead><tr><th>现象</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>保存时提示 <code>KID must be 16 bytes hex</code></td><td>KID 长度不对</td><td>检查位数是否为 32 个十六进制字符</td></tr>
+<tr><td>保存时提示含非十六进制字符</td><td>含空格、0x 前缀或非十六进制符号</td><td>删去空格与前缀。只保留 0-9 与 a-f</td></tr>
+<tr><td>状态「失败」，分类为 Key 错误（硬编码不可恢复）</td><td>KID 或 KEY 与源不匹配</td><td>从 MPD 重新读取 KID。确认 KEY 来源正确</td></tr>
+<tr><td>状态「失败」，分类为 Key 过期（将重新获取）</td><td>动态密钥到期</td><td>系统重跑 Key 脚本。持续失败时检查上游授权</td></tr>
+<tr><td>状态「运行中」，播放器转圈或花屏</td><td>密钥能解密但内容不对</td><td>核对 KID 是否取自该源的 MPD。尝试只保留一条密钥</td></tr>
+<tr><td>状态「失败」，分类为 CDM 错误</td><td>设备文件缺失或无效</td><td>检查 <code>var/cdm/</code>。详见 <a href="#s5-cdm">5.5</a></td></tr>
+<tr><td>状态「失败」，分类为 脚本错误</td><td>Key 脚本异常</td><td>查看频道日志中的 <code>script stderr</code> 行</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note info">
+<b>先留空再排查。</b>不确定时先留空启动。
+源若可播，说明无需密钥。若不可播，频道日志会给出具体的失败分类。
+</div>
+</section>
+
+<section id="s6">
+<h2><span class="num">6</span>五分钟上手</h2>
+<p class="sub">这一章用六步把一个频道送进播放器。全程不需要脚本与自定义配置。</p>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 1</span><h3>建一个分组</h3></div>
+<p>分组是频道的必填归属，也是共享配置的载体。</p>
+<ol>
+<li>打开左侧导航的「分组」。</li>
+<li>单击「新建分组」。</li>
+<li>输入名称，例如 <code>自建源</code>。</li>
+<li>单击「创建」。</li>
+</ol>
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>分组表出现该分组。频道数列显示 <code>0</code>。</span>
+</div>
+</div>
+
+<figure>
+  <img src="ui/groups.png" alt="分组页面：分组列表与新建分组按钮">
+  <figcaption>分组页面。表格显示每个分组的频道数、上游配置、调优覆盖与字幕绑定状态。</figcaption>
+</figure>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 2</span><h3>新建一个频道</h3></div>
+<p>先建一个最简单的 ClearKey 频道，验证链路通畅。</p>
+<ol>
+<li>打开左侧导航的「频道」。</li>
+<li>单击「新建频道」。</li>
+<li>填写频道名称，例如 <code>CCTV-1</code>。</li>
+<li>填写源地址。填入上游清单地址，填入 <code>.mpd</code> 或 <code>.m3u8</code> 后缀。</li>
+<li>加密流填写 License Key，每行一条 <code>KID:KEY</code>。公开流留空。不确定时先留空试播。格式详见<a href="#s5">第 5 章</a>。</li>
+<li>选择分组。本步骤创建的是 <code>自建源</code>。</li>
+<li>单击「创建」。</li>
+</ol>
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>频道列表出现该频道。状态列为「已停止」。</span>
+</div>
+</div>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 3</span><h3>启动并确认推流</h3></div>
+<ol>
+<li>在频道行单击「推流」。</li>
+<li>等待状态变为「运行中」。</li>
+</ol>
+<p>状态变化过程为：已停止 → 启动中 → 运行中。启动过程包含解析清单、拉取分片与解密。</p>
+<div class="note info">
+<b>按需启动的频道不会立即推流。</b>按需频道在收到首个播放请求时才拉流。
+要在不播放的情况下验证链路，先把频道切换为常驻。
+</div>
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>状态列为「运行中」。健康列为「正常」。</span>
+</div>
+</div>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 4</span><h3>读取播放地址</h3></div>
+<p>频道运行后分配播放地址。执行以下操作读取：</p>
+<ol>
+<li>在频道行单击「复制链接」。</li>
+<li>地址已复制到剪贴板。</li>
+</ol>
+<p>地址格式如下。</p>
+<div class="code">
+  <div class="hd"><span class="tag">播放地址</span></div>
+<pre>http://<span class="k">服务器IP</span>:9100/l/<span class="s">&lt;令牌&gt;</span>/index.m3u8</pre>
+</div>
+<p>把地址粘进播放器。VLC、mpv、ffplay 与 ExoPlayer 均可直接播放。</p>
+<div class="note warn">
+<b>播放器要求。</b>若频道启用了去后缀伪装，播放器必须容忍无 <code>.m3u8</code> 后缀的地址。
+iOS 与 Safari 原生播放器会失效。详见<a href="#s7">第 7 章</a>。
+</div>
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>播放器开始播放。画面与声音正常。</span>
+</div>
+</div>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 5</span><h3>创建观众账号</h3></div>
+<p>不要把管理员账号交给播放器。为观看者创建独立账号。</p>
+<ol>
+<li>打开左侧导航的「用户」。</li>
+<li>单击「新建用户」。</li>
+<li>输入用户名与密码。</li>
+<li>角色选择「User · 仅能访问授权分组的推流」。</li>
+<li>选择可见分组。本步骤选择 <code>自建源</code>。</li>
+<li>单击「创建」。</li>
+</ol>
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>用户表出现该用户。角色列为「普通用户」。</span>
+</div>
+</div>
+
+<div class="step">
+<div class="step-head"><span class="step-n">步骤 6</span><h3>发订阅地址</h3></div>
+<p>订阅地址包含完整频道列表。把它交给播放器即可，无需逐条复制播放地址。</p>
+<ol>
+<li>在用户行单击「导出 m3u」。</li>
+<li>地址已复制到剪贴板。</li>
+</ol>
+<p>订阅地址格式如下。</p>
+<div class="code">
+  <div class="hd"><span class="tag">订阅地址</span></div>
+<pre>http://<span class="k">服务器IP</span>:9100/sub/<span class="s">&lt;令牌&gt;</span>/playlist.m3u</pre>
+</div>
+<p>配套的 EPG 地址格式如下。</p>
+<div class="code">
+  <div class="hd"><span class="tag">EPG 地址</span></div>
+<pre>http://<span class="k">服务器IP</span>:9100/sub/<span class="s">&lt;令牌&gt;</span>/epg.xml.gz</pre>
+</div>
+<p>把订阅地址粘进播放器的订阅设置。多数播放器会自动识别订阅内的 EPG 地址。</p>
+
+<div class="done">
+  <span class="mk">✓</span>
+  <span><b>完成标志：</b>播放器订阅列表出现全部授权频道。EPG 有节目数据。</span>
+</div>
+</div>
+
+<figure>
+  <img src="ui/channels.png" alt="频道页面：频道列表、筛选与批量操作">
+  <figcaption>频道页面。顶部提供导出、导入与新建入口。表头可勾选全选，配合批量操作栏处理多个频道。</figcaption>
+</figure>
+
+<div class="note info">
+<b>批量导入已有列表时跳过本多数步骤。</b>频道页提供「导入 m3u」与「导入 o11」两个入口。
+导入时可直接勾选按需启动与 302 下发，避免导入后逐条修改。
+详见<a href="#s7">第 7 章</a>。
+</div>
+</section>
+
+<section id="s7">
+<h2><span class="num">7</span>频道管理</h2>
+<p class="sub">这一章说明频道的全部配置项。频道是系统的核心对象。</p>
+
+<h3>7.1 频道列表</h3>
+<p>频道页列出全部频道。表头统计各类状态的数量。</p>
+<div class="tw">
+<table>
+<thead><tr><th>列</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>名称</td><td>频道名。用于 M3U 显示与 EPG 匹配</td></tr>
+<tr><td>状态</td><td>运行中、启动中、已停止、失败、302 已启用、302 未启用</td></tr>
+<tr><td>健康</td><td>正常、缓慢、曾缓慢。反映分片生成是否跟得上播放</td></tr>
+<tr><td>按需</td><td>按需或常驻。单击单元格可切换</td></tr>
+<tr><td>分组</td><td>所属分组</td></tr>
+<tr><td>分类</td><td>M3U 的 group-title。留空时回退到分组名</td></tr>
+<tr><td>启动时间</td><td>本次推流的开始时刻</td></tr>
+<tr><td>操作</td><td>推流、探测、轨道、录制、定时、编辑、更多</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>排序前先清空筛选。</b>搜索或分组、状态筛选处于激活状态时，排序按钮禁用。
+排序依赖列表的完整顺序。
+</div>
+
+<h3>7.2 频道状态机</h3>
+<div class="tw">
+<table>
+<thead><tr><th>状态</th><th>含义</th><th>后续动作</th></tr></thead>
+<tbody>
+<tr><td>已停止</td><td>没有推流</td><td>可手动启动</td></tr>
+<tr><td>启动中</td><td>正在解析清单与拉取首轮分片</td><td>等待或停止</td></tr>
+<tr><td>运行中</td><td>正常推流</td><td>可停止</td></tr>
+<tr><td>重试中</td><td>失败后等待重试。显示重试次数与倒计时</td><td>等待或停止</td></tr>
+<tr><td>失败</td><td>重试耗尽或不可重试。状态栏显示错误分类</td><td>查看日志后重启</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>错误分类</h4>
+<p>失败状态下，状态栏给出错误分类。按分类定位问题。</p>
+<div class="tw">
+<table>
+<thead><tr><th>分类</th><th>典型原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>网络/上游错误</td><td>连接超时、HTTP 5xx</td><td>检查网络与代理。更换上游</td></tr>
+<tr><td>Key 过期（将重新获取）</td><td>动态密钥到期</td><td>系统自动重跑 Key 脚本。观察是否恢复</td></tr>
+<tr><td>Key 错误（硬编码不可恢复）</td><td>填写的 KID:KEY 与源不匹配</td><td>更换正确密钥，或改用脚本获取</td></tr>
+<tr><td>脚本错误</td><td>脚本超时、退出码非零、输出异常</td><td>查看日志中的 script stderr 行</td></tr>
+<tr><td>CDM 错误</td><td>设备文件缺失、Challenge 或 License 失败</td><td>检查 <code>var/cdm/</code> 文件</td></tr>
+<tr><td>媒体格式错误</td><td>分片格式不受支持</td><td>确认源类型受支持</td></tr>
+<tr><td>鉴权失败</td><td>User-Agent 或请求头不匹配</td><td>补齐 UA 与请求头</td></tr>
+<tr><td>配置错误</td><td>字段缺失或格式错误</td><td>检查频道配置</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>7.3 基本字段</h3>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>必填</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>频道名称</td><td>否</td><td>留空时从源 URL 推导</td></tr>
+<tr><td>分类</td><td>否</td><td>仅作为 M3U 的 group-title。留空回退到分组名</td></tr>
+<tr><td>Logo URL</td><td>否</td><td>写入 M3U 的 <code>tvg-logo</code></td></tr>
+<tr><td>源地址</td><td>是</td><td>拉流模式填上游清单地址。推流模式留空</td></tr>
+<tr><td>License Key</td><td>否</td><td>每行一条 <code>KID:KEY</code>，或 http(s):// 开头的 license URL。格式详见<a href="#s5">第 5 章</a></td></tr>
+<tr><td>分组</td><td>是</td><td>必选。决定继承哪些共享配置</td></tr>
+<tr><td>字幕配置</td><td>否</td><td>留空继承分组。分组也留空时用系统默认</td></tr>
+<tr><td>录制格式</td><td>否</td><td>TS 或 MKV。留空使用默认 TS</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>连续流只能录制为 TS。</b>字节流流水线只产出 <code>.ts</code> 段。
+TS 使用内置合成，单文件容纳多音轨。MKV 使用 ffmpeg 合成，需要镜像内存在 ffmpeg。
+</div>
+
+<h3>7.4 来源方式</h3>
+<p>「来源方式」决定流的方向。两个选项对应两类接入。</p>
+<div class="tw">
+<table>
+<thead><tr><th>选项</th><th>含义</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td>拉流（我们去取）</td><td>系统主动连接上游地址拉取</td><td>DASH、HLS、TS、RTMP 等绝大多数源</td></tr>
+<tr><td>推流（编码器推给我们）</td><td>OBS、ffmpeg 等编码器推流到系统 RTMP 端口</td><td>自建直播源、摄像头</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>推流模式的配置</h4>
+<p>选择推流模式后，系统显示推流地址与串流密钥。地址在创建频道后可在编辑对话框查看。</p>
+<div class="tw">
+<table>
+<thead><tr><th>OBS 设置项</th><th>填写内容</th></tr></thead>
+<tbody>
+<tr><td>服务器</td><td><code>rtmp://服务器IP:1935/live</code></td></tr>
+<tr><td>串流密钥</td><td>频道的串流密钥</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>「断开保留时长」控制推流中断后的会话保留秒数。编码器在此期间重连可无缝续播，观众不掉线。设为 <code>0</code> 表示断开即停止。</p>
+
+<div class="note warn">
+<b>推流模式的编码限制。</b>仅支持 H.264 与 HEVC 视频，以及 AAC 音频。
+选择 AV1 会推流失败。
+</div>
+
+<h3>7.5 启动方式</h3>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>自动启动</td><td>服务启动时自动推流该频道</td></tr>
+<tr><td>按需启动</td><td>有播放请求时才拉流。无人观看后自动停止</td></tr>
+<tr><td>启用 302 下发</td><td>允许客户端获取重定向。仅 302 模式可用</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>7.6 上游请求设置</h3>
+<p>以下字段控制系统访问上游的方式。留空时继承分组值。</p>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>格式</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>上游代理 URL</td><td><code>http://</code>、<code>https://</code>、<code>socks5://</code></td><td>可含账号密码</td></tr>
+<tr><td>User-Agent</td><td>字符串</td><td>覆盖默认 UA</td></tr>
+<tr><td>自定义请求头</td><td>每行一条 <code>Key: Value</code></td><td>逐条追加到上游请求</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>编辑对话框留空某字段会清除该频道的对应配置，配置回退到分组级或系统默认值。</p>
+
+<h3>7.7 探测源与轨道面板</h3>
+<p>系统通过「探测」读取上游清单，列出可用轨道。探测结果决定轨道面板中的选项。</p>
+<ol>
+<li>在频道行单击「探测」。</li>
+<li>等待探测完成。状态提示「已触发探测」。</li>
+<li>单击「轨道」打开轨道面板。</li>
+</ol>
+
+<h4>轨道面板的选项</h4>
+<div class="tw">
+<table>
+<thead><tr><th>区块</th><th>选项</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>视频</td><td>单选，含「最高质量（自动）」</td><td>「自动」始终跟随当前最高分辨率</td></tr>
+<tr><td>音频</td><td>多选</td><td>按编号顺序发布。排第一的轨道标记为默认</td></tr>
+<tr><td>字幕</td><td>多选</td><td>可输出为 PGS、WebVTT 或两者</td></tr>
+<tr><td>字幕配置</td><td>下拉</td><td>频道级配置，覆盖分组级</td></tr>
+<tr><td>多音轨输出方式</td><td>开关</td><td>开启后音轨混入视频 TS。面向 TVHeadend 等不支持 HLS 多音轨的下游</td></tr>
+<tr><td>短分片聚合</td><td>开关</td><td>上游分片短于约 4 秒时合并为约 8 秒。仅对 DASH 源生效</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>WebVTT 字幕有代价。</b>PotPlayer 选中 WebVTT 字幕轨时会丢失声音。
+优先使用 PGS 字幕轨。
+</div>
+<div class="note">
+<b>保存轨道会重启推流。</b>推流中的频道保存轨道配置后停止并重启，缓存全部清除。
+控制台在保存前给出确认提示。
+</div>
+
+<h3>7.8 缓存与调优</h3>
+<p>「HLS 代理设置」区块配置分片缓存行为。留空项继承分组。</p>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>默认值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>启用分片磁盘缓存</td><td>—</td><td>开关</td></tr>
+<tr><td>每频道缓存上限 (MB)</td><td>—</td><td>超限后回收最旧分片</td></tr>
+<tr><td>分片保留时间 (分钟)</td><td>—</td><td>定时回收</td></tr>
+<tr><td>Manifest 短缓存 (毫秒)</td><td>—</td><td>抑制频繁拉取上游清单</td></tr>
+<tr><td>并发切片获取数</td><td>4</td><td>单频道同时获取的非密钥 HLS 资源上限</td></tr>
+<tr><td>目标分片时长 (秒)</td><td>8</td><td>连续流合并上游分片的目标时长</td></tr>
+<tr><td>重定向多解析次数</td><td>1</td><td>仅 302 模式。仅 DASH 与 HLS 清单源生效</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>不要随意调高「重定向多解析次数」。</b>大于 1 时，启动会并发解析源地址多次，得到多个 CDN 边缘地址并在请求间轮询。
+部分上游对同一账号的多地址并发拉流会触发封号风控。
+不确定时保持默认值 <code>1</code>。
+</div>
+
+<h4>Query 与 Header 映射</h4>
+<p>映射表用于改写下游请求。每行写 <code>下游名称=上游名称</code>，追加 <code>;children</code> 表示继续带到改写后的子资源。</p>
+<dl class="kv">
+<dt>保留名称</dt><dd>下游 Query 参数 <code>u</code> 与 <code>p</code> 为本地鉴权保留。上游需要同名参数时使用别名映射</dd>
+<dt>作用范围</dt><dd>映射值只覆盖同一上游会话的本次请求，不创建新的上游会话</dd>
+</dl>
+
+<h3>7.9 流量伪装</h3>
+<p>「流量伪装」改变 HTTP 出口的外观，用于对抗 CDN 的 Cloudflare 校验。磁盘文件与内部管线保持不变。</p>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td>分片后缀</td><td>分片的假后缀，不带点。填 <code>jpg</code> 则分片以 <code>12.jpg</code> 提供</td></tr>
+<tr><td>分片 Content-Type</td><td>分片响应的 Content-Type。留空时为 <code>application/octet-stream</code></td></tr>
+<tr><td>播放列表 Content-Type</td><td>设置后播放列表以去后缀形式提供，地址形如 <code>.../index</code></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn">
+<b>去后缀地址会淘汰部分播放器。</b>iOS 与 Safari 原生播放器严格按 <code>.m3u8</code> 后缀识别。
+同时避免使用 <code>ts</code>、<code>m4s</code>、<code>mp4</code>、<code>aac</code>、<code>vtt</code> 作为假后缀。
+确认客户端使用容忍型播放器后再开启：ExoPlayer、VLC、mpv、ffmpeg。
+</div>
+
+<h3>7.10 批量操作</h3>
+<p>勾选表头的复选框全选当前页。批量操作栏提供以下操作。</p>
+<div class="tw">
+<table>
+<thead><tr><th>操作</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>批量编辑</td><td>逐字段勾选启用，只提交启用的字段。留空即清除该字段</td></tr>
+<tr><td>推流 / 停止</td><td>批量下发启停指令</td></tr>
+<tr><td>探测</td><td>批量触发源探测</td></tr>
+<tr><td>开按需 / 关按需</td><td>切换生命周期。推流中的频道被跳过</td></tr>
+<tr><td>启用 302 / 停用 302</td><td>切换 302 下发开关</td></tr>
+<tr><td>设置分类</td><td>统一设置 M3U 分类。留空即清除</td></tr>
+<tr><td>排序</td><td>把选中频道作为连续块移动到指定位置。含移动后预览</td></tr>
+<tr><td>批量删除</td><td>删除选中频道及其 HLS 缓存。不可恢复</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>脚本批量覆盖</h4>
+<p>批量编辑的「脚本」字段会整张覆盖所选频道的脚本列表。留空即清空所有脚本。</p>
+
+<h3>7.11 导入</h3>
+
+<h4>导入 M3U</h4>
+<ol>
+<li>打开「频道」，单击「导入 m3u」。</li>
+<li>选择目标分组，或勾选「按 group-title 分组」自动匹配分组。</li>
+<li>从链接获取，或选择文件，或直接粘贴内容。</li>
+<li>检查解析摘要：总数、可导入数、跳过数。</li>
+<li>勾选「按需启动」与「启用 302 下发」。建议两者都勾选。</li>
+<li>单击「导入」。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>跳过原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>缺少 URL</td><td>该行无地址。修正源文件</td></tr>
+<tr><td>不支持的源类型</td><td>地址后缀不受支持</td></tr>
+<tr><td>密钥格式不合法</td><td><code>#KODIPROP</code> 声明的 ClearKey 格式错误</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>导入支持解析 M3U 中的 <code>#KODIPROP</code> 声明，包括 ClearKey 密钥与 User-Agent。</p>
+
+<h4>导入 o11</h4>
+<p>「导入 o11」读取 o11 工具导出的 <code>.cfg</code> 配置文件。系统自动创建分组并导入全部频道。</p>
+<p>导入同时带入以下内容：</p>
+<ul>
+<li>ClearKey 密钥、按需启动开关、Logo、轨道选择</li>
+<li>分组级别的 User-Agent 与代理</li>
+</ul>
+
+<h3>7.12 频道日志</h3>
+<p>频道行单击日志按钮打开频道日志面板。日志保存在内存环形缓冲区，容量 500 条，记录 INFO 及以上级别。</p>
+<p>面板提供按级别筛选、按关键字搜索与自动滚动。状态变化时的关键事件如下。</p>
+<div class="tw">
+<table>
+<thead><tr><th>日志内容</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td><code>starting persistent MPD live session</code></td><td>开始建立直播会话</td></tr>
+<tr><td><code>refresh attempt failed, retrying with a fresh MPD session</code></td><td>清单刷新失败，重建会话</td></tr>
+<tr><td><code>bootstrap refresh failed, retrying in place</code></td><td>首轮初始化失败，原地重试</td></tr>
+<tr><td><code>session failed, will retry</code></td><td>会话失败，等待下一次重试</td></tr>
+<tr><td><code>script stderr:</code> 前缀</td><td>脚本输出。用于调试 Source 与 Key 脚本</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="s8">
+<h2><span class="num">8</span>分组与 Provider</h2>
+<p class="sub">这一章说明分组共享配置，以及三类上游账号的接入。</p>
+
+<h3>8.1 分组配置</h3>
+<p>分组编辑对话框含四个选项卡。</p>
+<div class="tw">
+<table>
+<thead><tr><th>选项卡</th><th>字段</th></tr></thead>
+<tbody>
+<tr><td>基本</td><td>名称、强制 IPv6、强制继承清单 URL 参数</td></tr>
+<tr><td>上游</td><td>User-Agent、代理 URL、自定义请求头</td></tr>
+<tr><td>字幕</td><td>字幕配置</td></tr>
+<tr><td>调优</td><td>缓存、并发、超时等参数。详见<a href="#ref">参考数据</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>强制继承清单 URL 参数</h4>
+<p>开启后，系统把上游清单 URL 的查询参数拼接到每个分片、子播单与 Key 请求上。</p>
+<div class="note info">
+<b>此项用于修复分片 403。</b>CloudFront 等 CDN 会把 Policy、Signature、Key-Pair-Id 等签名参数放在清单 URL 上。
+分片请求不带这些参数时返回 403。开启本项即可复用清单上的签名。
+</div>
+
+<h4>调优字段的继承规则</h4>
+<p>调优字段留空表示不覆盖全局值。界面显示当前继承的默认值。</p>
+
+<h3>8.2 分组导入导出</h3>
+<div class="tw">
+<table>
+<thead><tr><th>操作</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>导出 JSON</td><td>导出单个分组的完整配置</td></tr>
+<tr><td>导入 JSON</td><td>从导出的 JSON 恢复分组</td></tr>
+<tr><td>导入 o11</td><td>从 o11 的 <code>.cfg</code> 恢复分组</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>删除分组会级联删除。</b>组内全部频道被一并删除。对应的 HLS 缓存与定时录制同时被清理。
+此操作不可恢复。
+</div>
+
+<h3>8.3 Provider 总览</h3>
+<p>Provider 页管理三类上游账号。三类账号的目录进入本系统，但目录本身不进入最终播放列表。
+导入的频道成为普通频道，之后与手工创建的频道一致。</p>
+<div class="tw">
+<table>
+<thead><tr><th>类型</th><th>凭据</th><th>特点</th></tr></thead>
+<tbody>
+<tr><td>Xtream Codes</td><td>服务器地址、用户名、密码</td><td>目录接口成熟，分页加载，支持分类筛选</td></tr>
+<tr><td>Stalker Portal</td><td>Portal Host、MAC 地址</td><td>用 MAC 握手换短期令牌。令牌只存在内存中</td></tr>
+<tr><td>M3U 订阅</td><td>订阅 URL</td><td>服务端定时刷新目录。可配代理与 User-Agent</td></tr>
+</tbody>
+</table>
+</div>
+
+<figure>
+  <img src="ui/providers.png" alt="Provider 页面：Xtream、Stalker、M3U 三类账号">
+  <figcaption>Provider 页面。三类账号分区展示，各自提供新建入口。</figcaption>
+</figure>
+
+<h3>8.4 Xtream Codes</h3>
+<ol>
+<li>打开「Provider」，在 Xtream Codes 区单击「新建账号」。</li>
+<li>填写账号名称、服务器地址、用户名、密码。</li>
+<li>保存后单击「同步目录」拉取频道目录。</li>
+<li>进入目录页，按分类筛选或搜索频道名。</li>
+<li>可选：单击「测试当前页」或「测试选中」检查可用性。</li>
+<li>勾选频道，单击「导入选中」。</li>
+<li>选择目标分组与下发模式，单击「确认导入」。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>导入选项</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>用供应商分类覆写频道分类</td><td>勾选后用供应商的分类覆盖导入频道的分类字段</td></tr>
+<tr><td>批量开启直通</td><td>为支持的连续流频道开启原始流直通</td></tr>
+<tr><td>下发模式</td><td>为本次导入的全部频道指定下发模式</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>可用性测试返回 HTTP 状态码、响应耗时与首包字节数。测试结果用于剔除失效频道。</p>
+
+<h3>8.5 Stalker Portal</h3>
+<ol>
+<li>打开「Provider」，在 Stalker Portal 区单击「新建 Portal」。</li>
+<li>填写 Provider 名称、Portal Host、MAC 地址。</li>
+<li>保存后单击「同步目录」。</li>
+<li>浏览目录，勾选频道并导入。</li>
+</ol>
+
+<div class="note warn">
+<b>Stalker 使用 MAC 地址握手。</b>系统用 MAC 地址换取短期令牌，令牌只保存在内存中。
+容器重启后需要重新同步目录。
+Stalker 渠道可能校验 User-Agent。复制播放链接后按提示设置正确的 UA。
+</div>
+
+<h3>8.6 M3U 订阅</h3>
+<ol>
+<li>打开「Provider」，在 M3U 区单击「添加 M3U 订阅」。</li>
+<li>填写 Provider 名称与订阅 URL。</li>
+<li>设置目录刷新间隔（秒）与最大动态推流数。</li>
+<li>可选：设置上游代理。</li>
+<li>保存后系统按间隔自动刷新目录。</li>
+</ol>
+
+<div class="note info">
+<b>账号级设置的作用范围。</b>M3U 订阅的 Header、代理与 User-Agent 同时用于目录刷新与播放请求。
+调整这些字段后，目录与播放行为同时改变。
+</div>
+</section>
+
+<section id="s9">
+<h2><span class="num">9</span>播放与分发</h2>
+<p class="sub">这一章说明内容如何到达播放器，以及每种分发方式的取舍。</p>
+
+<h3>9.1 三条分发路径</h3>
+<div class="tw">
+<table>
+<thead><tr><th>路径</th><th>入口</th><th>谁处理转封装</th><th>系统开销</th></tr></thead>
+<tbody>
+<tr><td>本机播放地址</td><td><code>/l/&lt;令牌&gt;/index.m3u8</code></td><td>系统</td><td>CPU、带宽、磁盘</td></tr>
+<tr><td>直通地址</td><td><code>/raw/&lt;stream_key&gt;</code></td><td>不处理</td><td>仅带宽</td></tr>
+<tr><td>302 重定向</td><td>播放地址返回 302</td><td>客户端直连上游</td><td>接近零</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>9.2 订阅地址</h3>
+<p>每个用户持有两条订阅地址。两条地址使用同一令牌。</p>
+<dl class="kv">
+<dt>M3U 订阅</dt><dd><code>/sub/&lt;令牌&gt;/playlist.m3u</code></dd>
+<dt>EPG 订阅</dt><dd><code>/sub/&lt;令牌&gt;/epg.xml.gz</code></dd>
+</dl>
+
+<p>M3U 首行的 <code>x-tvg-url</code> 属性指向配套的 EPG 地址。多数播放器自动识别该属性，无需单独配置 EPG。</p>
+
+<h4>订阅内容范围</h4>
+<div class="tw">
+<table>
+<thead><tr><th>用户设置</th><th>M3U 内容</th><th>EPG 内容</th></tr></thead>
+<tbody>
+<tr><td>可见分组：全部分组</td><td>全部频道</td><td>全部已绑定频道</td></tr>
+<tr><td>可见分组：指定分组</td><td>所选分组的频道</td><td>所选分组内已绑定的频道</td></tr>
+<tr><td>开启「只开放指定频道」</td><td>仅勾选的频道</td><td>仅勾选频道绑定的节目</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>频道筛选对已有链接生效。</b>开启「只开放指定频道」后，频道列表、EPG、订阅与已发出的播放链接全部受限。
+已发给用户的旧链接会立即失效。
+</div>
+
+<h3>9.3 原始流直通</h3>
+<p>直通模式跳过 HLS 切片，直接转发上游字节。播放地址为 <code>/raw/&lt;stream_key&gt;</code>。</p>
+<div class="tw">
+<table>
+<thead><tr><th>项目</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>适用上游</td><td>仅 TS、FLV、AAC、MP3 等连续流</td></tr>
+<tr><td>忽略的上游</td><td>DASH 与 HLS 清单源会忽略此设置</td></tr>
+<tr><td>录制</td><td>依然可用</td></tr>
+<tr><td>省下的资源</td><td>不切片，不写磁盘，只转发字节</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>频道行的「直通」标签标识已开启直通。Provider 批量导入时可一并开启。</p>
+
+<h3>9.4 302 重定向</h3>
+<p>302 模式把上游地址交给客户端。客户端自行连接上游，本系统只负责签发地址。</p>
+
+<h4>解析策略</h4>
+<div class="tw">
+<table>
+<thead><tr><th>策略</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td>直接下发原地址</td><td>返回频道配置或 Source 脚本给出的地址</td></tr>
+<tr><td>解析最终地址后下发</td><td>系统先跟随上游重定向，再把最终地址返回客户端</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>ClearKey 接口</h4>
+<p>302 频道可对外提供 ClearKey 接口。「ClearKey 接口格式」控制该接口的响应格式，供需要取密钥的客户端使用。</p>
+
+<h4>启用与停用</h4>
+<p>302 频道没有生命周期。「启用 302 下发」开关决定是否签发重定向。频道列表的状态列显示「302 已启用」或「302 未启用」。</p>
+
+<div class="note">
+<b>302 统计。</b>流量统计页记录 302 签发次数与客户端 IP 分布。
+按客户端 IP 聚合近期 302 次数，每 2 秒刷新。
+</div>
+
+<h3>9.5 播放器兼容性</h3>
+<div class="tw">
+<table>
+<thead><tr><th>播放器</th><th>标准地址</th><th>去后缀伪装地址</th><th>直通地址</th></tr></thead>
+<tbody>
+<tr><td>VLC</td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td>mpv</td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td>ffmpeg / ffplay</td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td>ExoPlayer</td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td>TVBox / 影视仓</td><td>支持</td><td>支持</td><td>取决于内核</td></tr>
+<tr><td>PotPlayer</td><td>支持</td><td>支持</td><td>支持</td></tr>
+<tr><td>iOS / Safari 原生</td><td>支持</td><td><b>不支持</b></td><td>取决于版本</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn">
+<b>PotPlayer 与 WebVTT 字幕。</b>PotPlayer 选中 WebVTT 字幕轨时会丢失声音。
+出现无声问题时改用 PGS 字幕轨。
+</div>
+
+<h3>9.6 多音轨分发</h3>
+<p>音轨随视频一起分发。分发方式有两种。</p>
+<div class="tw">
+<table>
+<thead><tr><th>方式</th><th>结构</th><th>适用下游</th></tr></thead>
+<tbody>
+<tr><td>独立 HLS 轨道</td><td>主播放列表声明多条音频轨</td><td>支持 HLS 多音轨的播放器与前端</td></tr>
+<tr><td>混入视频 TS</td><td>音轨混入视频 TS，独立 PID 加语言描述符。主播放列表不再单独声明音频轨</td><td>TVHeadend 等不支持 HLS 多音轨的下游</td></tr>
+</tbody>
+</table>
+</div>
+<p>第二种方式在轨道面板的「多音轨输出方式」中开启。切换后系统重启该频道。</p>
+</section>
+
+<section id="s10">
+<h2><span class="num">10</span>设备端接入</h2>
+<p class="sub">这一章说明如何把订阅地址填进播放器，在电视、电脑与手机上观看。</p>
+
+<div class="note info">
+<b>读法：先拿到地址，再按设备类型填写。</b>取地址见 <a href="#s6">第 6 章</a>。
+本文只说明通用步骤，不列具体软件的菜单路径。各软件界面差异大，按「通用步骤」一节对照即可。
+</div>
+
+<h3>10.1 你需要的两条地址</h3>
+<p>接入用两条地址。这两条地址属于同一个令牌，可同时给播放器。</p>
+<dl class="kv">
+<dt>订阅地址</dt><dd>M3U 频道列表。播放器读取它得到全部频道</dd>
+<dt>EPG 地址</dt><dd>XMLTV 节目表。多数播放器会自动从订阅地址里读取，无需单独填</dd>
+</dl>
+
+<div class="note">
+<b>多数情况只填订阅地址。</b>M3U 文件首行含 <code>x-tvg-url</code> 属性，指向配套 EPG。
+播放器识别该属性后自动加载节目单。
+</div>
+
+<h4>地址长什么样</h4>
+<div class="code">
+  <div class="hd"><span class="tag">订阅地址</span></div>
+<pre>http://<span class="k">服务器IP</span>:9100/sub/<span class="s">&lt;令牌&gt;</span>/playlist.m3u</pre>
+</div>
+
+<h3>10.2 通用接入步骤</h3>
+<p>无论用哪个播放器，接入步骤都是这三步。</p>
+<ol>
+<li>取得该用户的订阅地址。方法见 <a href="#s6">第 6 章</a>。</li>
+<li>在播放器的「订阅」「配置」「直播源」一类设置里新增一条订阅，填入该地址。</li>
+<li>保存后刷新订阅。频道列表出现即接入成功。</li>
+</ol>
+
+<h4>接入后检查</h4>
+<div class="tw">
+<table>
+<thead><tr><th>检查项</th><th>正常表现</th><th>异常时看</th></tr></thead>
+<tbody>
+<tr><td>频道列表</td><td>出现全部授权频道</td><td>空列表：检查用户可见分组。见<a href="#s15">第 15 章</a></td></tr>
+<tr><td>节目单</td><td>频道详情显示当天节目</td><td>空白：检查 EPG 绑定。见<a href="#s12">第 12 章</a></td></tr>
+<tr><td>台标</td><td>频道显示图标</td><td>空白：频道未填 Logo URL</td></tr>
+<tr><td>播放</td><td>点开频道即出画面</td><td>转圈或失败：见 <a href="#s10-trouble">10.6</a></td></tr>
+<tr><td>时长</td><td>总时移时长约几小时</td><td>过短：检查播放器设置</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>10.3 Android 电视盒子与电视端</h3>
+<p>这一类设备常用 TVBox / 影视仓系客户端。它们的共同特点是：配置一个订阅地址后自动加载全部频道。</p>
+
+<h4>配置位置</h4>
+<p>这类客户端一般把地址存在「配置」或「设置」里，通常是一个订阅链接输入框。部分版本在「直播源」或「配置管理」中。</p>
+
+<div class="note warn">
+<b>填地址时不要漏掉协议。</b>地址必须以 <code>http://</code> 或 <code>https://</code> 开头。
+只填 IP 加路径会导致解析失败。
+</div>
+
+<h4>需要留意的开关</h4>
+<p>部分版本默认拒绝非 HTTPS 地址。若订阅后频道加载不出来，检查是否有「允许 HTTP」「允许明文」一类开关并打开。</p>
+
+<h4>画质选择</h4>
+<p>同一频道若有多条线路或多种画质，播放器通常在播放页或设置中提供切换。切换在播放中即时生效，无需重订。</p>
+
+<h3>10.4 手机与平板</h3>
+<p>iOS 与 Android 上有多种订阅客户端。接入方式与电视端相同，都是填订阅地址。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>平台</th><th>常见客户端</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Android</td><td>TiviMate、TVBox 系</td><td>功能较全，支持 EPG 与分组筛选</td></tr>
+<tr><td>iOS</td><td>infuser、SenPlayer 等</td><td>部分客户端仅支持本地 M3U 文件，不支持远程订阅地址</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>iOS 与 Safari 原生播放器的限制。</b>若频道启用了去后缀伪装，Safari 原生播放器会失效。
+此时改用第三方客户端，或关闭该频道的伪装设置。详见 <a href="#s7">第 7 章</a>。
+</div>
+
+<h3>10.5 电脑端</h3>
+<p>电脑端常用 VLC、mpv、PotPlayer。它们既能播订阅，也能播单条地址。</p>
+<div class="code">
+  <div class="hd"><span class="tag">命令行播放单条地址</span><button class="cp" data-cp="ffplay &quot;http://服务器IP:9100/l/令牌/index.m3u8&quot;">复制</button></div>
+<pre><span class="p">$</span> ffplay <span class="s">"http://<span class="k">服务器IP</span>:9100/l/<span class="k">令牌</span>/index.m3u8"</span></pre>
+</div>
+<p>VLC 与 mpv 也可直接打开本地 M3U 文件。把订阅地址下载后保存为 <code>.m3u</code>，再用播放器打开该文件。</p>
+
+<div class="note info">
+<b>电脑端也是排查工具。</b>用 VLC 打开单条频道地址，出画面说明链路正常，问题在播放器侧。
+详见 <a href="#s10-trouble">10.6</a>。
+</div>
+
+<h3 id="s10-trouble">10.6 接入后播放异常</h3>
+<div class="tw">
+<table>
+<thead><tr><th>现象</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>订阅加载失败</td><td>地址不完整或协议缺失</td><td>确认地址含 <code>http://</code> 前缀。重新复制完整地址</td></tr>
+<tr><td>订阅加载失败</td><td>播放器拒绝明文地址</td><td>打开「允许 HTTP」开关</td></tr>
+<tr><td>频道列表为空</td><td>用户没有可见分组</td><td>管理员为该用户分配可见分组</td></tr>
+<tr><td>频道列表为空</td><td>令牌被吊销</td><td>重新生成令牌</td></tr>
+<tr><td>有频道但播不了</td><td>按需频道未被正确拉起</td><td>先在控制台确认频道能推流</td></tr>
+<tr><td>一直转圈</td><td>上游无响应或健康状态为「缓慢」</td><td>在控制台查看频道状态与日志</td></tr>
+<tr><td>有画面无声音</td><td>播放器选中了 WebVTT 字幕轨</td><td>改选 PGS 字幕轨或关闭字幕</td></tr>
+<tr><td>黑屏但有声音</td><td>编码不被该播放器支持</td><td>改用 VLC 或 mpv 验证</td></tr>
+<tr><td>部分频道卡顿</td><td>源站限速或 CDN 边缘节点问题</td><td>在控制台查看健康状态。更换上游</td></tr>
+<tr><td>多台设备同时看不同设备都卡</td><td>上行带宽不足</td><td>降低分发模式为 302 重定向，见 <a href="#s4">第 4 章</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>排查顺序</h4>
+<ol>
+<li>在控制台确认该频道状态为「运行中」。</li>
+<li>用 VLC 打开单条播放地址。VLC 能播则问题在播放器侧。</li>
+<li>VLC 也播不了，转到控制台查看频道日志与错误分类。见<a href="#s17">第 17 章</a>。</li>
+</ol>
+
+<h3>10.7 多设备同时观看</h3>
+<p>同一令牌可被多台设备同时使用。系统按 IP 加账号加 User-Agent 去重统计人数，同一设备切换 IP 会被计为两人。</p>
+<div class="note warn">
+<b>并发上限取决于上行带宽。</b>转封装推流模式下，每一路播放都占用服务端带宽。
+多设备同时观看高码率源时，优先改用 302 重定向模式，把带宽消耗交给上游。
+各模式的取舍见 <a href="#s4">第 4 章</a>。
+</div>
+
+<p>查看当前各频道的观看人数与客户端 IP，见<a href="#s16">第 16 章</a>的流量统计。</p>
+
+<h3>10.8 给家人分权限</h3>
+<p>为不同使用者创建独立用户，各自只看到授权分组。这比共用一个账号更易管理。</p>
+<ol>
+<li>按用途创建分组。例如「少儿」「体育」「纪录片」。</li>
+<li>把频道归入对应分组。</li>
+<li>创建用户时只勾选该用户可看的分组。</li>
+<li>为每个设备发独立令牌。家人换手机时只吊销旧令牌。</li>
+</ol>
+<p>完整步骤见<a href="#s15">第 15 章</a>。</p>
+
+<div class="note">
+<b>令牌与账号分离的好处。</b>令牌不含用户名密码。设备失窃时吊销令牌即可，
+不必改动账号密码，也不影响其他设备。
+</div>
+</section>
+
+<section id="s11">
+<h2><span class="num">11</span>录制与定时</h2>
+<p class="sub">这一章说明如何把直播流存成文件，以及如何自动启停频道。</p>
+
+<h3>11.1 录制的工作方式</h3>
+<p>录制不重新拉流。系统从已推流的分片合并出成品文件，因此保留原始的 PGS 字幕、WebVTT 与多音轨。</p>
+
+<h4>两种合成方式</h4>
+<div class="tw">
+<table>
+<thead><tr><th>格式</th><th>合成方式</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>TS</td><td>内置合成</td><td>单文件容纳多音轨。默认格式。连续流只能用此格式</td></tr>
+<tr><td>MKV</td><td>ffmpeg 合成</td><td>需要镜像内存在 ffmpeg。适合对容器有要求的场景</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>分片的落盘方式</h4>
+<div class="tw">
+<table>
+<thead><tr><th>条件</th><th>方式</th><th>影响</th></tr></thead>
+<tbody>
+<tr><td>暂存目录与 HLS 缓存同一文件系统</td><td>hardlink</td><td>零拷贝。速度快，不占额外空间</td></tr>
+<tr><td>暂存目录与 HLS 缓存不同文件系统</td><td>copy</td><td>较慢，占双倍磁盘空间</td></tr>
+</tbody>
+</table>
+</div>
+<p>录制页提示当前为哪种方式。把暂存目录与 HLS 缓存放在同一挂载点可获得 hardlink 加速。</p>
+
+<h3>11.2 新建录制</h3>
+<p>两种入口。从频道页创建会预填频道，从录制页创建可搜索选择频道。</p>
+<ol>
+<li>打开「录制」，单击「新建录制」。或在频道行单击「立即录制」。</li>
+<li>选择频道。</li>
+<li>填写任务名。任务名用于生成文件名。</li>
+<li>选择结束方式。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>结束方式</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>按时长录制</td><td>填写分钟数。到时自动结束</td></tr>
+<tr><td>一直录制直到手动停止</td><td>持续录制。用于 7×24 监控场景</td></tr>
+</tbody>
+</table>
+</div>
+<p>单击「开始录制」。录制立即开始。</p>
+
+<h3>11.3 录制任务状态</h3>
+<div class="tw">
+<table>
+<thead><tr><th>状态</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>待开始</td><td>由定时任务触发，等待节目开始</td></tr>
+<tr><td>录制中</td><td>正在写入分片</td></tr>
+<tr><td>合并中</td><td>录制已结束，正在合并成品文件</td></tr>
+<tr><td>已完成</td><td>成品文件可用</td></tr>
+<tr><td>失败</td><td>ffmpeg 报错、暂存丢失或分片不完整。单击「重试合并」重试</td></tr>
+<tr><td>已取消</td><td>用户手动取消</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>失败与取消记录中断原因：被中断、频道被停止、频道被删除或频道配置变更。</p>
+
+<h3>11.4 下载与删除</h3>
+<p>已完成的录制提供下载。一个任务可能产出多个文件：视频文件与字幕文件各一个。下载对话框列出全部文件，逐个下载。</p>
+<p>删除任务时可选择是否一并删除磁盘上的成品文件。文件较多时对话框显示文件数量。</p>
+
+<div class="note warn">
+<b>删除录制不可恢复。</b>选择「连同文件删除」会清除磁盘上的成品文件。
+成品文件是唯一副本，不会自动备份。
+</div>
+
+<h3>11.5 定时任务</h3>
+<p>定时任务按计划启停频道，或按计划启动录制。</p>
+
+<h4>触发规则</h4>
+<div class="tw">
+<table>
+<thead><tr><th>规则</th><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>一次</td><td>触发时间</td><td>按浏览器时区填写，保存时转成 UTC</td></tr>
+<tr><td>每日</td><td>执行时间</td><td>按任务时区解释</td></tr>
+<tr><td>每周</td><td>星期、执行时间</td><td>至少选择一个星期</td></tr>
+<tr><td>Cron</td><td>表达式</td><td>支持 5 段（分 时 日 月 周）或 6 段（加秒）。周位 0 或 7 表示周日</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note info">
+<b>每条任务保存自己的时区。</b>时区使用 IANA 名称，例如 <code>Asia/Shanghai</code>。
+每日、每周与 Cron 按任务自身的时区解释，不依赖服务器时区。
+一次性任务按浏览器时区换算后存为 UTC。
+</div>
+
+<h4>动作</h4>
+<div class="tw">
+<table>
+<thead><tr><th>动作</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td>开始推流</td><td>到点启动频道。已运行则保持</td></tr>
+<tr><td>停止推流</td><td>到点停止频道。常用于午夜频道清场</td></tr>
+<tr><td>录制</td><td>到点启动频道并录制文件</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>录制的缓冲设置</h4>
+<p>录制动作含两个缓冲字段。</p>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td>提前开始（秒）</td><td>节目开始前若干秒启动录制</td></tr>
+<tr><td>延后结束（秒）</td><td>节目结束后多录若干秒</td></tr>
+</tbody>
+</table>
+</div>
+<p>两个字段用于体育赛事等可能提早开始或加时的内容。「提前开始」不拉取历史内容，仅在频道已经推流时生效。</p>
+
+<h4>任务管理</h4>
+<div class="tw">
+<table>
+<thead><tr><th>操作</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>立即触发</td><td>不等待计划时间，立即执行一次</td></tr>
+<tr><td>启用 / 停用</td><td>停用后任务保留但不再触发</td></tr>
+<tr><td>删除</td><td>删除任务。删除后无法恢复</td></tr>
+<tr><td>清除错误</td><td>上次运行失败时显示标记。单击标记清除</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>停机期间的一次性任务会错过。</b>服务停机时到期的一次性任务在重启后被自动标记为禁用。
+概览页显示错过数量。这些任务需要手动删除或调整。
+</div>
+
+<div class="note warn">
+<b>频道绑定不可修改。</b>编辑定时任务时可改名称、规则与参数。
+更换目标频道需要删除任务后重建。
+</div>
+</section>
+
+<section id="s12">
+<h2><span class="num">12</span>EPG 与节目预约</h2>
+<p class="sub">这一章说明节目单的导入、绑定与自动预约。</p>
+
+<figure>
+  <img src="ui/epg.png" alt="EPG 页面：横向时间轴节目表">
+  <figcaption>EPG 页面。横向时间轴显示节目单，红线标记当前时刻。单击节目可预约推流、停止或录制。</figcaption>
+</figure>
+
+<h3>12.1 配置流程</h3>
+<p>EPG 功能分两步配置。源放上面，绑定放下面。两者都在「EPG 配置」页完成。</p>
+<ol>
+<li>添加 EPG 源。等待首次抓取成功。</li>
+<li>绑定频道到 EPG 频道。</li>
+<li>在「EPG」页浏览节目单。</li>
+<li>按需配置关键字规则实现自动预约。</li>
+</ol>
+
+<h3>12.2 EPG 源</h3>
+<ol>
+<li>打开「EPG 配置」，选择「EPG 源」选项卡。</li>
+<li>单击「添加源」。</li>
+<li>填写 URL。支持 <code>https://</code>、<code>http://</code> 与 <code>file://</code>。gzip 自动识别</li>
+<li>设置刷新间隔（分钟）与优先级。</li>
+<li>保存。系统按间隔自动抓取，并使用 ETag 减少上游负载。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>URL 列表</td><td>同一源可挂多个 URL。至少 1 个</td></tr>
+<tr><td>源内优先级</td><td>多个 URL 含同一频道时，数字小的 URL 获胜。按 channel id 去重</td></tr>
+<tr><td>优先级</td><td>多个源含同一频道时，数字小的源获胜</td></tr>
+<tr><td>刷新间隔（分钟）</td><td>抓取周期</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>状态</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>抓取中</td><td>正在下载</td></tr>
+<tr><td>正常</td><td>最近一次抓取成功</td></tr>
+<tr><td>错误</td><td>最近一次抓取失败</td></tr>
+<tr><td>待抓取</td><td>尚未抓取</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>「覆盖」列显示当前节目数据覆盖到的时间点。覆盖范围不足时，节目表会出现空白。</p>
+
+<div class="note warn">
+<b>删除源会清除关联数据。</b>删除操作一并清除该源的快照、缓存与所有绑定关系。
+</div>
+
+<h3>12.3 频道绑定</h3>
+<p>每次源刷新后，系统按精确匹配自动写入绑定。匹配条件为：EPG 的 channel id 或 display-name 等于推流频道名。</p>
+<p>未自动匹配的频道需要手动绑定。</p>
+
+<h4>手动绑定</h4>
+<ol>
+<li>打开「EPG 配置」，选择「频道绑定」选项卡。</li>
+<li>找到未绑定的频道，单击「选择」。</li>
+<li>选择 EPG 源。</li>
+<li>搜索频道名或 ID。直接搜索比模糊匹配更准确。</li>
+<li>单击目标行完成绑定。</li>
+</ol>
+
+<h4>两种绑定方式</h4>
+<div class="tw">
+<table>
+<thead><tr><th>方式</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>绑定到 EPG 源</td><td>频道使用某个 EPG 频道的节目单</td></tr>
+<tr><td>复用其他频道的 EPG</td><td>多个频道（如 4K 与 SD 版本）共享同一份节目表。导出的 M3U 使用相同的 tvg-id，播放器只下载一份节目数据</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>标记</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>自动</td><td>系统按精确匹配写入</td></tr>
+<tr><td>手动</td><td>人工指定。系统不覆盖</td></tr>
+<tr><td>别名</td><td>指向另一个频道的 EPG</td></tr>
+<tr><td>未绑定</td><td>没有对应 EPG 频道</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note info">
+<b>名字差异大时直接搜索。</b>无法自动匹配的频道，其推流频道名与 EPG 频道名通常差异较大。
+在绑定对话框中输入关键字搜索比依赖自动匹配更可靠。
+</div>
+
+<h3>12.4 节目浏览与预约</h3>
+<p>「EPG」页按时间轴展示节目单。红色竖线标记当前时刻。</p>
+<div class="tw">
+<table>
+<thead><tr><th>控件</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td>跳到此刻</td><td>把时间轴滚动到当前时刻</td></tr>
+<tr><td>全部分组</td><td>按分组过滤频道</td></tr>
+<tr><td>节目时长筛选</td><td>不限、小于、大于或区间筛选，用于过滤短新闻与长赛事</td></tr>
+<tr><td>检索节目</td><td>按节目名（如比赛名称）搜索。覆盖所选日期起 7 天</td></tr>
+<tr><td>复制流地址</td><td>复制单个频道的播放地址</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>节目预约动作</h4>
+<p>单击节目条目可建立预约。每种动作生成一条定时任务。</p>
+<div class="tw">
+<table>
+<thead><tr><th>动作</th><th>行为</th></tr></thead>
+<tbody>
+<tr><td>预约开始推流</td><td>节目开始时启动频道。已运行则保持。不录制</td></tr>
+<tr><td>预约停止推流</td><td>节目结束时停止频道</td></tr>
+<tr><td>预约录制</td><td>节目开始时启动并录制为文件。提前 60 秒触发以容忍上游延迟，结束后多录 60 秒</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>已预约的节目显示「已预约」标记。单击可重新预约。</p>
+
+<div class="note warn">
+<b>302 频道不支持预约动作。</b>302 重定向频道没有启动、停止或录制生命周期。
+需要控制该频道时使用「启用 302 下发」开关。
+</div>
+
+<h3>12.5 关键字规则</h3>
+<p>关键字规则把 EPG 匹配条件与动作绑定。命中时自动生成定时任务。</p>
+
+<p>典型场景：CCTV5 的节目标题含「直播」，且标题含「利物浦」或「曼联」时，自动录制。</p>
+
+<h4>配置步骤</h4>
+<ol>
+<li>打开「EPG 配置」，选择「关键字规则」选项卡。</li>
+<li>单击「新建规则」。</li>
+<li>填写规则名称与目标频道。</li>
+<li>构建匹配条件。可用「全部满足」「任一满足」「非」嵌套组合。</li>
+<li>选择动作：推流、停止或录制。</li>
+<li>录制动作可设置提前秒数、延长秒数、输出目录与任务名模板。</li>
+<li>单击「预览匹配」验证规则命中哪些节目。</li>
+<li>保存并启用规则。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>规则属性</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>匹配方式</td><td>对节目标题做大小写不敏感的子串匹配</td></tr>
+<tr><td>匹配范围</td><td>只匹配未来 48 小时的节目</td></tr>
+<tr><td>条件组</td><td>「全部满足」要求组内每个条件都命中。「任一满足」要求组内任一条件命中。可添加子组</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note info">
+<b>先预览再启用。</b>预览对话框列出规则会命中的节目。
+频道未绑定 EPG 时，规则正确也不会有匹配结果。
+</div>
+</section>
+
+<section id="s13">
+<h2><span class="num">13</span>字幕、字体与命名模板</h2>
+<p class="sub">这一章说明字幕渲染配置、字体上传与录制文件命名。</p>
+
+<h3>13.1 字幕处理链路</h3>
+<p>系统的字幕处理分两类源。</p>
+<div class="tw">
+<table>
+<thead><tr><th>源类型</th><th>处理方式</th></tr></thead>
+<tbody>
+<tr><td>MPD 文本字幕</td><td>转封装为 WebVTT</td></tr>
+<tr><td>MPD 图形字幕</td><td>渲染为 PGS。开启 OCR 后同时输出 WebVTT</td></tr>
+<tr><td>PGS 图形字幕</td><td>可选压入 TS 流</td></tr>
+<tr><td>HLS 透传源</td><td>字幕原样转发，无渲染步骤。输出格式由上游决定</td></tr>
+<tr><td>TTML 字幕的连续流</td><td>可选择输出为 PGS 和／或 WebVTT。其它连续源无字幕时该设置无效</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>13.2 字幕配置</h3>
+<p>字幕配置定义 PGS 字幕的渲染样式与 OCR 开关。配置可绑定到频道或分组，频道级覆盖分组级。</p>
+
+<ol>
+<li>打开「字幕」，单击「新建配置」。</li>
+<li>填写配置名称，例如 <code>白字黑边-下方</code>。</li>
+<li>在「字体」页选择上传的字体文件。</li>
+<li>设置字号、描边、文字颜色与描边颜色。</li>
+<li>设置画布宽高与位置锚点。</li>
+<li>需要时开启 OCR。</li>
+<li>在预览区检查效果。</li>
+<li>保存。克隆按钮可基于现有配置快速派生新配置。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>字号 (px)</td><td>字幕文字大小</td></tr>
+<tr><td>描边宽度 (px)</td><td>文字轮廓粗细。加深色描边提升可读性</td></tr>
+<tr><td>文字颜色 / 描边颜色</td><td>颜色值，格式 <code>#RRGGBB</code>。留空继承</td></tr>
+<tr><td>画布宽 / 画布高 (px)</td><td>PGS 图形字幕的画布尺寸</td></tr>
+<tr><td>位置锚点</td><td>靠下（bottom）或靠上（top）</td></tr>
+<tr><td>位置百分比</td><td>距对应边缘的百分比距离</td></tr>
+<tr><td>字距 (px)</td><td>字符间距</td></tr>
+<tr><td>行距（倍）</td><td>行高倍数</td></tr>
+<tr><td>启用 OCR</td><td>从图形字幕识别文本，生成可选的 WebVTT 副本</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>被引用的配置不能删除。</b>频道或分组正在引用的字幕配置无法删除。
+对话框会列出引用来源：频道名称或分组名称。
+</div>
+
+<h3>13.3 字体</h3>
+<p>字幕配置使用上传的字体文件。</p>
+<ol>
+<li>打开「字体」。</li>
+<li>拖入文件，或单击「选择文件」。</li>
+<li>单击「上传」。</li>
+<li>在字幕配置中按字体名选择该文件。</li>
+</ol>
+<div class="tw">
+<table>
+<thead><tr><th>项目</th><th>要求</th></tr></thead>
+<tbody>
+<tr><td>格式</td><td><code>.ttf</code> 与 <code>.otf</code></td></tr>
+<tr><td>大小上限</td><td>32 MB</td></tr>
+</tbody>
+</table>
+</div>
+<p>上传后字体列表显示字体名。字幕配置的预览区实时渲染选中字体的效果。</p>
+
+<h3>13.4 命名模板</h3>
+<p>命名模板定义录制文件名的生成规则。模板在新建录制与关键字规则中以拷贝方式填入。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>占位符</th><th>含义</th><th>适用范围</th></tr></thead>
+<tbody>
+<tr><td><code>{schedule.name}</code></td><td>任务名</td><td>全局</td></tr>
+<tr><td><code>{channel.name}</code></td><td>频道名</td><td>全局</td></tr>
+<tr><td><code>{date}</code></td><td>日期</td><td>全局</td></tr>
+<tr><td><code>{time}</code></td><td>时间</td><td>全局</td></tr>
+<tr><td><code>{datetime}</code></td><td>日期与时间</td><td>全局</td></tr>
+<tr><td><code>{program.title}</code></td><td>节目标题</td><td><b>仅关键字规则触发的录制</b></td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>子文件夹</h4>
+<p>模板中使用斜杠可创建子文件夹。</p>
+<div class="code">
+  <div class="hd"><span class="tag">模板示例</span></div>
+<pre>{channel.name}/{schedule.name}/{datetime}
+<span class="c"># 生成 频道名/任务名/日期时间.mkv 的目录结构</span></pre>
+</div>
+
+<h4>时区偏移</h4>
+<p>时间占位符默认使用排程自身的时区。需要固定到某个 UTC 偏移时，加上偏移后缀。</p>
+<div class="tw">
+<table>
+<thead><tr><th>写法</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td><code>{datetime+8}</code></td><td>UTC+8</td></tr>
+<tr><td><code>{date-5}</code></td><td>UTC-5</td></tr>
+<tr><td><code>{time+5:30}</code></td><td>UTC+5:30</td></tr>
+</tbody>
+</table>
+</div>
+<p>小时偏移范围为 ±0 到 ±18。分钟部分可选。</p>
+
+<div class="note info">
+<b>模板是拷贝，不是引用。</b>填入模板后内容即固定。修改模板不影响已填入的录制任务名。
+删除模板同样不影响已有任务名。
+</div>
+</section>
+
+<section id="s14">
+<h2><span class="num">14</span>脚本管线</h2>
+<p class="sub">这一章说明 Source 与 Key 脚本的用途、协议与调试方法。</p>
+
+<h3>14.1 脚本解决什么问题</h3>
+<p>脚本管线允许在两个环节插入任意 Python 代码。这两个环节是解析 MPD 与获取 License Key。</p>
+<p>接入下面的源通常需要脚本：</p>
+<ul>
+<li>上游需要登录才能取到 MPD 地址</li>
+<li>上游使用非标准鉴权，需要自定义请求头</li>
+<li>License 服务器需要自定义签名或协议</li>
+<li>需要在上游故障时自动切换到备用源</li>
+</ul>
+
+<div class="note info">
+<b>脚本是可选项。</b>公开的 ClearKey 流不需要任何脚本。
+只在 source 阶段需要登录时，挂 source 脚本即可。
+</div>
+
+<h3>14.2 执行顺序</h3>
+<p>系统刷新频道时按固定顺序执行脚本。</p>
+<div class="tw">
+<table>
+<thead><tr><th>步骤</th><th>执行内容</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>按声明顺序依次运行全部 stage 为 <code>source</code> 的脚本。脚本改写源地址，鉴权上下文写入 extra</td></tr>
+<tr><td>2</td><td>系统解析 MPD，提取 PSSH 与 default KID</td></tr>
+<tr><td>3</td><td>按声明顺序依次运行全部 stage 为 <code>key</code> 的脚本。脚本读 extra、pssh 与 default_kids，产出 license_key</td></tr>
+<tr><td>4</td><td>系统用 license_key 解密分片，封装 fMP4，发布 HLS</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>每个频道可挂多个脚本。同一阶段的脚本按声明顺序串行执行，上一个脚本的输出作为下一个的输入。</p>
+
+<h3>14.3 通信协议</h3>
+<p>脚本是独立子进程。系统以 <code>python3 脚本路径</code> 启动脚本，把 JSON 写入标准输入，从标准输出读取改写后的 JSON。</p>
+<div class="note">
+<b>调试输出写标准错误。</b>标准错误的每一行都被系统转成 WARN 级日志，前缀为 <code>script stderr:</code>。
+使用 <code>print(..., file=sys.stderr)</code> 输出调试信息。
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>类型</th><th>方向</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>channel_id</code></td><td>字符串</td><td>输入</td><td>频道 UUID。稳定不变</td></tr>
+<tr><td><code>channel_name</code></td><td>字符串</td><td>输入</td><td>频道显示名。只读参考</td></tr>
+<tr><td><code>source_url</code></td><td>字符串</td><td>输入与输出</td><td>源阶段改写为真实 MPD 地址</td></tr>
+<tr><td><code>license_key</code></td><td>字符串</td><td>输入与输出</td><td>key 阶段写回 <code>KID:KEY</code>。多条用逗号分隔</td></tr>
+<tr><td><code>pssh</code></td><td>字符串数组</td><td>输入（key 阶段）</td><td>来自 MPD 的 cenc:pssh，base64。空数组说明 MPD 未携带</td></tr>
+<tr><td><code>default_kids</code></td><td>字符串数组</td><td>输入（key 阶段）</td><td>来自 MPD 的 default_KID，十六进制</td></tr>
+<tr><td><code>cdm_api_url</code></td><td>字符串</td><td>输入</td><td>内置 CDM 的基地址。只在本机可达</td></tr>
+<tr><td><code>user_agent</code></td><td>字符串或 null</td><td>输入与输出</td><td>会话内覆盖 User-Agent</td></tr>
+<tr><td><code>upstream_headers</code></td><td>对象或 null</dt><dd>输入与输出</td><td>会话内合并上游请求头</td></tr>
+<tr><td><code>extra</code></td><td>对象</td><td>输入与输出</td><td>阶段之间传递自定义上下文。source 阶段写入，key 阶段读取</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>输入值恒为 null。</b><code>user_agent</code> 与 <code>upstream_headers</code> 的输入永远是 null。
+这是有意设计：脚本不读取频道的真实配置，避免把运行期值误当作配置来源。
+输出 null 表示不覆盖。输出对象表示在频道配置之上叠加。对象中的 null 值表示删除对应请求头。
+</div>
+
+<h3>14.4 内部 CDM 接口</h3>
+<p>内置 CDM 绑定在 <code>127.0.0.1</code>，路径前缀含一条 64 字节随机 token。该 token 每次进程启动时重新生成。</p>
+
+<div class="code">
+  <div class="hd"><span class="tag">接口</span></div>
+<pre><span class="c"># 步骤 1：请求 challenge</span>
+POST {cdm_api_url}/challenge
+  body: {<span class="s">"pssh"</span>: <span class="s">"&lt;base64&gt;"</span>, <span class="s">"cdm_type"</span>: <span class="s">"widevine"</span>}
+  resp: {<span class="s">"session_id"</span>: <span class="s">"&lt;hex&gt;"</span>, <span class="s">"challenge_b64"</span>: <span class="s">"&lt;base64&gt;"</span>}
+
+<span class="c"># 步骤 2：把 challenge 提交给上游授权服务器，取回 license</span>
+
+<span class="c"># 步骤 3：提交 license，取回密钥</span>
+POST {cdm_api_url}/keys
+  body: {<span class="s">"session_id"</span>: <span class="s">"&lt;hex&gt;"</span>, <span class="s">"license_b64"</span>: <span class="s">"&lt;base64&gt;"</span>}
+  resp: {<span class="s">"keys"</span>: [{<span class="s">"kid"</span>: <span class="s">"&lt;hex&gt;"</span>, <span class="s">"key"</span>: <span class="s">"&lt;hex&gt;"</span>}]}</pre>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>取值</th><th>默认值</th></tr></thead>
+<tbody>
+<tr><td>cdm_type</td><td><code>widevine</code>、<code>wv</code>、<code>playready</code>、<code>pr</code></td><td><code>widevine</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>该字段也接受 <code>type</code>、<code>drm</code>、<code>cdm</code> 作为别名。省略该字段时使用 Widevine。</p>
+<p>CDM 会话的生存时间为 5 分钟。用完自动清理。</p>
+
+<h4>PlayReady 的差异</h4>
+<p>PlayReady 的 <code>challenge_b64</code> 是 XML UTF-8 字节的 base64。脚本解码后提交 XML，
+向 <code>/keys</code> 发送 license XML 字节的 base64。</p>
+
+<h3>14.5 上传脚本</h3>
+<ol>
+<li>打开「脚本」，单击「选择文件」。</li>
+<li>上传 <code>.py</code> 文件。</li>
+<li>单击文件可打开内置编辑器。</li>
+<li>需要时单击「格式化」按 PEP 8 格式化。</li>
+<li>保存。</li>
+</ol>
+
+<div class="tw">
+<table>
+<thead><tr><th>能力</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>新建文件夹</td><td>在脚本根目录下建立子目录</td></tr>
+<tr><td>重命名与移动</td><td>填写新的相对路径。频道配置中的路径不会自动更新</td></tr>
+<tr><td>引用计数</td><td>列表显示每个脚本被多少个频道引用</td></tr>
+<tr><td>失效引用检测</td><td>列出配置中的路径在磁盘上找不到对应文件的频道</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>操作限制在脚本根目录内。</b>所有上传、新建、重命名与删除操作都被限制在脚本根目录，无法访问上层目录。
+删除被引用的脚本会让引用它的频道路径失效，需要手动改回。
+</div>
+
+<h3>14.6 把脚本挂到频道</h3>
+<ol>
+<li>打开「频道」，进入目标频道的编辑对话框。</li>
+<li>在「脚本」区块单击「+ 添加脚本」。</li>
+<li>选择 stage：<code>source</code> 或 <code>key</code>。</li>
+<li>选择脚本路径。路径旁的「选择」按钮从脚本目录中挑选，选中即自动填入正确形态的路径。</li>
+<li>可选：设置 <code>timeout_secs</code> 覆盖默认 30 秒。</li>
+<li>保存。立即生效，无需重启服务。</li>
+</ol>
+
+<div class="note info">
+<b>挂了 key 脚本后 License Key 可留空。</b>此时系统知道密钥由脚本产出。
+若同时填写了 KID:KEY，脚本产出的密钥覆盖填写的值。
+</div>
+
+<h3>14.7 调试</h3>
+<div class="tw">
+<table>
+<thead><tr><th>问题</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>脚本一直超时</td><td>调大超时：设置环境变量 <code>MPD_HLS_SCRIPT_TIMEOUT_SECS</code>，或在单个脚本上设 <code>timeout_secs: 60</code></td></tr>
+<tr><td>需要看脚本输出</td><td>全部标准错误进入服务日志，前缀为 <code>script stderr:</code>。查看容器日志</td></tr>
+<tr><td>单独运行脚本</td><td>构造一个上下文 JSON，通过标准输入喂给脚本：<code>cat test_ctx.json | python3 scripts/source.py</code></td></tr>
+<tr><td>CDM 返回 401 或 403</td><td>必须使用脚本收到的 <code>cdm_api_url</code>。token 每次进程启动时重新生成，不要硬编码</td></tr>
+<tr><td>脚本需要代理</td><td>调用 <code>_socks5.install(url)</code>。该实现对 <code>127.0.0.1</code> 自动旁路，CDM 调用不走代理</td></tr>
+<tr><td>需要指定 Python 解释器</td><td>设置 <code>MPD_HLS_SCRIPT_PYTHON</code>。脚本的 shebang 行被忽略</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>14.8 进阶用法</h3>
+<p>Source 与 Key 脚本构成的管线用途超出 DRM 范畴。以下用法可直接实施。</p>
+<div class="tw">
+<table>
+<thead><tr><th>用途</th><th>实现要点</th></tr></thead>
+<tbody>
+<tr><td>任意 URL 协议映射为 MPD</td><td>源地址前缀可以是自定义协议。脚本把它翻译为可抓取的 MPD 地址</td></tr>
+<tr><td>登录态自愈</td><td>脚本维护 token 文件。收到 401 时删除文件并重新登录。系统重跑脚本时自动取到新 token</td></tr>
+<tr><td>多源 failover</td><td>脚本按时间或探活结果选择上游。多个备份 MPD 依次探测，选用可用的一条</td></tr>
+<tr><td>替代 DRM 系统</td><td>脚本内实现任意 DRM 客户端。CDM 接口默认支持 Widevine 与 PlayReady，也可自行完成握手</td></tr>
+<tr><td>本地密钥库</td><td>Key 脚本读取本地 <code>keys.json</code>，按 KID 索引。不访问网络。适合离线调试与持续集成</td></tr>
+<tr><td>集成测试夹具</td><td>源地址以 <code>test://</code> 开头时短路到本地 ffmpeg 生成的循环视频。提供零依赖的测试源</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="s15">
+<h2><span class="num">15</span>用户与令牌</h2>
+<p class="sub">这一章说明账号、权限范围与设备令牌的发放。</p>
+
+<figure>
+  <img src="ui/users.png" alt="用户页面：账号列表、角色与可见分组">
+  <figcaption>用户页面。表格显示用户名、角色、可见分组、WebUI 登录许可与创建时间。</figcaption>
+</figure>
+
+<h3>15.1 两种角色</h3>
+<div class="tw">
+<table>
+<thead><tr><th>角色</th><th>权限</th></tr></thead>
+<tbody>
+<tr><td>Admin</td><td>管理后台与全部 API。可管理用户、分组、脚本与系统设置</td></tr>
+<tr><td>User</td><td>仅能访问授权分组的推流。可查看频道与 EPG，复制播放链接</td></tr>
+</tbody>
+</table>
+</div>
+<p>Admin 无需单独授权，可见全部分组。</p>
+
+<h3>15.2 权限范围</h3>
+<div class="tw">
+<table>
+<thead><tr><th>设置</th><th>作用范围</th></tr></thead>
+<tbody>
+<tr><td>可见分组</td><td>M3U 订阅内容、EPG 内容、控制台内可见频道</td></tr>
+<tr><td>只开放指定频道</td><td>在可见分组基础上进一步收窄到勾选的频道。影响已发出的链接</td></tr>
+<tr><td>允许登录 WebUI</td><td>关闭后该用户不能登录控制台，只能使用订阅地址</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>创建用户</h4>
+<ol>
+<li>打开「用户」，单击「新建用户」。</li>
+<li>填写用户名与密码。两者均为必填。</li>
+<li>选择角色。</li>
+<li>选择可见分组。普通用户至少需要一个可见分组。</li>
+<li>可选：开启「只开放指定频道」并在授权分组内勾选频道。</li>
+<li>可选：开启「允许登录 WebUI」。</li>
+<li>单击「创建」。</li>
+</ol>
+
+<div class="note warn">
+<b>普通用户需要至少一个可见分组。</b>没有可见分组的用户在控制台内看不到任何频道，订阅地址也只有空列表。
+</div>
+
+<h3>15.3 设备令牌</h3>
+<p>设备令牌是播放设备的访问凭证。每台设备发放一个独立令牌。</p>
+
+<h4>令牌的作用</h4>
+<div class="tw">
+<table>
+<thead><tr><th>特性</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>不透明</td><td>令牌本身不编码用户名与密码。订阅 URL 中不含凭据</td></tr>
+<tr><td>可单独吊销</td><td>设备失窃时只吊销该设备的令牌。不影响同一用户的其他设备</td></tr>
+<tr><td>可设有效期</td><td>从 1 小时到 3 年，或永不过期，也可指定自定义到期日</td></tr>
+<tr><td>全链路复用</td><td>频道列表、EPG 与分片请求自动复用同一令牌</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>发放令牌</h4>
+<ol>
+<li>在用户行打开令牌管理。</li>
+<li>填写设备名称，例如 <code>客厅 Apple TV</code>。</li>
+<li>选择有效期。</li>
+<li>单击「生成」。</li>
+<li>复制订阅地址与 EPG 地址，填入播放器。</li>
+</ol>
+
+<div class="code">
+  <div class="hd"><span class="tag">令牌订阅地址</span></div>
+<pre>http://<span class="k">服务器IP</span>:9100/sub/<span class="s">&lt;设备令牌&gt;</span>/playlist.m3u
+http://<span class="k">服务器IP</span>:9100/sub/<span class="s">&lt;设备令牌&gt;</span>/epg.xml.gz</pre>
+</div>
+
+<p>一个用户可持有多个令牌。建议按设备分别发放，便于单独管理。</p>
+
+<div class="note warn">
+<b>不要在地址中使用账号密码。</b>旧式 <code>?u=&amp;p=</code> 形式把用户名与密码暴露在地址里，
+并且无法单独吊销。新建部署一律使用令牌。
+</div>
+
+<h3>15.4 修改与删除</h3>
+<div class="tw">
+<table>
+<thead><tr><th>操作</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>编辑</td><td>修改用户名、角色或可见分组。密码用独立按钮修改</td></tr>
+<tr><td>重置密码</td><td>设置新密码。立即生效</td></tr>
+<tr><td>吊销令牌</td><td>使指定令牌立即失效。订阅地址停止工作</td></tr>
+<tr><td>删除用户</td><td>删除账号。当前登录的用户无法被删除</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="s16">
+<h2><span class="num">16</span>监控与告警</h2>
+<p class="sub">这一章说明概览、流量统计、Telegram 与系统信息页。</p>
+
+<h3>16.1 概览</h3>
+<p>概览页显示系统实时状态。顶部四张卡片给出关键指标。</p>
+<div class="tw">
+<table>
+<thead><tr><th>卡片</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>频道总数</td><td>频道总数，附运行中、停止与 302 启用数量</td></tr>
+<tr><td>活跃推流</td><td>正在运行并对外服务的频道。全部就绪时显示「全部就绪」</td></tr>
+<tr><td>主机 CPU</td><td>主机占用百分比，附逻辑核数与本进程占用</td></tr>
+<tr><td>运行时长</td><td>进程运行时长，附 PID 与线程数</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>页面下半部分显示资源占用：CPU 负载、内存、存储、网络吞吐与主机对进程的 CPU 占用对比。</p>
+<div class="tw">
+<table>
+<thead><tr><th>区块</th><th>数据来源</th></tr></thead>
+<tbody>
+<tr><td>CPU 负载</td><td>主机与本进程 CPU 占用的时间序列。采样周期 2 秒</td></tr>
+<tr><td>网络吞吐</td><td>近 2 分钟主机的收发速率。首次打开显示「正在采集」</td></tr>
+<tr><td>存储</td><td>HLS 输出目录所在磁盘的总量、已用与可用，以及 HLS 目录占用</td></tr>
+<tr><td>播放流量概览</td><td>最近 30 秒内的活跃客户端数、活跃频道数与本次流量</td></tr>
+<tr><td>定时任务</td><td>任务总数与已启用数。错过的一次性任务单独提示</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>流量的统计起点是进程启动。</b>累计流量与成功播放请求数从本次服务运行开始统计。
+重启服务后计数归零。
+</div>
+
+<h3>16.2 健康指标</h3>
+<p>频道健康列反映分片生成是否跟得上播放消耗。</p>
+<div class="tw">
+<table>
+<thead><tr><th>健康状态</th><th>含义</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>正常</td><td>分片生成速度跟得上播放</td><td>无需处理</td></tr>
+<tr><td>缓慢</td><td>分片生成跟不上播放消耗速度</td><td>更换上游链接或代理。检查带宽与上游限速</td></tr>
+<tr><td>曾缓慢</td><td>此前曾落后若干次，现已恢复</td><td>观察。持续出现则调整配置</td></tr>
+</tbody>
+</table>
+</div>
+<p>健康栏还显示「客户端等待」计数，表示客户端因缺少分片而等待的次数。</p>
+
+<h3>16.3 流量统计</h3>
+<p>流量统计页显示各频道的播放人数、客户端 IP 与流量。</p>
+<div class="tw">
+<table>
+<thead><tr><th>指标</th><th>定义</th></tr></thead>
+<tbody>
+<tr><td>当前播放人数</td><td>最近 30 秒内有成功播放请求的活跃客户端数</td></tr>
+<tr><td>活跃频道</td><td>有活跃客户端的频道数</td></tr>
+<tr><td>累计流量</td><td>本次服务运行期间输出的字节数</td></tr>
+<tr><td>成功播放请求</td><td>成功处理的播放请求总数</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>去重规则</h4>
+<p>频道内的人数按 <b>IP + 账号 + User-Agent</b> 三项组合去重。
+同一台设备切换 IP 会被计为两人。同一 IP 下的不同账号或不同浏览器分别计数。</p>
+
+<h4>客户端明细</h4>
+<p>选择一个频道后，下方显示客户端明细。明细仅显示当前活跃客户端，每 2 秒刷新。</p>
+<div class="tw">
+<table>
+<thead><tr><th>列</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>账号</td><td>请求所用的账号或令牌标识</td></tr>
+<tr><td>最后请求</td><td>最近一次播放请求的时刻</td></tr>
+<tr><td>本次活跃</td><td>本次活跃的持续时长</td></tr>
+<tr><td>首次出现</td><td>该客户端首次出现的时刻</td></tr>
+<tr><td>连接</td><td>该客户端建立的连接数</td></tr>
+<tr><td>分发方式</td><td>HLS、RAW、302 或混合</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>302 统计</h4>
+<p>302 频道显示近期重定向次数与客户端 IP。系统按客户端 IP 聚合，并限制明细数量以保护内存。</p>
+
+<figure>
+  <img src="ui/traffic.png" alt="流量统计页面：频道流量与客户端明细">
+  <figcaption>流量统计页面。上方为总体指标，中部为频道流量列表，下方为选中频道的客户端明细。</figcaption>
+</figure>
+
+<h3>16.4 Telegram Bot</h3>
+<p>Telegram 页面分为五段。总开关关闭时全部推送与命令不生效。</p>
+
+<h4>基础配置</h4>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>总开关</td><td>关闭后所有推送与命令一律不生效</td></tr>
+<tr><td>Bot Token</td><td>Telegram Bot 的令牌</td></tr>
+<tr><td>默认 Chat ID</td><td>默认推送目标</td></tr>
+<tr><td>Bot 交互语言</td><td>Bot 发送消息的语言。默认简体中文</td></tr>
+<tr><td>测试连通性</td><td>用当前表单的 token 与 chat_id 发送测试消息。该操作不写入配置文件</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>权限</h4>
+<p>填入一个或多个 Telegram 用户 ID，空格或逗号分隔。列表内的任何人都能发送已启用类别的命令。</p>
+<div class="note warn">
+<b>未配置 admin ID 时 Bot 只推送不接受命令。</b>命令控制依赖此列表。留空即关闭全部命令入口。
+</div>
+
+<h4>告警</h4>
+<p>告警面向需要立即处理的故障。默认全部开启。</p>
+<div class="tw">
+<table>
+<thead><tr><th>告警项</th><th>触发条件</th></tr></thead>
+<tbody>
+<tr><td>会话失败</td><td>频道进入失败状态。含上游 404、解密失败等</td></tr>
+<tr><td>CDM 异常</td><td>Widevine 设备缺失。Challenge 或 License 请求失败</td></tr>
+<tr><td>脚本异常</td><td>Python 脚本超时、非零退出或 JSON 输出异常</td></tr>
+<tr><td>定时任务失败</td><td>调度器触发动作但返回错误</td></tr>
+<tr><td>录制失败</td><td>录制任务进入失败状态。含 ffmpeg 报错、暂存丢失、分片不完整</td></tr>
+<tr><td>推流缓慢</td><td>分片生成跟不上窗口消化速度。可能与网络或上游变慢有关</td></tr>
+<tr><td>磁盘空间不足</td><td>存储目录剩余空间低于阈值</td></tr>
+</tbody>
+</table>
+</div>
+<p>磁盘告警的阈值类型可选百分比或绝对值，最小间隔设置同一挂载点连续告警的最小间隔秒数。</p>
+
+<h4>事件</h4>
+<p>事件属于信息类通知。部分噪音较大，默认关闭。</p>
+<div class="tw">
+<table>
+<thead><tr><th>事件项</th><th>默认</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>定时任务成功触发</td><td>开启</td><td>调度器成功执行后推送</td></tr>
+<tr><td>Session 状态切换</td><td>关闭</td><td>Resolving、Parsing、Packaging、Ready 每次切换都推送。噪音大</td></tr>
+<tr><td>On-demand 生命周期</td><td>关闭</td><td>按需频道被拉起或自动停止</td></tr>
+<tr><td>批量操作进度</td><td>关闭</td><td>批量启动、探测、删除的逐条进度</td></tr>
+<tr><td>录制完成</td><td>关闭</td><td>录制结束并产出文件后推送。无人值守长录场景会刷屏</td></tr>
+<tr><td>推流恢复</td><td>关闭</td><td>此前缓慢的推流恢复正常后推送。上游抖动会刷屏</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>命令</h4>
+<p>开启后，<code>admin_tg_ids</code> 列表内的人员可通过 Bot 触发对应操作。</p>
+<div class="tw">
+<table>
+<thead><tr><th>类别</th><th>默认</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>查询</td><td>开启</td><td><code>/find</code>、<code>/status</code>、<code>/groups</code>、<code>/rec</code>、<code>/sched</code>、<code>/failed</code> 等只读命令与按钮浏览</td></tr>
+<tr><td>频道控制</td><td>开启</td><td>单频道启动、停止、启用、禁用</td></tr>
+<tr><td>批量操作</td><td>关闭</td><td>批量启停与删除。危险操作</td></tr>
+<tr><td>录制控制</td><td>关闭</td><td>从聊天快捷开始录制指定分钟数、取消进行中的录制</td></tr>
+<tr><td>计划控制</td><td>关闭</td><td>启停频道的计划任务、立即触发某条计划</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>高级</h4>
+<div class="tw">
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>去重窗口（秒）</td><td>抑制重复推送</td></tr>
+<tr><td>每分钟最多消息数</td><td>速率限制</td></tr>
+<tr><td>Long poll 超时（秒）</td><td>轮询等待时长</td></tr>
+</tbody>
+</table>
+</div>
+<p>多数情况下无需修改这三项。</p>
+
+<figure>
+  <img src="ui/telegram.png" alt="Telegram 页面：开关、权限、告警与命令">
+  <figcaption>Telegram 页面。上部为开关与权限，中部为告警与事件，下部为命令与高级设置。</figcaption>
+</figure>
+
+<h3>16.5 系统信息</h3>
+<p>系统信息页分为五段。</p>
+<div class="tw">
+<table>
+<thead><tr><th>段落</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>站点品牌</td><td>站点名称与图标设置</td></tr>
+<tr><td>进程</td><td>版本、PID、线程数、运行时长、进程内存、虚拟内存</td></tr>
+<tr><td>主机</td><td>主机名、操作系统、架构、内核、启动时间</td></tr>
+<tr><td>CPU 与内存</td><td>逻辑核数、Load Average、内存、Swap</td></tr>
+<tr><td>存储</td><td>HLS 输出目录路径、磁盘总量、已用、可用、HLS 占用</td></tr>
+<tr><td>频道</td><td>推流分布。运行中、启动中、已停止、失败的数量</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>站点品牌</h4>
+<ol>
+<li>打开「系统」，找到「站点品牌」区块。</li>
+<li>输入站点名称。最多 64 个字符，保存后立即应用到整个控制台。</li>
+<li>可选：选择站点图标。支持 PNG、JPEG、WebP 与 ICO，文件不超过 2 MiB，建议使用方形图片。</li>
+<li>单击「保存品牌」。</li>
+</ol>
+<p>「恢复默认品牌」按钮还原为出厂设置。</p>
+
+<figure>
+  <img src="ui/settings.png" alt="系统信息页面：品牌、进程、主机与存储">
+  <figcaption>系统信息页面。上部为品牌设置，下部依次为进程、主机、CPU 与内存、存储、频道分布。</figcaption>
+</figure>
+
+<h3>16.6 容器日志</h3>
+<p>系统事件写入容器标准输出。查看全部日志：</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose logs -f --tail=200 mpd-hls">复制</button></div>
+<pre><span class="p">$</span> docker compose logs -f --tail=200 mpd-hls</pre>
+</div>
+<p>频道级日志在频道页的日志面板中查看，容量为内存环形缓冲的 500 条。</p>
+</section>
+
+<section id="s17">
+<h2><span class="num">17</span>备份、恢复与升级</h2>
+<p class="sub">这一章说明如何保护配置与录制文件，以及如何升级镜像。</p>
+
+<div class="note warn">
+<b>配置存在 SQLite 数据库里，直接复制该文件会丢数据。</b>
+系统使用 WAL 模式，尚未合并的写入停留在 <code>-wal</code> 文件中。
+只复制 <code>mpd-hls.db</code> 会丢失这些写入。正确做法见 <a href="#s17-how">17.2</a>。
+</div>
+
+<h3>17.1 需要备份什么</h3>
+<div class="tw">
+<table>
+<thead><tr><th>内容</th><th>位置</th><th>是否必须</th><th>丢失后果</th></tr></thead>
+<tbody>
+<tr><td>数据库</td><td><code>var/mpd-hls.db</code> 及 <code>-wal</code>、<code>-shm</code></td><td><b>必须</b></td><td>全部配置丢失。频道、分组、用户、EPG 绑定、定时任务、录制记录全部消失</td></tr>
+<tr><td>脚本</td><td><code>var/scripts/</code></td><td>必须</td><td>频道引用的脚本路径失效</td></tr>
+<tr><td>CDM 设备</td><td><code>var/cdm/</code></td><td>必须</td><td>加密流无法解密</td></tr>
+<tr><td>录制成品</td><td><code>var/recordings/finished/</code></td><td>按需</td><td>已录制的节目丢失。体积最大，通常单独处理</td></tr>
+<tr><td>录制暂存</td><td><code>var/recordings/</code> 暂存区</td><td>否</td><td>未合并的录制丢失。可重新录制</td></tr>
+<tr><td>EPG 缓存</td><td><code>var/epg/</code></td><td>否</td><td>重新抓取即可</td></tr>
+<tr><td>HLS 缓存</td><td><code>var/hls/</code></td><td>否</td><td>无需备份。系统自动重建</td></tr>
+<tr><td>初始凭据</td><td><code>var/admin_initial_credentials.txt</code></td><td>否</td><td>修改密码后可丢弃</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>两类内容的区别</h4>
+<div class="tw">
+<table>
+<thead><tr><th>类别</th><th>包含</th><th>典型体积</th></tr></thead>
+<tbody>
+<tr><td>配置（小）</td><td>数据库、脚本、CDM、EPG 缓存</td><td>数 MB</td></tr>
+<tr><td>成品（大）</td><td>录制文件</td><td>数 GB 到数 TB</td></tr>
+</tbody>
+</table>
+</div>
+<p>配置与成品分开备份。配置每天备份一次即可，成品按需要另行归档。这样日常备份保持轻量。</p>
+
+<h3 id="s17-how">17.2 备份配置</h3>
+
+<h4>方法一：停机备份（最可靠）</h4>
+<ol>
+<li>停止容器。</li>
+<li>复制整个 <code>var/</code> 目录。</li>
+<li>启动容器。</li>
+</ol>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose down
+tar czf mpd-backup-$(date +%Y%m%d).tar.gz var/
+docker compose up -d">复制</button></div>
+<pre><span class="p">$</span> docker compose down
+<span class="p">$</span> tar czf mpd-backup-<span class="k">$(date +%Y%m%d)</span>.tar.gz var/
+<span class="p">$</span> docker compose up -d</pre>
+</div>
+<p>停机期间服务不可用，一般为一分钟内。此方法无需额外工具，不会遗漏任何文件。</p>
+
+<h4>方法二：不停机备份</h4>
+<p>服务需要持续运行、不愿中断时使用。先确认系统装有 <code>sqlite3</code> 命令行工具。</p>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="sqlite3 var/mpd-hls.db ".backup '/tmp/mpd-hls-backup.db'"">复制</button></div>
+<pre><span class="p">$</span> sqlite3 var/mpd-hls.db <span class="s">".backup '/tmp/mpd-hls-backup.db'"</span></pre>
+</div>
+<p>该命令生成一份独立且完整的数据副本。副本可直接用于恢复。</p>
+
+<div class="note warn">
+<b>不要在服务运行时直接 <code>cp</code> 数据库文件。</b>
+服务运行中执行 <code>cp var/mpd-hls.db ...</code> 会得到不完整的副本。
+实测中该方式丢失了最新的写入。
+如只用 <code>cp</code>，必须同时复制 <code>-wal</code> 与 <code>-shm</code>，且要在服务停止后执行。
+</div>
+
+<h4>方法三：连同脚本与 CDM 一起打包</h4>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose down
+mkdir -p backup/var
+cp var/mpd-hls.db* backup/var/
+cp -r var/scripts backup/var/
+cp -r var/cdm backup/var/
+tar czf mpd-config-$(date +%Y%m%d).tar.gz -C backup .
+docker compose up -d">复制</button></div>
+<pre><span class="p">$</span> docker compose down
+<span class="p">$</span> mkdir -p backup/var
+<span class="p">$</span> cp var/mpd-hls.db* backup/var/
+<span class="p">$</span> cp -r var/scripts backup/var/
+<span class="p">$</span> cp -r var/cdm backup/var/
+<span class="p">$</span> tar czf mpd-config-<span class="k">$(date +%Y%m%d)</span>.tar.gz -C backup .
+<span class="p">$</span> docker compose up -d</pre>
+</div>
+<p>通配符 <code>mpd-hls.db*</code> 同时匹配 <code>.db</code>、<code>-wal</code>、<code>-shm</code> 三个文件。三个都要复制。</p>
+
+<h4>排除大目录</h4>
+<p>只想备份配置、不含录制与缓存时，复制下列路径即可。</p>
+<div class="tw">
+<table>
+<thead><tr><th>备份</th><th>跳过</th></tr></thead>
+<tbody>
+<tr><td><code>var/mpd-hls.db*</code></td><td><code>var/recordings/</code></td></tr>
+<tr><td><code>var/scripts/</code></td><td><code>var/hls/</code></td></tr>
+<tr><td><code>var/cdm/</code></td><td><code>var/epg/</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>备份频率</h4>
+<div class="tw">
+<table>
+<thead><tr><th>场景</th><th>建议频率</th></tr></thead>
+<tbody>
+<tr><td>配置稳定，少量改动</td><td>每周一次</td></tr>
+<tr><td>频繁增删频道</td><td>每天一次</td></tr>
+<tr><td>批量导入之前</td><td>必做一次</td></tr>
+<tr><td>升级之前</td><td>必做一次</td></tr>
+<tr><td>录制成品</td><td>按需归档。与配置分开</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>17.3 恢复</h3>
+<div class="note warn">
+<b>恢复会覆盖现有数据。</b>当前的所有频道、分组、用户与定时任务被备份内容替换。
+恢复前先备份当前状态，以便回退。
+</div>
+
+<ol>
+<li>停止容器。</li>
+<li>把当前 <code>var/</code> 移到别处，保留为回退副本。</li>
+<li>解压备份到 <code>var/</code>。</li>
+<li>启动容器并检查。</li>
+</ol>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose down
+mv var var.broken
+tar xzf mpd-backup-20260101.tar.gz
+docker compose up -d">复制</button></div>
+<pre><span class="p">$</span> docker compose down
+<span class="p">$</span> mv var var.broken
+<span class="p">$</span> tar xzf mpd-backup-<span class="k">20260101</span>.tar.gz
+<span class="p">$</span> docker compose up -d</pre>
+</div>
+<p>把原目录改名为 <code>var.broken</code> 而非直接删除。确认恢复无误后再删除该目录。</p>
+
+<h4>恢复后检查</h4>
+<div class="tw">
+<table>
+<thead><tr><th>检查项</th><th>方法</th></tr></thead>
+<tbody>
+<tr><td>服务启动</td><td><code>curl -s http://服务器IP:9100/healthz</code> 返回 <code>ok</code></td></tr>
+<tr><td>频道数量</td><td>控制台「频道」页的统计数字与备份时一致</td></tr>
+<tr><td>用户可登录</td><td>用一个已知账号登录控制台</td></tr>
+<tr><td>订阅地址有效</td><td>用播放器刷新订阅，频道列表正常</td></tr>
+<tr><td>脚本可用</td><td>控制台「脚本」页无失效引用提示</td></tr>
+<tr><td>录制任务</td><td>「录制」页任务列表正常。成品文件在原位置</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>迁移到新服务器</h4>
+<p>恢复流程同样适用于换机。额外需要注意两项。</p>
+<div class="tw">
+<table>
+<thead><tr><th>项目</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>地址变化</td><td>数据库中保存的播放地址含旧 IP。订阅地址随之变化，需重新发给用户</td></tr>
+<tr><td>加密内容</td><td>CDM 设备文件与原机绑定。跨机解密可能失败。加密流通常每台设备单独获取授权</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>17.4 升级</h3>
+
+<h4>升级前</h4>
+<ol>
+<li>阅读发布说明，确认有无破坏性变更。</li>
+<li>做一次配置备份。方法见 <a href="#s17-how">17.2</a>。</li>
+<li>确认无正在进行的录制任务。升级会中断它们。</li>
+</ol>
+
+<h4>执行升级</h4>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span><button class="cp" data-cp="docker compose pull
+docker compose down
+docker compose up -d
+docker image prune -f">复制</button></div>
+<pre><span class="p">$</span> docker compose pull
+<span class="p">$</span> docker compose down
+<span class="p">$</span> docker compose up -d
+<span class="p">$</span> docker image prune -f</pre>
+</div>
+<p><code>docker image prune</code> 删除旧的悬空镜像，释放磁盘空间。该命令不影响正在使用的镜像。</p>
+
+<h4>数据是否保留</h4>
+<div class="tw">
+<table>
+<thead><tr><th>内容</th><th>升级后</th></tr></thead>
+<tbody>
+<tr><td>数据库与全部配置</td><td>保留。数据在挂载目录，不在镜像内</td></tr>
+<tr><td>录制文件</td><td>保留</td></tr>
+<tr><td>脚本</td><td>保留</td></tr>
+<tr><td>CDM 设备</td><td>保留</td></tr>
+<tr><td>账号密码</td><td>保留。若新版有改动则重置为初始值</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<b>数据库可能被迁移。</b>新版可能升级数据库结构。
+降级回旧镜像时，旧版可能无法读取已迁移的结构。回退前先恢复升级前的备份。
+</div>
+
+<h4>升级后验证</h4>
+<div class="tw">
+<table>
+<thead><tr><th>检查项</th><th>方法</th></tr></thead>
+<tbody>
+<tr><td>版本号</td><td>控制台左下角显示新版本号</td></tr>
+<tr><td>服务启动</td><td><code>curl -s http://服务器IP:9100/healthz</code></td></tr>
+<tr><td>启动无报错</td><td><code>docker compose logs --tail=100</code> 无 ERROR</td></tr>
+<tr><td>推流正常</td><td>启动一个频道，状态变为「运行中」</td></tr>
+<tr><td>订阅可用</td><td>播放器刷新订阅成功</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>回退</h4>
+<div class="code">
+  <div class="hd"><span class="tag">shell</span></div>
+<pre><span class="c"># 把 compose 文件中的镜像标签固定到旧版本，例如 1.4.0</span>
+<span class="c"># 然后恢复升级前的备份，再启动</span>
+docker compose down
+<span class="c"># 恢复备份…</span>
+docker compose up -d</pre>
+</div>
+<p>固定镜像标签可避免意外拿到新版本。生产环境建议这样做。</p>
+</section>
+
+<section id="trouble">
+<h2><span class="num">18</span>排错</h2>
+<p class="sub">这一章按症状列出原因与处理步骤。</p>
+
+<h3>18.1 安装与启动</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>浏览器打不开 9100 端口</td><td>端口未放行</td><td>检查云服务器安全组与系统防火墙。放行 TCP 9100</td></tr>
+<tr><td>健康检查返回连接失败</td><td>容器未运行或已退出</td><td>执行 <code>docker compose ps</code> 与 <code>docker compose logs</code></td></tr>
+<tr><td>找不到初始密码</td><td>凭据文件已被删除</td><td>删除 <code>var/mpd-hls.db</code> 后重启会重新生成。但这会丢失全部配置</td></tr>
+<tr><td>数据丢失</td><td>数据目录未挂载或被覆盖</td><td>确认 <code>./var</code> 挂载正确。备份该目录</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.2 频道无法推流</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>状态「失败」，分类为网络错误</td><td>上游不可达</td><td>在服务器上直接 curl 源地址。检查代理与 DNS</td></tr>
+<tr><td>状态「失败」，分类为鉴权失败</td><td>UA 或请求头缺失</td><td>在分组或频道上补齐 User-Agent 与自定义请求头</td></tr>
+<tr><td>状态「失败」，分类为 Key 错误</td><td>硬编码密钥与源不匹配</td><td>更换正确密钥，或改用 key 脚本动态获取</td></tr>
+<tr><td>状态「失败」，分类为 CDM 错误</td><td>设备文件缺失</td><td>检查 <code>var/cdm/</code> 是否含成对的 blob 文件或 <code>.wvd</code> 文件</td></tr>
+<tr><td>状态「失败」，分类为配置错误</td><td>分组未选或字段缺失</td><td>打开编辑对话框检查必填项</td></tr>
+<tr><td>长期「启动中」</td><td>上游响应慢</td><td>调大启动超时。检查上游延迟</td></tr>
+<tr><td>反复「重试中」</td><td>上游不稳定</td><td>查看频道日志确认失败类型。更换上游或加代理</td></tr>
+<tr><td>失败但错误分类为空</td><td>未产生明确错误</td><td>打开频道日志查看 INFO 与 WARN 行</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.3 分片 403</h3>
+<p>症状：播放列表能取到，分片请求返回 403。</p>
+<ol>
+<li>在分组或频道上开启「强制继承清单 URL 参数」。</li>
+<li>确认上游签名参数在清单 URL 的查询串中。</li>
+<li>仍未解决时检查 User-Agent 与 Referer 是否匹配。</li>
+</ol>
+
+<h3>18.4 播放问题</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>播放器无反应</td><td>地址错误或令牌失效</td><td>重新复制播放链接。确认令牌未被吊销</td></tr>
+<tr><td>iOS 播放失败</td><td>启用了去后缀伪装</td><td>关闭「播放列表 Content-Type」。或改用容忍型播放器</td></tr>
+<tr><td>PotPlayer 无声</td><td>选中了 WebVTT 字幕轨</td><td>改用 PGS 字幕轨</td></tr>
+<tr><td>起播慢</td><td>缓存未命中或上游慢</td><td>确认 Manifest 短缓存配置合理。检查上游响应速度</td></tr>
+<tr><td>卡顿</td><td>健康状态为「缓慢」</td><td>更换上游或代理。检查带宽是否足够</td></tr>
+<tr><td>TVHeadend 无多音轨</td><td>下游不支持 HLS 多音轨</td><td>在轨道面板开启「多音轨输出方式」</td></tr>
+<tr><td>4K 源播放不流畅</td><td>分片过大</td><td>关闭轨道面板的「短分片聚合」。每个上游分片按原样输出</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.5 EPG 问题</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>节目表空白</td><td>频道未绑定 EPG</td><td>在「EPG 配置 → 频道绑定」手动绑定</td></tr>
+<tr><td>节目数据只覆盖近期</td><td>源数据覆盖范围不足</td><td>查看源的「覆盖」列。更换覆盖范围更广的源</td></tr>
+<tr><td>源状态为「错误」</td><td>抓取失败</td><td>在服务器上直接下载该 URL。检查是否需要鉴权</td></tr>
+<tr><td>频道匹配错误</td><td>名称相近导致误匹配</td><td>手动绑定并加「手动」标记。系统不覆盖手动绑定</td></tr>
+<tr><td>关键字规则无命中</td><td>频道无 EPG 绑定</td><td>使用「预览匹配」确认。规则只匹配未来 48 小时</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.6 录制问题</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>录制被阻止</td><td>频道使用反代或 302 模式</td><td>改用转封装推流模式</td></tr>
+<tr><td>录制中断</td><td>频道被停止或配置变更</td><td>查看任务的中断原因。避免在录制期间修改频道</td></tr>
+<tr><td>合并失败</td><td>ffmpeg 报错或分片不完整</td><td>单击「重试合并」。检查容器日志中的 ffmpeg 输出</td></tr>
+<tr><td>MKV 格式失败</td><td>镜像内无 ffmpeg</td><td>改用 TS 格式。TS 使用内置合成</td></tr>
+<tr><td>录制很慢</td><td>暂存与缓存跨文件系统</td><td>把两者放在同一挂载点以启用 hardlink</td></tr>
+<tr><td>无法删除字幕配置</td><td>被频道或分组引用</td><td>对话框会列出引用来源。先解除引用</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.7 定时与脚本</h3>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>一次性任务未触发</td><td>停机期间错过</td><td>概览页显示错过数量。手动删除或调整该任务</td></tr>
+<tr><td>任务时间不对</td><td>时区设置错误</td><td>检查任务的时区字段。使用 IANA 名称</td></tr>
+<tr><td>脚本超时</td><td>默认超时 30 秒</td><td>设置 <code>MPD_HLS_SCRIPT_TIMEOUT_SECS</code> 或单个脚本的 <code>timeout_secs</code></td></tr>
+<tr><td>CDM 返回 401</td><td>使用了旧的 cdm_api_url</td><td>使用脚本运行时收到的地址。token 每次进程启动时重新生成</td></tr>
+<tr><td>频道推流失败，日志含 script stderr</td><td>脚本内部错误</td><td>查看容器日志中的脚本输出</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="ref">
+<h2><span class="num">19</span>参考数据</h2>
+<p class="sub">这一章列出环境变量、端点与调优参数的完整取值。</p>
+
+<h3>19.1 环境变量</h3>
+<div class="tw">
+<table>
+<thead><tr><th>变量</th><th>默认值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>MPD_HLS_BIND</code></td><td><code>[::]:9100</code></td><td>Web 控制台与播放服务的监听地址</td></tr>
+<tr><td><code>MPD_HLS_RTMP_BIND</code></td><td><code>[::]:1935</code></td><td>RTMP 推流监听地址</td></tr>
+<tr><td><code>MPD_HLS_DATABASE_URL</code></td><td><code>sqlite:///app/var/mpd-hls.db</code></td><td>数据库连接串</td></tr>
+<tr><td><code>MPD_HLS_CHANNELS</code></td><td><code>/app/var/channels.json</code></td><td>频道配置文件路径</td></tr>
+<tr><td><code>MPD_HLS_USERS</code></td><td><code>/app/var/users.json</code></td><td>用户配置文件路径</td></tr>
+<tr><td><code>MPD_HLS_HLS_OUTPUT_STORAGE</code></td><td><code>/app/var/hls</code></td><td>HLS 输出与缓存目录</td></tr>
+<tr><td><code>MPD_HLS_RECORDINGS_DIR</code></td><td><code>/app/var/recordings</code></td><td>录制暂存与成品目录</td></tr>
+<tr><td><code>MPD_HLS_SCRIPTS_DIR</code></td><td><code>/app/var/scripts</code></td><td>脚本根目录。控制台的可操作范围由它决定</td></tr>
+<tr><td><code>MPD_HLS_CDM_DEVICE</code></td><td><code>/app/var/cdm</code></td><td>Widevine 与 PlayReady 设备文件目录</td></tr>
+<tr><td><code>MPD_HLS_EPG_DIR</code></td><td><code>/app/var/epg</code></td><td>EPG 快照与缓存目录</td></tr>
+<tr><td><code>MPD_HLS_BOOTSTRAP_CREDENTIALS</code></td><td><code>/app/var/admin_initial_credentials.txt</code></td><td>初始账号写入路径</td></tr>
+<tr><td><code>MPD_HLS_SCRIPT_TIMEOUT_SECS</code></td><td><code>30</code></td><td>脚本默认超时秒数</td></tr>
+<tr><td><code>MPD_HLS_SCRIPT_PYTHON</code></td><td><code>python3</code></td><td>Python 解释器路径。脚本 shebang 行被忽略</td></tr>
+<tr><td><code>MPD_HLS_OCR_DET_MODEL</code></td><td>内置路径</td><td>OCR 文字检测模型</td></tr>
+<tr><td><code>MPD_HLS_OCR_REC_MODEL</code></td><td>内置路径</td><td>OCR 文字识别模型</td></tr>
+<tr><td><code>MPD_HLS_OCR_KEYS</code></td><td>内置路径</td><td>OCR 字典文件</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>19.2 端点</h3>
+<div class="tw">
+<table>
+<thead><tr><th>端点</th><th>方法</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>/</code></td><td>GET</td><td>Web 控制台</td></tr>
+<tr><td><code>/healthz</code></td><td>GET</td><td>健康检查。返回 <code>ok</code></td></tr>
+<tr><td><code>/l/&lt;令牌&gt;/index.m3u8</code></td><td>GET</td><td>播放地址</td></tr>
+<tr><td><code>/raw/&lt;stream_key&gt;</code></td><td>GET</td><td>直通地址</td></tr>
+<tr><td><code>/sub/&lt;令牌&gt;/playlist.m3u</code></td><td>GET</td><td>M3U 订阅</td></tr>
+<tr><td><code>/sub/&lt;令牌&gt;/epg.xml.gz</code></td><td>GET</td><td>EPG 订阅</td></tr>
+<tr><td><code>/api/*</code></td><td>多种</td><td>管理 API。需要会话或令牌</td></tr>
+<tr><td><code>rtmp://服务器IP:1935/live</code></td><td>RTMP</td><td>推流接入点</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>19.3 管理 API 分类</h3>
+<p>管理 API 按资源分组。全部接口需要有效会话。</p>
+<div class="tw">
+<table>
+<thead><tr><th>资源</th><th>路径前缀</th></tr></thead>
+<tbody>
+<tr><td>会话与账号</td><td><code>/api/auth/</code>、<code>/api/me</code>、<code>/api/users</code></td></tr>
+<tr><td>频道</td><td><code>/api/channels</code></td></tr>
+<tr><td>分组</td><td><code>/api/groups</code></td></tr>
+<tr><td>上游账号</td><td><code>/api/xtream/</code>、<code>/api/stalker/</code>、<code>/api/m3u/</code></td></tr>
+<tr><td>EPG</td><td><code>/api/epg/</code></td></tr>
+<tr><td>录制</td><td><code>/api/recording/</code></td></tr>
+<tr><td>定时任务</td><td><code>/api/schedules</code></td></tr>
+<tr><td>脚本</td><td><code>/api/scripts</code></td></tr>
+<tr><td>字幕与字体</td><td><code>/api/subtitle-profiles</code>、<code>/api/fonts</code></td></tr>
+<tr><td>命名模板</td><td><code>/api/filename-templates</code></td></tr>
+<tr><td>Telegram</td><td><code>/api/telegram/</code></td></tr>
+<tr><td>流量与统计</td><td><code>/api/traffic</code>、<code>/api/metrics</code></td></tr>
+<tr><td>品牌</td><td><code>/api/branding</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note info">
+<b>频道 API 使用 stream_key。</b>频道的路径参数是 <code>stream_key</code>，形式为 <code>stream-&lt;UUID&gt;</code>。
+使用 <code>channel_id</code> 调用路径参数形式的接口会返回 404。
+</div>
+
+<h3>19.4 调优参数</h3>
+<p>以下参数可在分组的「调优」选项卡按字段覆盖。留空表示继承全局值。</p>
+<div class="tw">
+<table>
+<thead><tr><th>参数</th><th>默认值</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><code>playlist_window</code></td><td>6</td><td>HLS 窗口段数</td></tr>
+<tr><td><code>fetch_window</code></td><td>9</td><td>上游拉取段数</td></tr>
+<tr><td><code>publish_delay_segments</code></td><td>0</td><td>发布延迟段数</td></tr>
+<tr><td><code>short_publish_delay_segments</code></td><td>1</td><td>短 2 秒段源的发布延迟段数</td></tr>
+<tr><td><code>retain_segments</code></td><td>12</td><td>磁盘保留段数</td></tr>
+<tr><td><code>startup_timeout_ms</code></td><td>8000</td><td>启动超时</td></tr>
+<tr><td><code>live_playlist_wait_ms</code></td><td>5000</td><td>播放列表长轮询时长</td></tr>
+<tr><td><code>live_asset_wait_ms</code></td><td>8000</td><td>分片长轮询时长</td></tr>
+<tr><td><code>live_file_poll_ms</code></td><td>50</td><td>文件轮询间隔</td></tr>
+<tr><td><code>upstream_mpd_timeout_ms</code></td><td>10000</td><td>上游清单请求超时。DASH 与 HLS 通用</td></tr>
+<tr><td><code>upstream_segment_timeout_ms</code></td><td>15000</td><td>分片请求超时</td></tr>
+<tr><td><code>cut_target_secs</code></td><td>8.0</td><td>目标分片时长。连续流合并上游分片的目标</td></tr>
+<tr><td><code>segment_timeline_limit</code></td><td>512</td><td>SegmentTimeline 长度上限</td></tr>
+<tr><td><code>max_consecutive_refresh_failures</code></td><td>10</td><td>连续失败重启阈值。超过后重启会话并重跑 Source 与 Key 脚本</td></tr>
+<tr><td><code>forbidden_403_retry_base_ms</code></td><td>2000</td><td>同一 URL 403 时每次重试的休眠时长。带 ±30% 抖动。建议设为上游 CDN 的频率配额恢复窗口</td></tr>
+<tr><td><code>session_inflight_cap</code></td><td>5</td><td>单会话并发上游请求硬上限。叠加于自适应并发之上</td></tr>
+<tr><td><code>bootstrap_init_stagger_ms</code></td><td>160</td><td>冷启动初始化错峰。按视频、音频、字幕顺序错峰获取 init，避免多轨同时并发触发 CDN 风控</td></tr>
+<tr><td><code>bootstrap_media_first_count</code></td><td>2</td><td>冷启动首轮每条音视频轨仅取的段数。第二轮起恢复完整 fetch_window</td></tr>
+<tr><td><code>bootstrap_skip_text_media</code></td><td>false</td><td>冷启动首轮仅取字幕 init，不取字幕媒体段。第二轮起字幕段正常追上</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>多数场景无需调整调优参数。</b>默认值适用于常规使用。
+出现启动失败时优先调大超时。出现 CDN 风控时优先启用冷启动错峰。
+</div>
+
+<h3>19.5 缓存说明</h3>
+<p>分片缓存的默认预算为 256 MB。超出预算时拒绝新的分片请求并回收最旧内容。</p>
+<p>概览页与系统信息页显示 HLS 目录占用。占用持续增长时检查缓存上限与保留时间设置。</p>
+</section>
+
+<footer><div class="wrap">
+  <span>CharmingStreamer 用户手册</span>
+  <span>对应版本 v1.4.1</span>
+  <span>写于本地环境实测</span>
+</div></footer>
+
+</div>
+
+<script>
+// 复制按钮：clipboard 在部分桌面应用与 App 内嵌视图会拒绝，失败时回退为选中文本
+document.querySelectorAll('.cp').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = btn.getAttribute('data-cp');
+    var pre = btn.closest('.code').querySelector('pre');
+    var done = function (ok) {
+      var old = btn.textContent;
+      btn.textContent = ok ? '已复制' : '请手动选中';
+      setTimeout(function () { btn.textContent = old; }, 1500);
+      if (!ok) {
+        var r = document.createRange();
+        r.selectNodeContents(pre);
+        var s = window.getSelection();
+        s.removeAllRanges(); s.addRange(r);
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else { done(false); }
+  });
+});
+
+// 导航横向滚动到两端时撤掉右缘渐隐，避免最后一两项看起来像被裁掉
+var nav = document.querySelector('.topbar nav');
+function navEdge() {
+  var atEnd = nav.scrollWidth - nav.clientWidth - nav.scrollLeft < 4;
+  nav.classList.toggle('at-end', atEnd);
+}
+nav.addEventListener('scroll', navEdge, { passive: true });
+window.addEventListener('resize', navEdge);
+navEdge();
+
+// 阅读进度
+var prog = document.getElementById('prog');
+var ticking = false;
+function update() {
+  var h = document.documentElement.scrollHeight - window.innerHeight;
+  prog.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + '%';
+  ticking = false;
+}
+window.addEventListener('scroll', function () {
+  if (!ticking) { ticking = true; requestAnimationFrame(update); }
+}, { passive: true });
+update();
+</script>
+
+</body>
+</html>

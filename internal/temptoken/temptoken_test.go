@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // hexOf 返回 token 的 sha256 十六进制，用于构造合法 token 表。

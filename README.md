@@ -4,7 +4,7 @@ sontv 是一个 IPTV 订阅代理服务，用 Go 编写。sontv 抓取上游 m3u
 
 订阅地址只放**稳定 token**。稳定 token 长期有效，可以随时吊销。响应体中的每条子链接只带**短命临时 token**。本站不回传上游凭据，也不把流地址挂在第三方域名下。sontv 只使用 Go 标准库，不引入第三方依赖。
 
-> 本仓库是 PHP 版 [mytv](https://github.com/HasonHuang/mytv) 的 Go 重写。
+> 灵感来自 PHP 版 [mytv](https://github.com/HasonHuang/mytv)。sontv 已独立演进：端点形态、参数命名与配置项都按自己的取舍来，不再追随前者的实现细节。
 
 ## 快速开始
 
@@ -23,14 +23,14 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 | 端点 | 作用 | 认证 |
 | --- | --- | --- |
 | `GET /sub` | 抓取上游 m3u，过滤并改写后返回播放列表 | 只接受稳定 token（`token=`） |
-| `GET` / `HEAD` `/url` | 代理任意 http(s) 目标。m3u8 逐行改写，其余流式透传 | 接受稳定 token（`token=`）或临时 token（`t=`） |
+| `GET` / `HEAD` `/play` | 代理任意 http(s) 目标。m3u8 逐行改写，其余流式透传 | 接受稳定 token（`token=`）或临时 token（`t=`） |
 
 ### 播放列表改写
 
 sontv 只改写播放列表中「链接」形态的内容。
 
-- **补全绝对地址**：相对路径按上游基准补全。协议相对地址（`//host/path`）补上 scheme。sontv 把链接统一包装成 `本站入口/url?t=…&u=…`。
-- **解包第三方代理**：sontv 识别 `…/url?u=…` 形态的别站代理链接。sontv 默认把它们解包成本站单跳（`unwrap_remote_proxy`）。sontv 因此避免了双跳套娃，也不再依赖别人的服务器。
+- **补全绝对地址**：相对路径按上游基准补全。协议相对地址（`//host/path`）补上 scheme。sontv 把链接统一包装成 `本站入口/play?t=…&url=…`。
+- **只认自己的形态**：sontv 只把「本站入口 `/play?url=…`」当作自己发出的链接，剥掉旧凭据重盖新的——一份列表反复改写不会套娃。别家代理站的链接（哪怕路径也叫 `/play`）sontv 一律原样看待，只在它外面盖上本站的临时 token。
 - **改写有分寸**：`url-tvg` / `x-tvg-url` / `catchup-source` 只改写「本站形态」的链接。纯第三方直连原样保留，本站因此不把凭据送给源站，也不把第三方 EPG 拖进本站代理。含 `${...}` 模板的 `catchup-source` 整条不动，因为模板不能 urlencode。`URI=`（如 `#EXT-X-KEY`）与资源行同规则处理。
 - **按关键字过滤**：`filter=` 指定关键字。sontv 匹配条目名（显示名 + `tvg-name`），命中即保留。匹配不区分大小写，按子串匹配，多个词之间是 OR。
 - **保留格式**：sontv 逐字节保留换行符（`\r\n` / `\n` / `\r`）。不改写时，输出与输入完全一致。
@@ -73,18 +73,43 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 
 脚本支持 Debian / Ubuntu / Alpine。脚本自动识别架构（`amd64` / `arm64`）与 libc。脚本按 `checksums.txt` 校验 sha256。下载失败或校验不通过时，脚本立即退出。
 
-**一条命令装完全套**。脚本补齐配置，缺凭据时生成一条 token，建服务用户，按 init 系统注册服务并启动。安装完成后存在下列文件：
+**一条命令装完全套**。脚本先探测环境（发行版、架构、init 系统），再逐项询问端口、首个 token、服务名与日志级别——**直接回车取默认值**。然后补齐配置、缺凭据时生成一条 token、建服务用户，按 init 系统注册服务并启动。安装完成后存在下列文件：
 
 ```
 /opt/sontv/sontv-go        二进制
-/opt/sontv/config.json     配置（docs/config.example.json 的内容）
+/opt/sontv/config.json     配置（docs/config.example.json 的内容，按你的选择改写）
 /opt/sontv/tokens.txt      凭据（缺失时自动生成一条，明文只在终端打印一次）
-/etc/systemd/system/sontv.service   或   /etc/init.d/sontv（按 init 系统二选一）
+/etc/systemd/system/<服务名>.service   或   /etc/init.d/<服务名>（按 init 系统二选一）
 ```
 
-重跑脚本即升级。脚本直接覆盖二进制，**已存在的 `config.json` 与 `tokens.txt` 保持不变**。自动生成凭据只在文件缺失时发生，脚本不覆盖你手写的 token 表。服务单元每次重写并重启。
+| 询问项 | 默认 | 落到哪 |
+| --- | --- | --- |
+| 监听端口 | `9900` | `config.json` 的 `listen` |
+| 服务名 | `sontv` | systemd 单元 / OpenRC 脚本的文件名、系统用户名、OpenRC 日志目录 |
+| 日志级别 | `info` | `config.json` 的 `log_level` |
+| 首个 token | 随机生成 | `tokens.txt` 的一行，文件里只存它的 sha256 |
 
-常用选项如下。管道传参时，把选项放在 `-s --` 之后：
+重跑脚本即升级。检测到服务已存在时脚本走**更新流程**：只换二进制，`config.json` 与 `tokens.txt` 一律不碰；服务原本在跑就重启它。
+
+> **为什么要显式重启**：`systemctl enable --now` 与 `rc-service start` 对**已在运行**的服务都是空操作，新覆盖的二进制不会被执行——`/proc/<pid>/exe` 仍指向旧 inode（显示为 `(deleted)`），新代码要等下次重启机器才生效。所以更新路径走显式 `restart`。
+
+| 情况 | 行为 |
+| --- | --- |
+| 交互环境检测到已安装 | 问一句「是否更新到最新版本」，回答 `n` 则原样退出、不做任何改动 |
+| 非交互环境检测到已安装 | 直接更新，不提示。CI / ansible / 定时任务里的「重跑 = 升级」语义不变 |
+| 服务原本在跑 | 覆盖二进制后重启，新代码立即生效 |
+| 服务本来是停的 | **不擅自启动**，只补开机自启，免得把用户特意停掉的服务拉起来 |
+| `--no-restart` | 只覆盖二进制不重启，末尾打印手动重启的命令 |
+
+更新只换程序。端口、日志级别、凭据都不在更新时询问——要改那些请直接编辑配置文件，或用 `--force-config` 整份覆盖。自动生成凭据只在文件缺失时发生，脚本不覆盖你手写的 token 表。
+
+### 端口已存在但服务未装
+
+有种情况会走到「服务没装、但 `config.json` 已在」：服务名换了，或当初用了 `--no-service`。这时脚本按首次安装走，但 `config.json` 不覆盖，**只有一处例外——填的端口与文件里的 `listen` 不同时才改写该字段**，其它字段原样保留，你手改过的值不会被冲掉。日志级别同理不覆盖，若与文件里的值不同，脚本会提示一次。整份覆盖用 `--force-config`。
+
+### 非交互环境
+
+交互只在能打开 `/dev/tty` 时进行。CI、Docker build、`docker exec`、`curl … | bash` 配上重定向的 stdin 时读不到终端，脚本**全部取默认值，不提示也不失败**，行为与不带交互的旧版一致。命令行选项与环境变量在两种模式下都生效，且**显式给过的项不再询问**——所以自动化调用全程无提示：
 
 ```bash
 # 装指定版本
@@ -92,6 +117,12 @@ curl -fsSL .../install.sh | bash -s -- --version v0.1.0
 
 # 换安装目录
 curl -fsSL .../install.sh | bash -s -- --dir /usr/local/sontv
+
+# 换端口、服务名、日志级别
+curl -fsSL .../install.sh | bash -s -- --port 8080 --name mytv --log-level debug
+
+# 指定首个 token（明文进，脚本自己算 sha256 存进 tokens.txt）
+curl -fsSL .../install.sh | bash -s -- --token 'my-secret-token'
 
 # 只装文件，不注册/启动服务（缺省会装完就起）
 curl -fsSL .../install.sh | bash -s -- --no-service
@@ -104,13 +135,16 @@ curl -fsSL .../install.sh | bash -s -- --no-token
 
 # 指定自动生成的那条 token 的标签
 curl -fsSL .../install.sh | bash -s -- --token-label 客厅电视
+
+# 更新二进制但不重启服务（新版本下次重启后生效）
+curl -fsSL .../install.sh | bash -s -- --no-restart
 ```
 
 执行 `./install.sh --help` 查看全部选项。每个选项都有同名环境变量（`SONTV_VERSION`、`SONTV_INSTALL_DIR`、`SONTV_SERVICE` …），作用等价。不带参数直接执行 `./install.sh` 也行，适合先下载再执行。
 
 > **自动生成的 token**：明文只在安装结束时打印一次。`tokens.txt` 只存 sha256。丢了只能换发，重装不会再次打印。订阅地址形如 `http://<listen>/sub?token=<明文>`，详见[生成 token](#生成-token)。想自己填表就加 `--no-token`。
 
-注册服务时，脚本建一个 `sontv` 系统用户。token 表权限是 0600，非属主读不到，服务会直接返回 503。脚本随后按 init 系统二选一：
+注册服务时，脚本建一个与**服务名同名**的系统用户。token 表权限是 0600，非属主读不到，服务会直接返回 503。脚本随后按 init 系统二选一（下面的 `sontv` 换成你填的服务名）：
 
 | init | 写入 | 开机自启 | 热重载 |
 | --- | --- | --- | --- |
@@ -119,7 +153,7 @@ curl -fsSL .../install.sh | bash -s -- --token-label 客厅电视
 
 脚本按 `/run/systemd/system` 是否存在来判定，再加 `rc-service` / `openrc-run` 是否可用。`/run/systemd/system` 只在 systemd 真正作为 PID 1 时才有，因此**纯容器里装了 systemctl 也不会被误判成 systemd**。两个 init 都没有时，脚本只装文件并提示手动运行，不留半个坏单元。
 
-OpenRC 服务脚本默认用 `supervise-daemon` 托管。进程崩溃后 5 秒拉起，日志写在 `/var/log/sontv/sontv.log`。OpenRC 版本太老而没有 `supervise-daemon`，或容器内核上 `supervise-daemon` 报 `failed to acquire lock` 起不来时，脚本当场降级成 `start-stop-daemon` 后台模式，重写一遍脚本再启动。
+OpenRC 服务脚本默认用 `supervise-daemon` 托管。进程崩溃后 5 秒拉起，日志写在 `/var/log/sontv/sontv-go.log`。OpenRC 版本太老而没有 `supervise-daemon`，或容器内核上 `supervise-daemon` 报 `failed to acquire lock` 起不来时，脚本当场降级成 `start-stop-daemon` 后台模式，重写一遍脚本再启动。
 
 > **Alpine 上用 `| sh` 代替 `| bash`**。Alpine 默认不带 bash。脚本本身是 POSIX sh，`sh` 与 `bash` 都能跑：
 >
@@ -193,7 +227,7 @@ sontv 在启动时读取一次配置。改后需重启生效，token 表除外�
   "default_ttl_hours": 24,
   "upstream_m3u": "https://cdn.qd.je/live.m3u",
   "listen": "0.0.0.0:9900",
-  "unwrap_remote_proxy": true
+  "log_level": "info"
 }
 ```
 
@@ -203,7 +237,7 @@ sontv 在启动时读取一次配置。改后需重启生效，token 表除外�
 | `default_ttl_hours` | int | `24` | 临时 token 的默认有效期（小时）。表里没写第三列的行用它。≤0 时静默回落为 24 |
 | `upstream_m3u` | string | `https://cdn.qd.je/live.m3u` | `/sub` 未带 `url=` 时使用的上游播放列表 |
 | `listen` | string | `0.0.0.0:9900` | 监听地址。绑 `0.0.0.0` 才能被容器端口转发（`-p 9900:9900` 转发到容器 IP，只听 `127.0.0.1` 会无人应答）。裸机部署因此默认对全网卡开放，鉴权由 token 把关。只让本机可达就显式写 `127.0.0.1:9900` |
-| `unwrap_remote_proxy` | bool | `true` | 是否把第三方代理链接解包成本站单跳 |
+| `log_level` | string | `info` | 日志级别 `debug` / `info` / `warn` / `error`。详见[日志](#日志) |
 
 `tokens_file` 写相对路径时，同样按二进制同级目录解析。
 
@@ -234,7 +268,7 @@ sontv 在启动时读取一次配置。改后需重启生效，token 表除外�
 | 参数 | 缺省值 | 说明 |
 | --- | --- | --- |
 | `-config` | `config.json` | 配置文件路径。相对路径以二进制所在目录为基准。传空串（`-config ""`）表示全部使用缺省值 |
-| `-log-level` | `info` | 日志级别 `debug` / `info` / `warn` / `error`。未指定时读环境变量 `SONTV_LOG_LEVEL`，详见[日志](#日志) |
+| `-log-level` | 空 | 日志级别 `debug` / `info` / `warn` / `error`。未指定时读环境变量 `SONTV_LOG_LEVEL`，再读配置文件的 `log_level`，详见[日志](#日志) |
 | `-check` | `false` | 只做配置与 token 表校验，不启动服务 |
 
 缺省值是读二进制同级的 `config.json`，因此把二进制和配置放在一起即可免参数启动。指定了路径但文件不存在或 JSON 非法时，启动失败并退出，退出码非 0。
@@ -262,17 +296,24 @@ token 表装载失败**不会**阻止启动，sontv 只在日志里提示。服�
 | `WARN` | 有人在做无效的事：凭据不对、目标非法、自引用 | — |
 | `ERROR` | 链路真的断了：上游抓不到、读不了、列表超限 | — |
 
-排查播放问题时，把级别调到 `debug`：
+排查播放问题时，把 `config.json` 的 `log_level` 改成 `debug`，重启服务：
 
 ```bash
-# systemd：在 ExecStart 末尾追加 -log-level debug
-systemctl edit sontv
-# 裸机手工跑：参数优先于环境变量
-./sontv-go -log-level debug
-SONTV_LOG_LEVEL=debug ./sontv-go
+sudo sed -i 's/"log_level": "info"/"log_level": "debug"/' /opt/sontv/config.json
+sudo systemctl restart sontv
 ```
 
-**systemd 部署下请用 `-log-level` 参数。** systemd 给服务进程的是它自己的干净环境。容器里 `docker run -e SONTV_LOG_LEVEL=debug` 传入的变量**不会**传给 unit 起的进程。实测：PID 1 有该变量，`sontv-go` 没有。环境变量只在手工跑二进制时可靠。参数优先于环境变量。
+`log_level` 排在三个入口的最后，是为了让临时覆盖不必先改配置：
+
+| 入口 | 用途 |
+| --- | --- |
+| `config.json` 的 `log_level` | 正式配置项，常驻部署改这里 |
+| `-log-level debug` | 临时提门槛，优先级最高，命令行 > 环境变量 > 配置文件 |
+| `SONTV_LOG_LEVEL=debug` | 手工跑二进制时的顺手写法 |
+
+非法取值（如 `"verbose"`）一律回落到 `info` 并打一条 WARN。日志配置写错不该让服务起不来。
+
+**服务单元里不需要、也不建议出现 `-log-level`。** 日志级别属于 `config.json`，改配置对 systemd、OpenRC、容器、手工运行是同一套做法。
 
 日志从不打印凭据明文。目标地址只保留 scheme/host/path，参数名保留，参数值一律抹成 `***`。错误只取内层原因，因为 `*url.Error` 会把完整 URL 拼进 `Error()`。响应正文也从不落盘，日志只留探测块开头的若干字符，用来分辨「HTML 错误页 / 文本提示 / 二进制流」。
 
@@ -311,7 +352,7 @@ kill -USR1 "$(pidof sontv-go)"   # 改完 tokens.txt 后热重载
 
 ### systemd 单元示例
 
-`install.sh --service` 生成的就是下面这个。脚本额外加了 `Group`、`WorkingDirectory` 与几个加固项。
+`install.sh --service` 生成的就是下面这个。脚本额外加了 `Group`、`WorkingDirectory` 与几个加固项。单元里**没有** `-log-level`：日志级别由 `config.json` 决定，`ExecStart` 也不必带 `-config`，二进制会读同级的 `config.json`。
 
 ```ini
 [Unit]
@@ -349,8 +390,8 @@ command_user="sontv:sontv"
 retry="SIGTERM/5"
 
 supervisor=supervise-daemon
-output_log="/var/log/sontv/sontv.log"
-error_log="/var/log/sontv/sontv.log"
+output_log="/var/log/sontv/sontv-go.log"
+error_log="/var/log/sontv/sontv-go.log"
 respawn_delay=5
 respawn_max=0
 
@@ -403,7 +444,7 @@ curl "http://127.0.0.1:9900/sub?token=<稳定token>&url=https%3A%2F%2Fexample.co
 ```
 #EXTM3U
 #EXTINF:-1 tvg-name="翡翠台",翡翠台
-http://你的域名/url?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&u=https%3A%2F%2Fexample.com%2Flive%2Fa.ts
+http://你的域名/play?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&url=https%3A%2F%2Fexample.com%2Flive%2Fa.ts
 ```
 
 `/sub` 的响应里**永远不含稳定 token**，只有短命临时 token。播放器直接抓这条订阅地址即可，子链接会自动走回本站。
@@ -416,8 +457,8 @@ http://你的域名/url?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&u=https%3A%2F%2Fe
 | `400` | 目标地址缺失/非法/非 http(s)、上游未配置、目标指向本站自身 |
 | `401` | 临时 token 无效（过期、签名不符，或对应的行已被删除） |
 | `403` | 稳定 token 无效（缺失或不在表里） |
-| `405` | `/url` 收到非 GET/HEAD 请求 |
-| `502` | 上游抓取/请求/读取失败，或播放列表超出上限（`/sub` 8 MiB、`/url` 4 MiB） |
+| `405` | `/play` 收到非 GET/HEAD 请求 |
+| `502` | 上游抓取/请求/读取失败，或播放列表超出上限（`/sub` 8 MiB、`/play` 4 MiB） |
 | `503` | token 表为空或未能装载，服务未就绪，fail closed |
 
 错误响应统一是一行纯文本。sontv 不返回服务器信息，也不返回上游细节。
@@ -443,7 +484,7 @@ internal/config/       配置装载（JSON 叠加缺省值）
 internal/tokens/       token 表解析与原子热重载（只存 sha256）
 internal/temptoken/    临时 token 的签发与校验
 internal/playlist/     播放列表改写（纯函数，不碰网络）
-internal/server/       HTTP 路由、认证、/sub 与 /url 的实现
+internal/server/       HTTP 路由、认证、/sub 与 /play 的实现
   └── curl/             端到端测试
 docs/                  配置示例（config.example.json）
 ```

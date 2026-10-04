@@ -3,19 +3,19 @@ package server
 import (
 	"net/http"
 
-	"github.com/HasonHuang/mytv/go/internal/temptoken"
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/temptoken"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // 查询参数名。凭据形态分离（ADR-0002）：
-//   - token：稳定 token（永久、可吊销），/sub 与 /url 都可
+//   - token：稳定 token（永久、可吊销），/sub 与 /play 都可
 //   - t：临时 token（短命），只出现在响应体的子链接里
-//   - u：/url 的目标地址；url：/sub 的上游地址；filter：订阅过滤词
+//   - url：目标地址。/sub 取上游播放列表、/play 取待代理资源，同名同义
+//   - filter：订阅过滤词
 const (
 	stableParam = "token"
 	tempParam   = "t"
-	targetParam = "u"
-	subParam    = "url"
+	targetParam = "url"
 	filterParam = "filter"
 )
 
@@ -50,9 +50,9 @@ func (s *Server) authStable(w http.ResponseWriter, r *http.Request, lg *reqLog) 
 	return row
 }
 
-// authURL 接受稳定或临时 token（/url）。判定优先级：有 t 按临时校验，
+// authPlay 接受稳定或临时 token（/play）。判定优先级：有 t 按临时校验，
 // 否则按稳定校验，都没有则 403（ADR-0002）。
-func (s *Server) authURL(w http.ResponseWriter, r *http.Request, lg *reqLog) *tokens.Row {
+func (s *Server) authPlay(w http.ResponseWriter, r *http.Request, lg *reqLog) *tokens.Row {
 	snap := s.snapshot(w)
 	if snap == nil {
 		lgAuth(lg, "token 表为空")

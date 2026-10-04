@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/config"
+	"github.com/HasonHuang/sontv/internal/config"
 )
 
 // 本文件是 E2E 层：真编译、真起进程、真走 TCP。
@@ -41,7 +41,7 @@ func startE2E(t *testing.T, cfg *config.Config, tokenLines ...string) *e2eServer
 
 	bin := filepath.Join(dir, "sontv-go")
 	// 用模块导入路径定位 cmd，不受本包所在目录影响。
-	build := exec.Command("go", "build", "-o", bin, "github.com/HasonHuang/mytv/go/cmd/sontv-go")
+	build := exec.Command("go", "build", "-o", bin, "github.com/HasonHuang/sontv/cmd/sontv-go")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("编译失败: %v\n%s", err, out)
 	}
@@ -53,8 +53,8 @@ func startE2E(t *testing.T, cfg *config.Config, tokenLines ...string) *e2eServer
 
 	cfg.TokensFile = tokensPath
 	cfgBytes := []byte(fmt.Sprintf(
-		`{"tokens_file":%q,"default_ttl_hours":%d,"upstream_m3u":%q,"listen":%q,"unwrap_remote_proxy":%v}`,
-		cfg.TokensFile, cfg.DefaultTTLHours, cfg.UpstreamM3U, cfg.Listen, cfg.UnwrapRemoteProxy))
+		`{"tokens_file":%q,"default_ttl_hours":%d,"upstream_m3u":%q,"listen":%q}`,
+		cfg.TokensFile, cfg.DefaultTTLHours, cfg.UpstreamM3U, cfg.Listen))
 	cfgPath := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(cfgPath, cfgBytes, 0o600); err != nil {
 		t.Fatal(err)
@@ -126,17 +126,17 @@ func hashOf(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// extractFirstURL 从订阅正文里取出第一条本站 /url 子链接（绝对地址）。
+// extractFirstURL 从订阅正文里取出第一条本站 /play 子链接（绝对地址）。
 // server 包测试有同名辅助，但那是包内私有；黑盒包不该伸手去要，就地重写。
 func extractFirstURL(t *testing.T, body string) string {
 	t.Helper()
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
-		if i := strings.Index(line, "/url?"); i >= 0 {
+		if i := strings.Index(line, "/play?"); i >= 0 {
 			return line
 		}
 	}
-	t.Fatalf("正文里没有 /url 子链接:\n%s", body)
+	t.Fatalf("正文里没有 /play 子链接:\n%s", body)
 	return ""
 }
 
@@ -151,7 +151,6 @@ func e2eConfig(t *testing.T, upstream string) *config.Config {
 	c := config.DefaultConfig()
 	c.Listen = freePort(t)
 	c.UpstreamM3U = upstream
-	c.UnwrapRemoteProxy = true
 	return c
 }
 
@@ -206,7 +205,7 @@ func TestE2ESelfRef400(t *testing.T) {
 	es := startE2E(t, cfg, "主,"+hashOf("good"))
 
 	self := url.QueryEscape("http://" + cfg.Listen + "/x.ts")
-	if code, _ := es.get("/url?token=good&u=" + self); code != http.StatusBadRequest {
+	if code, _ := es.get("/play?token=good&url=" + self); code != http.StatusBadRequest {
 		t.Fatalf("自引用应 400，实际 %d", code)
 	}
 }

@@ -19,6 +19,7 @@ VERSION="${SONTV_VERSION:-}"          # 指定 tag（如 v0.1.0）；留空则�
 FORCE_FLAVOR="${SONTV_FLAVOR:-}"     # 强制 glibc / musl
 FORCE_CONFIG="${SONTV_REINSTALL_CONFIG:-0}"
 ENABLE_SERVICE="${SONTV_SERVICE:-1}"  # 默认装完就跑起来；--no-service 关掉
+NO_RESTART="${SONTV_NO_RESTART:-0}"   # 更新时不重启服务（默认重启，好让新代码真的跑起来）
 
 # 下面四个标记「这个值是命令行/环境变量显式给的」，用来决定还要不要提问。
 # 显式给过的绝不提问：脚本化调用（CI、ansible、Dockerfile）里冒出一句提示
@@ -63,29 +64,36 @@ sontv 安装脚本
 选项：
   -v, --version TAG   安装指定版本（如 v0.1.0），默认 latest
   -d, --dir DIR       安装目录，默认 /opt/sontv
-  -p, --port PORT     监听端口，默认 9900（写进 config.json 的 listen）
   -n, --name NAME     服务名，默认 sontv。决定 systemd 单元 / OpenRC 脚本的
                       文件名、服务用户名与 OpenRC 日志目录
-  -l, --log-level L   日志级别 debug/info/warn/error，默认 info（写进 config.json）
+  -p, --port PORT     监听端口，默认 9900（写进 config.json 的 listen）。
+                      仅首次安装时询问
+  -l, --log-level L   日志级别 debug/info/warn/error，默认 info（写进 config.json）。
+                      仅首次安装时询问
       --token TOKEN   指定首个 token 的明文，脚本自己算 sha256 存进 tokens.txt
-                      （默认随机生成一条）
+                      （默认随机生成一条）。仅首次安装时询问
       --flavor F      强制使用 glibc 或 musl 产物
       --force-config  覆盖已存在的 config.json（默认保留）
       --no-token      不自动生成 tokens.txt（默认缺凭据时生成一条并打印明文）
       --token-label L 自动生成的那条 token 的标签，默认「我的订阅」
       --service       注册并启动系统服务（systemd / OpenRC 自适应）；缺省就是开的
       --no-service    只装文件，不碰服务（等价 SONTV_SERVICE=0）
+      --no-restart    更新时不重启服务，新版本下次重启后生效（缺省会重启）
   -h, --help          显示本帮助
 
 环境变量（等价于上面的选项）：
   SONTV_VERSION SONTV_INSTALL_DIR SONTV_FLAVOR SONTV_REINSTALL_CONFIG
   SONTV_SERVICE SONTV_REPO SONTV_NO_TOKEN SONTV_TOKEN_LABEL SONTV_USER
-  SONTV_PORT SONTV_SERVICE_NAME SONTV_LOG_LEVEL SONTV_TOKEN
+  SONTV_PORT SONTV_SERVICE_NAME SONTV_LOG_LEVEL SONTV_TOKEN SONTV_NO_RESTART
 
-交互：能读 /dev/tty 时，脚本在探测完环境后逐项询问端口、首个 token、服务名与
-日志级别，直接回车取默认值。命令行选项或环境变量给过的项不再询问。
-读不到 /dev/tty（CI、Docker build、`curl | bash` 配上重定向的 stdin）时
-全部取默认值，不提示、不失败。
+更新：服务名对应的服务已存在时，脚本走更新流程——只换二进制，不碰 config.json
+与 tokens.txt；服务原本在跑就重启它，好让新代码真的生效（否则新文件要等下次重启
+才生效，/proc 里的旧进程还在跑老代码）。交互环境下会先问一句是否更新，读不到
+/dev/tty 时直接更新、不提示。端口、token、日志级别只在首次安装时询问。
+
+交互：能读 /dev/tty 时，脚本在探测完环境后逐项询问，直接回车取默认值。命令行选项
+或环境变量给过的项不再询问。读不到 /dev/tty（CI、Docker build、`curl | bash` 配上
+重定向的 stdin）时全部取默认值，不提示、不失败。
 
 缺省行为：装到 /opt/sontv，补齐配置，缺凭据就生成一条 token（明文只在终端打印
 一次，文件里只存 sha256），再按 init 系统注册服务并启动——systemd 与 OpenRC（Alpine、
@@ -109,6 +117,7 @@ while [ $# -gt 0 ]; do
     --token-label) [ $# -ge 2 ] || die "--token-label 需要参数"; TOKEN_LABEL="$2"; shift 2 ;;
     --service)    ENABLE_SERVICE=1; shift ;;
     --no-service) ENABLE_SERVICE=0; shift ;;
+    --no-restart) NO_RESTART=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     *)            usage >&2; die "未知参数：$1" ;;
   esac
@@ -145,6 +154,17 @@ ask() {
   # 读不到行（Ctrl-D）也当回车：交互中途放弃不该把脚本带崩。
   IFS= read -r ASK_REPLY <"$TTY" || ASK_REPLY=""
   [ -n "$ASK_REPLY" ] || ASK_REPLY="$2"
+}
+
+# ask_yes_no 问一个是/否。答案收敛成 y 或 n，其余（含回车）取默认值——
+# 调用点只判这两个值，不必再写一遍 case。
+ask_yes_no() {
+  ask "$1" "$2"
+  case "$ASK_REPLY" in
+    [Yy]*) ASK_REPLY="y" ;;
+    [Nn]*) ASK_REPLY="n" ;;
+    *)     ASK_REPLY="$2" ;;
+  esac
 }
 
 # ask_num 提示 默认值 校验函数名：校验不通过就重新问，而不是报错退出。
@@ -358,6 +378,26 @@ elif command -v rc-service >/dev/null 2>&1 || [ -x /sbin/openrc-run ] || [ -x /u
   INIT="openrc"
 fi
 
+# service_installed 报出这个服务是否已装：判据是服务单元/脚本本身存在，
+# 而不是问 init——问 systemctl/rc-service 在没装过的机器上会拖出一堆误导性输出。
+service_installed() {
+  case "$INIT" in
+    systemd) [ -f "/etc/systemd/system/$SERVICE_NAME.service" ] ;;
+    openrc)  [ -f "/etc/init.d/$SERVICE_NAME" ] ;;
+    *)       return 1 ;;
+  esac
+}
+
+# service_is_running 报出服务当前是否在跑。更新时只重启原本在跑的：
+# 把一个用户特意停掉的服务顺手拉起来，比不重启更糟。
+service_is_running() {
+  case "$INIT" in
+    systemd) systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null ;;
+    openrc)  rc-service "$SERVICE_NAME" status >/dev/null 2>&1 ;;
+    *)       return 1 ;;
+  esac
+}
+
 # ---------- 配置询问 ----------
 # 环境已经探明（发行版、架构、init 系统），现在才问怎么装。
 # 每项都是「命令行/环境变量给了就用、不给才问」，所以脚本化调用全程无交互。
@@ -366,13 +406,8 @@ fi
 #   ask_num "监听端口" "$PORT" valid_port; PORT="$ASK_REPLY"
 # 漏掉这一句的话，答案会被问出来、会被回显、然后被原样丢掉，
 # 表现得像交互根本没生效。
-if [ "$PORT_GIVEN" = 1 ]; then
-  valid_port "$PORT" || die "端口只接受 1~65535，收到：$PORT"
-else
-  ask_num "监听端口" "$PORT" valid_port
-  PORT="$ASK_REPLY"
-fi
 
+# 服务名排在最前：后面要靠它去判「这个服务装过没有」，问晚了就没法分支了。
 if [ "$NAME_GIVEN" = 1 ]; then
   valid_name "$SERVICE_NAME" \
     || die "服务名只接受字母、数字、下划线与连字符，收到：$SERVICE_NAME"
@@ -381,27 +416,65 @@ else
   SERVICE_NAME="$ASK_REPLY"
 fi
 
-if [ "$LOGLEVEL_GIVEN" = 1 ]; then
-  valid_level "$(printf '%s' "$LOG_LEVEL" | tr 'A-Z' 'a-z')" \
-    || die "日志级别只接受 debug / info / warn / error，收到：$LOG_LEVEL"
-else
-  ask_num "日志级别 (debug/info/warn/error)" "$LOG_LEVEL" valid_level
-  LOG_LEVEL="$ASK_REPLY"
-fi
-
-if [ "$TOKEN_GIVEN" = 1 ]; then
-  valid_token "$TOKEN_INPUT" || die "token 不能为空，也不能含逗号或控制字符"
-elif [ "$AUTO_TOKEN" != 1 ]; then
-  # 填了就用填的（脚本自己算 sha256），留空则随机生成一条。
-  ask "首个 token（直接回车则随机生成）" ""
-  [ -z "$ASK_REPLY" ] || TOKEN_INPUT="$ASK_REPLY"
-fi
-
-# 级别统一转小写后使用：用户填 INFO / Debug 都不该被当成非法值拒掉。
-LOG_LEVEL="$(printf '%s' "$LOG_LEVEL" | tr 'A-Z' 'a-z')"
 # 服务用户名默认跟随服务名。SONTV_USER 显式给过时以其为准——
 # 用户可能已经有一个专用账号了，不该被我们改名字。
 [ -n "$SERVICE_USER" ] || SERVICE_USER="$SERVICE_NAME"
+
+# ---------- 已安装检测 ----------
+# 装过了就是升级，没装过才是首次安装。两条路的差别只在「要不要动配置和凭据」，
+# 下载、校验、覆盖二进制、注册服务这些是一样的。
+IS_UPDATE=0
+if service_installed; then
+  IS_UPDATE=1
+fi
+
+if [ "$IS_UPDATE" = 1 ]; then
+  if [ -z "$TTY" ]; then
+    # 非交互：直接更新，不提示。脚本化调用（CI、ansible、定时任务）里
+    # 「重跑 = 升级」是既有语义，冒出一句提示就已经算交互了。
+    info "检测到    $SERVICE_NAME 已安装，将更新到最新版本"
+  else
+    # 更新只换程序，不改配置也不动凭据——需要改那些是另一件事，
+    # 用 --force-config 或直接编辑配置文件。免得回答被问了却不生效。
+    ask_yes_no "检测到 $SERVICE_NAME 已安装，是否更新到最新版本？(Y/n)" "Y"
+    if [ "$ASK_REPLY" = n ] || [ "$ASK_REPLY" = N ]; then
+      info "已取消    未做任何改动"
+      exit 0
+    fi
+  fi
+else
+  if [ "$PORT_GIVEN" = 1 ]; then
+    valid_port "$PORT" || die "端口只接受 1~65535，收到：$PORT"
+  else
+    ask_num "监听端口" "$PORT" valid_port
+    PORT="$ASK_REPLY"
+  fi
+
+  if [ "$LOGLEVEL_GIVEN" = 1 ]; then
+    valid_level "$(printf '%s' "$LOG_LEVEL" | tr 'A-Z' 'a-z')" \
+      || die "日志级别只接受 debug / info / warn / error，收到：$LOG_LEVEL"
+  else
+    ask_num "日志级别 (debug/info/warn/error)" "$LOG_LEVEL" valid_level
+    LOG_LEVEL="$ASK_REPLY"
+  fi
+
+  if [ "$TOKEN_GIVEN" = 1 ]; then
+    valid_token "$TOKEN_INPUT" || die "token 不能为空，也不能含逗号或控制字符"
+  elif [ "$AUTO_TOKEN" != 1 ]; then
+    # 填了就用填的（脚本自己算 sha256），留空则随机生成一条。
+    ask "首个 token（直接回车则随机生成）" ""
+    [ -z "$ASK_REPLY" ] || TOKEN_INPUT="$ASK_REPLY"
+  fi
+
+  # 级别统一转小写后使用：用户填 INFO / Debug 都不该被当成非法值拒掉。
+  LOG_LEVEL="$(printf '%s' "$LOG_LEVEL" | tr 'A-Z' 'a-z')"
+fi
+
+# 非交互且是更新时，上面整段都被跳过了，这些变量得有个能用的值：
+# 端口只用于安装结束时打印订阅地址，日志级别只用于打印。
+PORT="${PORT:-9900}"
+LOG_LEVEL="$(printf '%s' "$LOG_LEVEL" | tr 'A-Z' 'a-z')"
+[ -n "$LOG_LEVEL" ] || LOG_LEVEL="info"
 
 # ---------- 解析版本与下载地址 ----------
 BASE="https://github.com/$REPO/releases"
@@ -424,8 +497,12 @@ info "仓库      $REPO"
 info "系统      $OS / $ARCH / $FLAVOR"
 info "版本      $TAG"
 info "安装目录  $INSTALL_DIR"
-info "监听      0.0.0.0:$PORT"
-info "日志级别  $LOG_LEVEL（写进 config.json，改完重启生效）"
+if [ "$IS_UPDATE" = 1 ]; then
+  info "模式      更新已安装的 $SERVICE_NAME（配置与凭据保持不变）"
+else
+  info "监听      0.0.0.0:$PORT"
+  info "日志级别  $LOG_LEVEL（写进 config.json，改完重启生效）"
+fi
 if [ "$INIT" != none ]; then
   info "服务      $SERVICE_NAME（$INIT）"
 fi
@@ -471,6 +548,14 @@ tar -xzf "$TMPDIR_/$ASSET" -C "$TMPDIR_"
 
 # ---------- 安装 ----------
 run_root install -d -m 0755 "$INSTALL_DIR"
+
+# 覆盖二进制前先记住服务在不在跑：更新完只重启原本在跑的那个。
+# 用户特意停掉的服务不该被顺手拉起来——那比不重启更糟。
+SERVICE_WAS_RUNNING=0
+if [ "$IS_UPDATE" = 1 ] && [ "$NO_RESTART" != 1 ] && service_is_running; then
+  SERVICE_WAS_RUNNING=1
+fi
+
 run_root install -m 0755 "$TMPDIR_/$BINARY" "$INSTALL_DIR/$BINARY"
 
 # 配置：以包里的 config.example.json 为底，按填写的端口与日志级别改写。
@@ -478,7 +563,11 @@ run_root install -m 0755 "$TMPDIR_/$BINARY" "$INSTALL_DIR/$BINARY"
 # 更不该把用户手改过的其它字段一起冲掉。
 NEW_LISTEN="0.0.0.0:$PORT"
 
-if [ "$FORCE_CONFIG" != 1 ] && [ -f "$INSTALL_DIR/config.json" ]; then
+if [ "$IS_UPDATE" = 1 ] && [ "$FORCE_CONFIG" != 1 ]; then
+  # 更新只换程序。端口与日志级别是另一件事：让用户用 --force-config 或直接
+  # 编辑配置文件去改，这里不碰，免得脚本替他做了没问过的决定。
+  info "配置      保持不变（--force-config 可覆盖）"
+elif [ "$FORCE_CONFIG" != 1 ] && [ -f "$INSTALL_DIR/config.json" ]; then
   if json_set_listen "$INSTALL_DIR/config.json" "$NEW_LISTEN"; then
     info "配置      已存在，只把 listen 更新为 $NEW_LISTEN（--force-config 可整份覆盖）"
   else
@@ -684,7 +773,27 @@ UNIT
       run_root install -d -m 0755 /etc/systemd/system
       run_root install -m 0644 "$TMPDIR_/sontv.service" "/etc/systemd/system/$SERVICE_NAME.service"
       run_root systemctl daemon-reload
-      if run_root systemctl enable --now "$SERVICE_NAME"; then
+
+      if [ "$IS_UPDATE" = 1 ]; then
+        # enable --now 对已在运行的服务是 no-op：systemd 认为无需启动，
+        # 新覆盖的二进制就永远不会被执行（/proc/<pid>/exe 指向 (deleted) 的旧 inode）。
+        # 所以更新走显式 restart，且只在服务原本在跑时才动它。
+        run_root systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+        if [ "$SERVICE_WAS_RUNNING" = 1 ]; then
+          if run_root systemctl restart "$SERVICE_NAME"; then
+            SERVICE_STARTED=1
+            info "服务      已重启到新版本（systemctl status $SERVICE_NAME）"
+          else
+            warn "二进制已更新，但重启失败：systemctl status $SERVICE_NAME（旧进程仍在跑）"
+          fi
+        elif [ "$NO_RESTART" = 1 ]; then
+          info "服务      未重启（--no-restart），新版本下次重启后生效"
+        else
+          # 本来就没在跑：不擅自启动，只把开机自启补上。
+          info "服务      本未运行，未启动；已登记开机自启（systemctl start $SERVICE_NAME 可手动起）"
+        fi
+        SERVICE_ENABLED=1
+      elif run_root systemctl enable --now "$SERVICE_NAME"; then
         SERVICE_STARTED=1
         SERVICE_ENABLED=1
         info "服务      已注册并启动（systemctl status $SERVICE_NAME）"
@@ -709,7 +818,22 @@ UNIT
       MODE="plain"
       command -v supervise-daemon >/dev/null 2>&1 && MODE="supervise"
       write_openrc_initd "$MODE"
-      if run_root rc-service "$SERVICE_NAME" start; then
+
+      if [ "$IS_UPDATE" = 1 ]; then
+        # start 对已在跑的服务同样是 no-op，新二进制不会被执行。显式 restart。
+        if [ "$SERVICE_WAS_RUNNING" = 1 ]; then
+          if run_root rc-service "$SERVICE_NAME" restart; then
+            SERVICE_STARTED=1
+            info "服务      已重启到新版本（rc-service $SERVICE_NAME status，$MODE 模式）"
+          else
+            warn "二进制已更新，但重启失败：rc-service $SERVICE_NAME restart（旧进程仍在跑）"
+          fi
+        elif [ "$NO_RESTART" = 1 ]; then
+          info "服务      未重启（--no-restart），新版本下次重启后生效"
+        else
+          info "服务      本未运行，未启动；手动起：rc-service $SERVICE_NAME start"
+        fi
+      elif run_root rc-service "$SERVICE_NAME" start; then
         SERVICE_STARTED=1
         info "服务      已启动（rc-service $SERVICE_NAME status，$MODE 模式）"
       elif [ "$MODE" = supervise ]; then
@@ -720,7 +844,9 @@ UNIT
           info "服务      已启动（rc-service $SERVICE_NAME status，plain 模式）"
         fi
       fi
-      [ "$SERVICE_STARTED" = 1 ] || warn "服务脚本已写入，但启动失败：rc-service $SERVICE_NAME start"
+      if [ "$IS_UPDATE" != 1 ]; then
+        [ "$SERVICE_STARTED" = 1 ] || warn "服务脚本已写入，但启动失败：rc-service $SERVICE_NAME start"
+      fi
 
       # default 运行级 = 开机自启。放在启动之后登记：openrc 从没 boot 过的
       # 容器里，/run/openrc 状态是服务起过一次才齐的，早跑容易失败。
@@ -738,7 +864,11 @@ fi
 
 # ---------- 完成 ----------
 printf '\n'
-info "sontv $TAG 安装完成 → $INSTALL_DIR"
+if [ "$IS_UPDATE" = 1 ]; then
+  info "sontv $TAG 更新完成 → $INSTALL_DIR（配置与凭据未改动）"
+else
+  info "sontv $TAG 安装完成 → $INSTALL_DIR"
+fi
 
 if [ -n "$NEW_TOKEN" ]; then
   cat <<EOF
@@ -802,7 +932,20 @@ cat <<EOF
   调日志    改 $INSTALL_DIR/config.json 的 log_level（debug/info/warn/error），改完重启服务
 EOF
 
-if [ "$SERVICE_STARTED" != 1 ] && [ "$INIT" != none ]; then
+if [ "$IS_UPDATE" = 1 ] && [ "$NO_RESTART" = 1 ]; then
+  case "$INIT" in
+    systemd) RESTART_HINT="  sudo systemctl restart $SERVICE_NAME" ;;
+    openrc)  RESTART_HINT="  sudo rc-service $SERVICE_NAME restart" ;;
+    *)       RESTART_HINT="" ;;
+  esac
+  if [ -n "$RESTART_HINT" ]; then
+    cat <<EOF
+
+新版本已就位但没有重启（--no-restart），手动重启后生效：
+$RESTART_HINT
+EOF
+  fi
+elif [ "$IS_UPDATE" != 1 ] && [ "$SERVICE_STARTED" != 1 ] && [ "$INIT" != none ]; then
   case "$INIT" in
     systemd) ENABLE_HINT="  sudo systemctl enable --now $SERVICE_NAME" ;;
     openrc)  ENABLE_HINT="  sudo rc-update add $SERVICE_NAME default && sudo rc-service $SERVICE_NAME start" ;;

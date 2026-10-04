@@ -89,9 +89,23 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 | 日志级别 | `info` | `config.json` 的 `log_level` |
 | 首个 token | 随机生成 | `tokens.txt` 的一行，文件里只存它的 sha256 |
 
-重跑脚本即升级。脚本直接覆盖二进制，**已存在的 `config.json` 与 `tokens.txt` 不会被覆盖**。自动生成凭据只在文件缺失时发生，脚本不覆盖你手写的 token 表。服务单元每次重写并重启。
+重跑脚本即升级。检测到服务已存在时脚本走**更新流程**：只换二进制，`config.json` 与 `tokens.txt` 一律不碰；服务原本在跑就重启它。
 
-已有 `config.json` 时只有一处例外：**填的端口与文件里的 `listen` 不同时才改写该字段**，其它字段原样保留，你手改过的值不会被冲掉。日志级别同理不覆盖，若与文件里的值不同，脚本会提示一次。整份覆盖用 `--force-config`。
+> **为什么要显式重启**：`systemctl enable --now` 与 `rc-service start` 对**已在运行**的服务都是空操作，新覆盖的二进制不会被执行——`/proc/<pid>/exe` 仍指向旧 inode（显示为 `(deleted)`），新代码要等下次重启机器才生效。所以更新路径走显式 `restart`。
+
+| 情况 | 行为 |
+| --- | --- |
+| 交互环境检测到已安装 | 问一句「是否更新到最新版本」，回答 `n` 则原样退出、不做任何改动 |
+| 非交互环境检测到已安装 | 直接更新，不提示。CI / ansible / 定时任务里的「重跑 = 升级」语义不变 |
+| 服务原本在跑 | 覆盖二进制后重启，新代码立即生效 |
+| 服务本来是停的 | **不擅自启动**，只补开机自启，免得把用户特意停掉的服务拉起来 |
+| `--no-restart` | 只覆盖二进制不重启，末尾打印手动重启的命令 |
+
+更新只换程序。端口、日志级别、凭据都不在更新时询问——要改那些请直接编辑配置文件，或用 `--force-config` 整份覆盖。自动生成凭据只在文件缺失时发生，脚本不覆盖你手写的 token 表。
+
+### 端口已存在但服务未装
+
+有种情况会走到「服务没装、但 `config.json` 已在」：服务名换了，或当初用了 `--no-service`。这时脚本按首次安装走，但 `config.json` 不覆盖，**只有一处例外——填的端口与文件里的 `listen` 不同时才改写该字段**，其它字段原样保留，你手改过的值不会被冲掉。日志级别同理不覆盖，若与文件里的值不同，脚本会提示一次。整份覆盖用 `--force-config`。
 
 ### 非交互环境
 
@@ -121,6 +135,9 @@ curl -fsSL .../install.sh | bash -s -- --no-token
 
 # 指定自动生成的那条 token 的标签
 curl -fsSL .../install.sh | bash -s -- --token-label 客厅电视
+
+# 更新二进制但不重启服务（新版本下次重启后生效）
+curl -fsSL .../install.sh | bash -s -- --no-restart
 ```
 
 执行 `./install.sh --help` 查看全部选项。每个选项都有同名环境变量（`SONTV_VERSION`、`SONTV_INSTALL_DIR`、`SONTV_SERVICE` …），作用等价。不带参数直接执行 `./install.sh` 也行，适合先下载再执行。

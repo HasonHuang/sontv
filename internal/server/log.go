@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 )
 
-// 播放链路的日志（/sub 与 /url 共用）。
+// 播放链路的日志（/sub 与 /play 共用）。
 //
 // 分级的意义在于「默认安静、按需全开」：播一路电视每分钟打几十行分片日志，
 // 与启动/改配置/凭据失效这些真正稀有的事混在一起，出问题时反而找不到重点。
@@ -249,7 +249,7 @@ func (l *reqLog) ms() int64 { return time.Since(l.start).Milliseconds() }
 
 // safeURL 脱敏一个地址：保留 scheme/host/path 与参数名，参数值一律抹成 ***。
 //
-// u= 是客户端可控的，可能根本不是合法 URL——解析失败就整体不显示，
+// url= 是客户端可控的，可能根本不是合法 URL——解析失败就整体不显示，
 // 绝不把原串打进日志。URL 的 path 段不含查询凭据（凭据一律在 query 或
 // path 后段的 userinfo 里，这里都不取），所以 path 可以原样留。
 func safeURL(raw string) string {

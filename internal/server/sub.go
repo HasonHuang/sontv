@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/HasonHuang/mytv/go/internal/playlist"
+	"github.com/HasonHuang/sontv/internal/playlist"
 )
 
 // maxPlaylistBytes 是上游列表的读取上限，防超大响应撑爆内存（设计 §2.7）。
@@ -21,8 +21,8 @@ const maxPlaylistBytes = 8 << 20 // 8 MiB
 // 认证只认稳定 token（ADR-0002）：订阅地址由用户主动配置，长期凭据落在这里。
 // 改写盖章用一条响应一枚临时 token（子链接只带短命凭据）。
 func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
-	// 与 /url 同一套日志：编号 + 脱敏地址，认证失败也留痕（订阅拉不到内容同样是故障）。
-	lg := newReqLog("订阅", "", r.URL.Query().Get(subParam))
+	// 与 /play 同一套日志：编号 + 脱敏地址，认证失败也留痕（订阅拉不到内容同样是故障）。
+	lg := newReqLog("订阅", "", r.URL.Query().Get(targetParam))
 
 	row := s.authStable(w, r, lg)
 	if row == nil {
@@ -64,7 +64,7 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 
 // subUpstream 解析 /sub 的上游：有 url= 用它，否则用配置的缺省上游。
 func (s *Server) subUpstream(r *http.Request) (*url.URL, error) {
-	raw := strings.TrimSpace(r.URL.Query().Get(subParam))
+	raw := strings.TrimSpace(r.URL.Query().Get(targetParam))
 	if raw == "" {
 		raw = s.cfg.UpstreamM3U
 	}

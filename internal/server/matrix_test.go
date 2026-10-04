@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // writeTable 覆盖写 token 表文件（每行 "标签,sha256hex[,ttl]"）。
@@ -59,7 +59,7 @@ func TestMatrixSubExplicitUpstream(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("#13 期望 200，实际 %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "u=http%3A%2F%2Fcdn%2Fspecial.ts") {
+	if !strings.Contains(rec.Body.String(), "url=http%3A%2F%2Fcdn%2Fspecial.ts") {
 		t.Fatalf("#13 指定上游未生效: %s", rec.Body.String())
 	}
 }
@@ -196,8 +196,8 @@ func TestMatrixStableDeletedAfterReload(t *testing.T) {
 	}
 }
 
-// 边界：/url 缺 u、非 http(s)、方法非 GET/HEAD、上游 5xx。
-func TestMatrixURLErrors(t *testing.T) {
+// 边界：/play 缺 url、非 http(s)、方法非 GET/HEAD。
+func TestMatrixPlayErrors(t *testing.T) {
 	table, _ := tableWith(t, rowLine("主", "good", ""))
 	s := newTestServer(t, testConfig(), table)
 	h := s.Handler()
@@ -206,9 +206,9 @@ func TestMatrixURLErrors(t *testing.T) {
 		name, url string
 		code      int
 	}{
-		{"缺u", "/url?token=good", http.StatusBadRequest},
-		{"非http", "/url?token=good&u=ftp%3A%2F%2Fx", http.StatusBadRequest},
-		{"坏token", "/url?token=bad&u=" + urlEnc("http://x/a.ts"), http.StatusForbidden},
+		{"缺url", "/play?token=good", http.StatusBadRequest},
+		{"非http", "/play?token=good&url=ftp%3A%2F%2Fx", http.StatusBadRequest},
+		{"坏token", "/play?token=bad&url=" + urlEnc("http://x/a.ts"), http.StatusForbidden},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestMatrixURLErrors(t *testing.T) {
 
 	// 方法不允许
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("POST", "/url?token=good&u="+urlEnc("http://x/a.ts"), nil))
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/play?token=good&url="+urlEnc("http://x/a.ts"), nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST 期望 405，实际 %d", rec.Code)
 	}
@@ -241,7 +241,7 @@ func TestMatrixUpstreamStatus(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec,
-		httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/a.ts"), nil))
+		httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/a.ts"), nil))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("上游 500 应原样透传，实际 %d", rec.Code)
 	}
@@ -283,7 +283,7 @@ func TestMatrixHeadPassthrough(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec,
-		httptest.NewRequest("HEAD", "/url?token=good&u="+urlEnc(up.URL+"/a.ts"), nil))
+		httptest.NewRequest("HEAD", "/play?token=good&url="+urlEnc(up.URL+"/a.ts"), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("HEAD 期望 200，实际 %d", rec.Code)
 	}
@@ -305,7 +305,7 @@ func TestMatrixPlaylistOverflow(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec,
-		httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/big.m3u8"), nil))
+		httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/big.m3u8"), nil))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("超限期望 502，实际 %d", rec.Code)
 	}
@@ -323,7 +323,7 @@ func TestMatrixBOMRecognized(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec,
-		httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/x.m3u8"), nil))
+		httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/x.m3u8"), nil))
 	if !strings.Contains(rec.Body.String(), "t=") {
 		t.Fatalf("BOM 列表未改写: %s", rec.Body.String())
 	}
@@ -343,11 +343,11 @@ func TestMatrixNonPlaylistStreamed(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec,
-		httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/x.m3u8"), nil))
+		httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/x.m3u8"), nil))
 	if !bytes.Equal(rec.Body.Bytes(), payload) {
 		t.Fatalf("正文被改动，长度 %d 期望 %d", rec.Body.Len(), len(payload))
 	}
-	if strings.Contains(rec.Body.String(), "/url?") {
+	if strings.Contains(rec.Body.String(), "/play?") {
 		t.Fatalf("非列表不该改写: %s", rec.Body.String())
 	}
 }

@@ -588,7 +588,6 @@ else
   "default_ttl_hours": 24,
   "upstream_m3u": "https://cdn.qd.je/live.m3u",
   "listen": "0.0.0.0:9900",
-  "unwrap_remote_proxy": true,
   "log_level": "info"
 }
 JSON

@@ -17,31 +17,56 @@ func optsFor(kw []string) RewriteOptions {
 		BaseDir:        "https://up.example.com/live/",
 		SelfHost:       "self.example.com",
 		SelfRoot:       "https://self.example.com",
-		Unwrap:         true,
 	}
 }
 
 func TestRewriteUnwrapsProxyForm(t *testing.T) {
-	// 已是本站/别站代理形态：解包内层、重盖，跑两次结果一致（幂等）。
-	body := "#EXTM3U\n#EXTINF:-1,A\n/url?t=OLD&u=http%3A%2F%2Fcdn%2Fa.ts\n"
+	// 已是本站形态：剥内层重盖，跑两次结果一致（幂等）。
+	body := "#EXTM3U\n#EXTINF:-1,A\n/play?t=OLD&url=http%3A%2F%2Fcdn%2Fa.ts\n"
 	once := RewritePlaylist(body, optsFor(nil))
 	twice := RewritePlaylist(once, optsFor(nil))
 	if once != twice {
 		t.Fatalf("非幂等:\n1 %q\n2 %q", once, twice)
 	}
-	if !strings.Contains(once, "t=EXP.UID.SIG") || !strings.Contains(once, "u=http%3A%2F%2Fcdn%2Fa.ts") {
-		t.Fatalf("未解包重盖: %s", once)
+	if !strings.Contains(once, "t=EXP.UID.SIG") || !strings.Contains(once, "url=http%3A%2F%2Fcdn%2Fa.ts") {
+		t.Fatalf("未重签: %s", once)
 	}
 }
 
-func TestRewriteNoUnwrapLayersProxy(t *testing.T) {
-	// Unwrap=false：别站代理链接原样再包一层（退回 stock 行为）。
-	opts := optsFor(nil)
-	opts.Unwrap = false
-	body := "#EXTM3U\n#EXTINF:-1,A\nhttps://other.example/proxy?url=http%3A%2F%2Fcdn%2Fa.ts\n"
-	got := RewritePlaylist(body, opts)
-	if !strings.Contains(got, "other.example") {
-		t.Fatalf("关闭解包应保留外层: %s", got)
+// 绝对形态的本站链接（host 与 SelfHost 一致）同样要认出，
+// 否则它会被当成普通直连再包一层，链式订阅下就套娃了。
+func TestRewriteAbsoluteSelfLinkResigned(t *testing.T) {
+	body := "#EXTM3U\n#EXTINF:-1,A\nhttps://self.example.com:8443/play?t=OLD&url=http%3A%2F%2Fcdn%2Fa.ts\n"
+	got := RewritePlaylist(body, optsFor(nil))
+	if strings.Contains(got, "OLD") {
+		t.Fatalf("旧凭据未剥掉: %s", got)
+	}
+	if !strings.Contains(got, "url=http%3A%2F%2Fcdn%2Fa.ts") {
+		t.Fatalf("本站绝对链接未重签: %s", got)
+	}
+}
+
+// 改名前的旧形态 /url?u=… 不再是本站形态：只当普通相对路径处理。
+func TestRewriteLegacyProxyFormTreatedAsResource(t *testing.T) {
+	body := "#EXTM3U\n#EXTINF:-1,A\n/url?u=http%3A%2F%2Fcdn%2Fa.ts\n"
+	got := RewritePlaylist(body, optsFor(nil))
+	if !strings.Contains(got, "url=https%3A%2F%2Fup.example.com%2Furl%3Fu%3Dhttp") {
+		t.Fatalf("/url 应被当普通相对路径: %s", got)
+	}
+}
+
+// 别站用同样的 /play 形态也不是本站的：不认它，只当普通绝对地址包一层。
+// 刻意不替别家解包——那是替别人的服务承担跳转与故障。
+func TestRewriteForeignProxyFormNotUnwrapped(t *testing.T) {
+	body := "#EXTM3U\n#EXTINF:-1,A\nhttps://other.example/play?url=http%3A%2F%2Fcdn%2Fa.ts\n"
+	got := RewritePlaylist(body, optsFor(nil))
+	// 整条别站链接作为目标被包进去（值里能看到它自己的 /play?url=）
+	if !strings.Contains(got, "url=https%3A%2F%2Fother.example%2Fplay%3Furl%3Dhttp") {
+		t.Fatalf("别站链接应被整体包一层: %s", got)
+	}
+	// 但凭据照样盖上本站的——经过本就该由本站发临时 token
+	if !strings.Contains(got, "t=EXP.UID.SIG") {
+		t.Fatalf("别站链接仍应盖本站临时 token: %s", got)
 	}
 }
 
@@ -58,7 +83,7 @@ func TestAttrOwnHostRewritten(t *testing.T) {
 	// url-tvg 指向本站 host：本站形态，应被包装敲章（绝对地址带本站入口根）。
 	body := "#EXTM3U url-tvg=\"http://self.example.com/tv.xml\"\n#EXTINF:-1,A\nhttp://cdn/a.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
-	if !strings.Contains(got, "url-tvg=\"https://self.example.com/url?") {
+	if !strings.Contains(got, "url-tvg=\"https://self.example.com/play?") {
 		t.Fatalf("本站 url-tvg 未被包装: %s", got)
 	}
 }
@@ -67,7 +92,7 @@ func TestResourceLineThirdPartyWrapped(t *testing.T) {
 	// 资源行的第三方直连也要包装（凭据落在我们的链接上）。
 	body := "#EXTM3U\n#EXTINF:-1,A\nhttp://cdn/a.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
-	if !strings.Contains(got, "u=http%3A%2F%2Fcdn%2Fa.ts") {
+	if !strings.Contains(got, "url=http%3A%2F%2Fcdn%2Fa.ts") {
 		t.Fatalf("资源行第三方未包装: %s", got)
 	}
 }
@@ -90,14 +115,14 @@ func TestRewriteResourceLinesWrapped(t *testing.T) {
 		"#EXTINF:-1,C\nc.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
 
-	// 本站形态永远回本站 /url，绝对地址带本站入口根，凭据带 t= 与 u=（u 被编码）
-	if !strings.Contains(got, "https://self.example.com/url?t=EXP.UID.SIG&u=http%3A%2F%2Fcdn%2Fa.ts") {
+	// 本站形态永远回本站 /play，绝对地址带本站入口根，凭据带 t= 与 url=（url 被编码）
+	if !strings.Contains(got, "https://self.example.com/play?t=EXP.UID.SIG&url=http%3A%2F%2Fcdn%2Fa.ts") {
 		t.Fatalf("绝对资源未包装: %s", got)
 	}
-	if !strings.Contains(got, "u=https%3A%2F%2Fup.example.com%2Fsub%2Fb.ts") {
+	if !strings.Contains(got, "url=https%3A%2F%2Fup.example.com%2Fsub%2Fb.ts") {
 		t.Fatalf("根相对路径未补全: %s", got)
 	}
-	if !strings.Contains(got, "u=https%3A%2F%2Fup.example.com%2Flive%2Fc.ts") {
+	if !strings.Contains(got, "url=https%3A%2F%2Fup.example.com%2Flive%2Fc.ts") {
 		t.Fatalf("目录相对路径未补全: %s", got)
 	}
 }
@@ -111,8 +136,8 @@ func TestRewritePreservesCRLF(t *testing.T) {
 }
 
 func TestRewriteIdempotentSelfProxy(t *testing.T) {
-	// 已是本站 /url 形态：剥旧凭据重盖，跑两次结果一致。
-	once := RewritePlaylist("#EXTM3U\n#EXTINF:-1,A\n/url?t=OLD&u=http%3A%2F%2Fcdn%2Fa.ts\n", optsFor(nil))
+	// 已是本站 /play 形态：剥旧凭据重盖，跑两次结果一致。
+	once := RewritePlaylist("#EXTM3U\n#EXTINF:-1,A\n/play?t=OLD&url=http%3A%2F%2Fcdn%2Fa.ts\n", optsFor(nil))
 	twice := RewritePlaylist(once, optsFor(nil))
 	if once != twice {
 		t.Fatalf("非幂等:\n1 %q\n2 %q", once, twice)
@@ -136,7 +161,7 @@ func TestRewriteAttrsOnlySelfForms(t *testing.T) {
 func TestRewriteCatchupTemplateUntouched(t *testing.T) {
 	body := "#EXTM3U\n" +
 		"#EXTINF:-1 catchup-source=\"http://cdn/timeshift?start=${start}\",A\n" +
-		"/url?u=http%3A%2F%2Fcdn%2Fx.ts\n"
+		"/play?url=http%3A%2F%2Fcdn%2Fx.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
 	if !strings.Contains(got, "${start}") || !strings.Contains(got, "catchup-source=\"http://cdn/timeshift?start=${start}\"") {
 		t.Fatalf("模板被改动: %s", got)
@@ -147,7 +172,7 @@ func TestRewriteURIAttrWrapped(t *testing.T) {
 	// URL= / URI= 承载单个资源（如 EXT-X-KEY），与资源行同规则。
 	body := "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"http://cdn/k\"\n#EXTINF:-1,A\nhttp://cdn/a.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
-	if !strings.Contains(got, "URI=\"https://self.example.com/url?") {
+	if !strings.Contains(got, "URI=\"https://self.example.com/play?") {
 		t.Fatalf("URI 未包装: %s", got)
 	}
 }
@@ -155,7 +180,7 @@ func TestRewriteURIAttrWrapped(t *testing.T) {
 // SelfRoot 为空时（纯函数/无入口场景）子链接退化为根相对，不带 host。
 func TestBuildProxyLinkNoSelfRootIsRelative(t *testing.T) {
 	opts := RewriteOptions{TempToken: "EXP.UID.SIG"}
-	if got := buildProxyLink("http://cdn/a.ts", opts); got != "/url?t=EXP.UID.SIG&u=http%3A%2F%2Fcdn%2Fa.ts" {
+	if got := buildProxyLink("http://cdn/a.ts", opts); got != "/play?t=EXP.UID.SIG&url=http%3A%2F%2Fcdn%2Fa.ts" {
 		t.Fatalf("无 SelfRoot 应根相对: %q", got)
 	}
 }
@@ -163,7 +188,7 @@ func TestBuildProxyLinkNoSelfRootIsRelative(t *testing.T) {
 // SelfRoot 非空时子链接是绝对地址，带本站入口根（含端口）。
 func TestBuildProxyLinkWithSelfRootIsAbsolute(t *testing.T) {
 	opts := RewriteOptions{TempToken: "EXP.UID.SIG", SelfRoot: "https://self.example.com:8443"}
-	want := "https://self.example.com:8443/url?t=EXP.UID.SIG&u=http%3A%2F%2Fcdn%2Fa.ts"
+	want := "https://self.example.com:8443/play?t=EXP.UID.SIG&url=http%3A%2F%2Fcdn%2Fa.ts"
 	if got := buildProxyLink("http://cdn/a.ts", opts); got != want {
 		t.Fatalf("带 SelfRoot 应为绝对地址:\n got %q\nwant %q", got, want)
 	}
@@ -242,8 +267,8 @@ func TestRewriteEntryFixtureInOut(t *testing.T) {
 	wants := []string{
 		"#EXTM3U\n",
 		`tvg-name="A"`, // 属性不因资源行而消失
-		"u=http%3A%2F%2Fcdn%2Fa.ts",
-		"u=https%3A%2F%2Fup.example.com%2Flive%2Fb.m3u8",
+		"url=http%3A%2F%2Fcdn%2Fa.ts",
+		"url=https%3A%2F%2Fup.example.com%2Flive%2Fb.m3u8",
 		"\n\n", // 空行保留
 	}
 	for _, w := range wants {
@@ -262,7 +287,7 @@ func TestRewriteBOMHeaderNotMangled(t *testing.T) {
 	if !strings.Contains(got, "\ufeff#EXTM3U") {
 		t.Fatalf("BOM 头行被破坏: %q", got)
 	}
-	if strings.Contains(got, "u=https%3A%2F%2Fup.example.com%2F%EF%BB%BF") {
+	if strings.Contains(got, "url=https%3A%2F%2Fup.example.com%2F%EF%BB%BF") {
 		t.Fatalf("BOM 头行被当资源行改写: %q", got)
 	}
 }
@@ -274,22 +299,22 @@ func TestRewriteProtocolRelative(t *testing.T) {
 	if strings.Contains(got, "%2Fup%2F%2Fother") {
 		t.Fatalf("host 被改写坏（应补 scheme 而非拼接）: %s", got)
 	}
-	if !strings.Contains(got, "u=https%3A%2F%2Fother.example%2Fa.ts") {
+	if !strings.Contains(got, "url=https%3A%2F%2Fother.example%2Fa.ts") {
 		t.Fatalf("协议相对未补 scheme: %s", got)
 	}
 }
 
 func TestRewriteProxyPathBoundary(t *testing.T) {
-	// /urllist 不是代理端点：不能被当作 /url 抽 u=。它应按普通资源行包装。
-	body := "#EXTM3U\n#EXTINF:-1,A\n/urllist?u=http%3A%2F%2Fcdn%2Fa.ts\n"
+	// /playlist 不是代理端点：不能被当作 /play 抽 url=。它应按普通资源行包装。
+	body := "#EXTM3U\n#EXTINF:-1,A\n/playlist?url=http%3A%2F%2Fcdn%2Fa.ts\n"
 	got := RewritePlaylist(body, optsFor(nil))
-	if !strings.Contains(got, "u=https%3A%2F%2Fup.example.com%2Furllist%3Fu%3Dhttp") {
-		t.Fatalf("/urllist 应被当普通相对路径: %s", got)
+	if !strings.Contains(got, "url=https%3A%2F%2Fup.example.com%2Fplaylist%3Furl%3Dhttp") {
+		t.Fatalf("/playlist 应被当普通相对路径: %s", got)
 	}
 }
 
 func TestRewriteDisplayNameWithQuote(t *testing.T) {
-	// 显示名含引号：PHP 取「最后一个引号后的首个逗号」之后，此处须一致。
+	// 显示名含引号：取「最后一个引号后的首个逗号」之后。
 	body := "#EXTM3U\n" +
 		"#EXTINF:-1 tvg-name=\"X\" grp=\"G\",频道\"高清\"台\nhttp://cdn/a.ts\n"
 	got := RewritePlaylist(body, optsFor([]string{"高清"}))
@@ -299,7 +324,7 @@ func TestRewriteDisplayNameWithQuote(t *testing.T) {
 }
 
 func TestTvgNameQuotesStripped(t *testing.T) {
-	// tvg-name 捕获值不带引号（对齐 PHP），否则关键字会带引号匹配不上。
+	// tvg-name 捕获值不带引号，否则关键字会带引号匹配不上。
 	names := extractTvgNames(`#EXTINF:-1 tvg-name="CCTV1",x`)
 	if len(names) != 1 || names[0] != "CCTV1" {
 		t.Fatalf("tvg-name 引号未剥: %#v", names)
@@ -307,7 +332,7 @@ func TestTvgNameQuotesStripped(t *testing.T) {
 }
 
 func TestEntryNamesMalformedFallsBackToWholeLine(t *testing.T) {
-	// 无逗号的畸形行：退回整行（对齐 PHP），过滤词仍可命中属性区。
+	// 无逗号的畸形行：退回整行，过滤词仍可命中属性区。
 	names := entryNames(`#EXTINF:-1 tvg-id=foo`)
 	if len(names) == 0 || !strings.Contains(names[0], "tvg-id=foo") {
 		t.Fatalf("畸形行应退回整行: %#v", names)

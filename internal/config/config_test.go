@@ -16,9 +16,6 @@ func TestDefaultConfig(t *testing.T) {
 	if c.UpstreamM3U != "https://cdn.qd.je/live.m3u" || c.Listen != "0.0.0.0:9900" {
 		t.Fatalf("上游/监听缺省不符: %+v", c)
 	}
-	if !c.UnwrapRemoteProxy {
-		t.Fatalf("缺省应解包远端代理")
-	}
 	if c.LogLevel != "info" {
 		t.Fatalf("日志缺省应为 info，实际 %q", c.LogLevel)
 	}

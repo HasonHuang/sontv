@@ -4,7 +4,7 @@ sontv 是一个 IPTV 订阅代理服务，用 Go 编写。sontv 抓取上游 m3u
 
 订阅地址只放**稳定 token**。稳定 token 长期有效，可以随时吊销。响应体中的每条子链接只带**短命临时 token**。本站不回传上游凭据，也不把流地址挂在第三方域名下。sontv 只使用 Go 标准库，不引入第三方依赖。
 
-> 本仓库是 PHP 版 [mytv](https://github.com/HasonHuang/mytv) 的 Go 重写。
+> 灵感来自 PHP 版 [mytv](https://github.com/HasonHuang/mytv)。sontv 已独立演进：端点形态、参数命名与配置项都按自己的取舍来，不再追随前者的实现细节。
 
 ## 快速开始
 
@@ -23,14 +23,14 @@ curl -fsSL https://raw.githubusercontent.com/HasonHuang/sontv/main/install.sh | 
 | 端点 | 作用 | 认证 |
 | --- | --- | --- |
 | `GET /sub` | 抓取上游 m3u，过滤并改写后返回播放列表 | 只接受稳定 token（`token=`） |
-| `GET` / `HEAD` `/url` | 代理任意 http(s) 目标。m3u8 逐行改写，其余流式透传 | 接受稳定 token（`token=`）或临时 token（`t=`） |
+| `GET` / `HEAD` `/play` | 代理任意 http(s) 目标。m3u8 逐行改写，其余流式透传 | 接受稳定 token（`token=`）或临时 token（`t=`） |
 
 ### 播放列表改写
 
 sontv 只改写播放列表中「链接」形态的内容。
 
-- **补全绝对地址**：相对路径按上游基准补全。协议相对地址（`//host/path`）补上 scheme。sontv 把链接统一包装成 `本站入口/url?t=…&u=…`。
-- **解包第三方代理**：sontv 识别 `…/url?u=…` 形态的别站代理链接。sontv 默认把它们解包成本站单跳（`unwrap_remote_proxy`）。sontv 因此避免了双跳套娃，也不再依赖别人的服务器。
+- **补全绝对地址**：相对路径按上游基准补全。协议相对地址（`//host/path`）补上 scheme。sontv 把链接统一包装成 `本站入口/play?t=…&url=…`。
+- **只认自己的形态**：sontv 只把「本站入口 `/play?url=…`」当作自己发出的链接，剥掉旧凭据重盖新的——一份列表反复改写不会套娃。别家代理站的链接（哪怕路径也叫 `/play`）sontv 一律原样看待，只在它外面盖上本站的临时 token。
 - **改写有分寸**：`url-tvg` / `x-tvg-url` / `catchup-source` 只改写「本站形态」的链接。纯第三方直连原样保留，本站因此不把凭据送给源站，也不把第三方 EPG 拖进本站代理。含 `${...}` 模板的 `catchup-source` 整条不动，因为模板不能 urlencode。`URI=`（如 `#EXT-X-KEY`）与资源行同规则处理。
 - **按关键字过滤**：`filter=` 指定关键字。sontv 匹配条目名（显示名 + `tvg-name`），命中即保留。匹配不区分大小写，按子串匹配，多个词之间是 OR。
 - **保留格式**：sontv 逐字节保留换行符（`\r\n` / `\n` / `\r`）。不改写时，输出与输入完全一致。
@@ -227,7 +227,6 @@ sontv 在启动时读取一次配置。改后需重启生效，token 表除外�
   "default_ttl_hours": 24,
   "upstream_m3u": "https://cdn.qd.je/live.m3u",
   "listen": "0.0.0.0:9900",
-  "unwrap_remote_proxy": true,
   "log_level": "info"
 }
 ```
@@ -238,7 +237,6 @@ sontv 在启动时读取一次配置。改后需重启生效，token 表除外�
 | `default_ttl_hours` | int | `24` | 临时 token 的默认有效期（小时）。表里没写第三列的行用它。≤0 时静默回落为 24 |
 | `upstream_m3u` | string | `https://cdn.qd.je/live.m3u` | `/sub` 未带 `url=` 时使用的上游播放列表 |
 | `listen` | string | `0.0.0.0:9900` | 监听地址。绑 `0.0.0.0` 才能被容器端口转发（`-p 9900:9900` 转发到容器 IP，只听 `127.0.0.1` 会无人应答）。裸机部署因此默认对全网卡开放，鉴权由 token 把关。只让本机可达就显式写 `127.0.0.1:9900` |
-| `unwrap_remote_proxy` | bool | `true` | 是否把第三方代理链接解包成本站单跳 |
 | `log_level` | string | `info` | 日志级别 `debug` / `info` / `warn` / `error`。详见[日志](#日志) |
 
 `tokens_file` 写相对路径时，同样按二进制同级目录解析。
@@ -446,7 +444,7 @@ curl "http://127.0.0.1:9900/sub?token=<稳定token>&url=https%3A%2F%2Fexample.co
 ```
 #EXTM3U
 #EXTINF:-1 tvg-name="翡翠台",翡翠台
-http://你的域名/url?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&u=https%3A%2F%2Fexample.com%2Flive%2Fa.ts
+http://你的域名/play?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&url=https%3A%2F%2Fexample.com%2Flive%2Fa.ts
 ```
 
 `/sub` 的响应里**永远不含稳定 token**，只有短命临时 token。播放器直接抓这条订阅地址即可，子链接会自动走回本站。
@@ -459,8 +457,8 @@ http://你的域名/url?t=1759257600.3f2a1b0c9d8e7f60.xxxxxxxx&u=https%3A%2F%2Fe
 | `400` | 目标地址缺失/非法/非 http(s)、上游未配置、目标指向本站自身 |
 | `401` | 临时 token 无效（过期、签名不符，或对应的行已被删除） |
 | `403` | 稳定 token 无效（缺失或不在表里） |
-| `405` | `/url` 收到非 GET/HEAD 请求 |
-| `502` | 上游抓取/请求/读取失败，或播放列表超出上限（`/sub` 8 MiB、`/url` 4 MiB） |
+| `405` | `/play` 收到非 GET/HEAD 请求 |
+| `502` | 上游抓取/请求/读取失败，或播放列表超出上限（`/sub` 8 MiB、`/play` 4 MiB） |
 | `503` | token 表为空或未能装载，服务未就绪，fail closed |
 
 错误响应统一是一行纯文本。sontv 不返回服务器信息，也不返回上游细节。
@@ -486,7 +484,7 @@ internal/config/       配置装载（JSON 叠加缺省值）
 internal/tokens/       token 表解析与原子热重载（只存 sha256）
 internal/temptoken/    临时 token 的签发与校验
 internal/playlist/     播放列表改写（纯函数，不碰网络）
-internal/server/       HTTP 路由、认证、/sub 与 /url 的实现
+internal/server/       HTTP 路由、认证、/sub 与 /play 的实现
   └── curl/             端到端测试
 docs/                  配置示例（config.example.json）
 ```

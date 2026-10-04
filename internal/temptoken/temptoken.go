@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // 临时 token 形态：<exp>.<uid>.<sig_b64url>（设计 §2.3）。

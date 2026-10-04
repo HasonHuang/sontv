@@ -21,11 +21,10 @@ const DefaultConfigName = "config.json"
 // Config 是启动时读一次的服务配置，改后重启服务生效。
 // 与 token 表（可热重载）分开：那些是凭据，这些是进程的监听与上游地址。
 type Config struct {
-	TokensFile        string `json:"tokens_file"`
-	DefaultTTLHours   int    `json:"default_ttl_hours"`
-	UpstreamM3U       string `json:"upstream_m3u"`
-	Listen            string `json:"listen"`
-	UnwrapRemoteProxy bool   `json:"unwrap_remote_proxy"`
+	TokensFile      string `json:"tokens_file"`
+	DefaultTTLHours int    `json:"default_ttl_hours"`
+	UpstreamM3U     string `json:"upstream_m3u"`
+	Listen          string `json:"listen"`
 	// LogLevel 是日志门槛。放在配置文件里而不是让每个部署环境（systemd /
 	// OpenRC / 容器）各自想办法塞参数：服务单元里的参数既难改又会和手改配置
 	// 打架，而环境变量在 systemd 下根本传不进服务进程（README 有实测记录）。
@@ -39,12 +38,11 @@ const DefaultLogLevel = "info"
 // 单独一个函数：测试与「配置文件不存在时照常启动」都依赖它。
 func DefaultConfig() *Config {
 	return &Config{
-		TokensFile:        "/opt/sontv/tokens.txt",
-		DefaultTTLHours:   24,
-		UpstreamM3U:       "https://cdn.qd.je/live.m3u",
-		Listen:            DefaultListen,
-		UnwrapRemoteProxy: true,
-		LogLevel:          DefaultLogLevel,
+		TokensFile:      "/opt/sontv/tokens.txt",
+		DefaultTTLHours: 24,
+		UpstreamM3U:     "https://cdn.qd.je/live.m3u",
+		Listen:          DefaultListen,
+		LogLevel:        DefaultLogLevel,
 	}
 }
 

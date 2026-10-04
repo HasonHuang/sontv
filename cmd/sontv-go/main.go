@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/config"
-	"github.com/HasonHuang/mytv/go/internal/server"
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/config"
+	"github.com/HasonHuang/sontv/internal/server"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // main 入口：解析参数、装载 token 表、起服务、等信号。

@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/HasonHuang/mytv/go/internal/playlist"
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/playlist"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // 内存纪律（设计 §5.3、ADR-0004）：
@@ -26,16 +26,16 @@ var probePool = sync.Pool{New: func() any {
 	return &b
 }}
 
-// handleURL 处理 /url：代理目标地址，流式吐回；若返回是 m3u8 则逐行改写盖章。
+// handlePlay 处理 /play：代理目标地址，流式吐回；若返回是 m3u8 则逐行改写盖章。
 //
 // 认证接受稳定或临时 token（ADR-0002），优先临时。Range 原样透传，
 // 上游重定向由客户端自动跟随（≤5 跳，不透传 Location）。
-func (s *Server) handleURL(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 	// 日志上下文在认证之前就建：认证失败（401/403/503）恰恰是「播不了」的
 	// 头号原因，没有编号就对不上是哪一次播放出的问题。
 	lg := newReqLog(credKind(r.URL.Query()), "", r.URL.Query().Get(targetParam))
 
-	row := s.authURL(w, r, lg)
+	row := s.authPlay(w, r, lg)
 	if row == nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (s *Server) handleURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有正文真的以 #EXTM3U 开头才改写（ADR-0004 §后果，比 PHP 保守）：
+	// 只有正文真的以 #EXTM3U 开头才改写（ADR-0004 §后果，宁可保守）：
 	// 后缀/Content-Type 命中的坑文件不会被误当 playlist 逐行处理。
 	if !startsWithEXTM3U(probe) {
 		streamThrough(w, resp, probe, lg)
@@ -116,7 +116,7 @@ func credKind(q url.Values) string {
 	return "稳定"
 }
 
-// doUpstream 向上游发请求：透传 Range/If-Range，带上伪装 UA（对齐 PHP 版）。
+// doUpstream 向上游发请求：透传 Range/If-Range，带上伪装 UA。
 // 不转发客户端其它头，避免泄露；重定向由 client 自动跟随（≤5 跳，防环）。
 func (s *Server) doUpstream(r *http.Request, target *url.URL) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, target.String(), nil)

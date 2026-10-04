@@ -10,11 +10,11 @@ import (
 // Playlist 改写是纯函数：输入正文与选项，输出正文，不碰网络。
 // 选项全部显式传入，调用方决定「本站入口」「上游基准」「过滤词」是什么。
 
-// /url 查询参数名。与 server 包的同名常量是同一份契约的两端；
+// /play 查询参数名。与 server 包的同名常量是同一份契约的两端；
 // playlist 是纯函数包，不该反向依赖 server，故此处各自成文。
 const (
-	tempParam   = "t" // 临时 token（改写后子链接携带）
-	targetParam = "u" // 目标地址（/url 的上游）
+	tempParam   = "t"   // 临时 token（改写后子链接携带）
+	targetParam = "url" // 目标地址（/play 的上游，与 /sub 的 url= 同名）
 )
 
 // RewriteOptions 描述一次改写所需的全部上下文。
@@ -32,18 +32,16 @@ type RewriteOptions struct {
 	// SelfRoot 是本站入口根 scheme://host[:port]，由请求头 Host 现取。
 	// 子链接据此拼成绝对地址：上游列表里的相对路径与本站入口路径毫无关系，
 	// 只有绝对地址才能让播放器无论从哪个入口拿到列表都一路走回本站。
-	// 为空时退化为根相对 /url（纯函数测试等无入口场景）。
+	// 为空时退化为根相对 /play（纯函数测试等无入口场景）。
 	SelfRoot string
-	// Unwrap 表示把第三方代理链接解包成本站单跳（设计 §4.2）。
-	Unwrap bool
 }
 
 // RewritePlaylist 逐行改写一份播放列表。
 //
 // 三类链接（ADR-0003）：
-//   - 本站代理形态（path 以 /url 开头且带 u=）→ 剥旧 t、重盖新 t（天然幂等）
+//   - 本站形态（自己的入口 /play?url=）→ 剥旧 t、重盖新 t（天然幂等）
 //   - 相对路径 → 按 BaseRoot/BaseDir 补全成绝对
-//   - 其余按资源行处理：包装进本站 /url
+//   - 其余按资源行处理：包装进本站 /play
 //
 // 属性行（URL= / url-tvg= / x-tvg-url= / catchup-source=）只改写「本站形态」
 // 的链接；纯第三方直连原样保留，凭据不落别人域名。含 ${...} 的 catchup-source
@@ -169,14 +167,18 @@ func splitLine(s string, i int) (line, delim string) {
 	return line, s[j : j+1]
 }
 
-// rewriteResourceLine 处理一条资源行：等价于 PHP 的 wrap + onlyOwn=false。
+// rewriteResourceLine 处理一条资源行：第三方直连也要包装，凭据才落在本站链接上。
+// （属性行相反，见 rewriteLink 的 onlyOwn。）
 func rewriteResourceLine(line string, opts RewriteOptions) string {
 	return rewriteLink(line, opts, false)
 }
 
-// rewriteLink 把一条链接归一化成「本站单跳代理链接」并盖章（PHP mytv_rewrite_link）。
+// rewriteLink 把一条链接归一化成「本站单跳代理链接」并盖章。
 //
-// onlyOwn=true 时只处理代理形态与本站链接，纯第三方直连原样返回——用于
+// 本站形态（自己发出的 /play?url=）剥出内层重签，反复改写不套娃；其余链接
+// 一律按它本来的样子处理——本站只在自己的子链接形态上盖章。
+//
+// onlyOwn=true 时只处理本站形态与本站链接，纯第三方直连原样返回——用于
 // url-tvg / catchup-source 等属性：既不把凭据送给源站，也不把第三方 EPG 平白
 // 拖进本站代理（ADR-0003）。
 func rewriteLink(uri string, opts RewriteOptions, onlyOwn bool) string {
@@ -185,26 +187,15 @@ func rewriteLink(uri string, opts RewriteOptions, onlyOwn bool) string {
 		return uri
 	}
 
-	inner, isProxy := parseProxyInner(uri)
-	host := urlHost(uri)
-	isOwn := isProxy && (host == "" || host == opts.SelfHost) ||
-		!isProxy && host != "" && host == opts.SelfHost
-
-	if onlyOwn && !isProxy && !isOwn {
+	if inner, ok := parseProxyInner(uri, opts); ok {
+		return buildProxyLink(inner, opts)
+	}
+	if onlyOwn && !isOwnHost(uri, opts) {
 		return uri // 纯第三方直连：不动、不盖章
 	}
 
 	var target string
 	switch {
-	case isProxy && !opts.Unwrap && !isOwn:
-		// 关闭解包：把别站代理链接原样再包一层（退回 stock 行为）
-		target = uri
-		if !hasHTTPPrefix(target) {
-			target = opts.BaseRoot + "/" + strings.TrimLeft(target, "/")
-		}
-	case isProxy:
-		// 解包成本站单跳：避免双跳套娃，也不再依赖别人的服务器
-		target = inner
 	case hasHTTPPrefix(uri):
 		target = uri
 	case strings.HasPrefix(uri, "//"):
@@ -219,17 +210,36 @@ func rewriteLink(uri string, opts RewriteOptions, onlyOwn bool) string {
 	return buildProxyLink(target, opts)
 }
 
-// parseProxyInner 判定是否「本站/别站代理形态」并抽出内层地址（PHP mytv_is_proxy_link）。
-// 本站自己发出的链接是 /url?t=…&u=…，参数顺序不固定，不能用字面量匹配。
+// isOwnHost 判断链接是否指向本站 host。根相对链接（无 host）不算——
+// 属性行里的相对路径归 BaseDir 补全，不是入口。
+func isOwnHost(uri string, opts RewriteOptions) bool {
+	h := urlHost(uri)
+	return h != "" && h == opts.SelfHost
+}
+
+// parseProxyInner 判定是否「本站形态」并抽出内层地址。
+// 本站自己发出的链接是 /play?t=…&url=…，参数顺序不固定，不能用字面量匹配。
 //
-// 路径必须以 /url 为整段或后跟 '/'——「/url」是本站端点，不是任意以它开头的
-// 路径（/urlist、/urlfoo 是别的资源，误判会把它们的 u= 当内层地址抽走）。
-func parseProxyInner(ref string) (inner string, ok bool) {
+// 认出它是为了幂等：改写时剥掉旧 t、重盖新 t。没有这一步，本站的子链接会被
+// 自己再包一层——链式订阅（拿一份已改写的列表当上游）下会无限套娃。
+//
+// 只认本站形态。别家的 /play 约定我们无从得知，也不该由我们替他解包：
+// 那等于替别人的服务承担跳转与故障。想让某份订阅走本站单跳，让它的链接
+// 指向本站入口即可——那是订阅地址该做的事，不是改写器该做的。
+//
+// 路径必须整段匹配（/play 或 /play/…）：/playlist 这类别的资源不是入口，
+// 误判会把它的 url= 当内层地址抽走。
+func parseProxyInner(ref string, opts RewriteOptions) (inner string, ok bool) {
 	u, err := url.Parse(ref)
-	if err != nil || (u.Path != "/url" && !strings.HasPrefix(u.Path, "/url/")) {
+	if err != nil || (u.Path != "/play" && !strings.HasPrefix(u.Path, "/play/")) {
 		return "", false
 	}
-	inner = u.Query().Get("u")
+	// 绝对形态还得 host 是本站才算本站的。根相对形态（SelfRoot 为空时发出的）
+	// 没有 host，按本站处理——它本就出自本站。
+	if h := urlHost(ref); h != "" && h != opts.SelfHost {
+		return "", false
+	}
+	inner = u.Query().Get(targetParam)
 	if inner == "" {
 		return "", false
 	}
@@ -245,12 +255,12 @@ func urlHost(ref string) string {
 	return strings.ToLower(u.Hostname())
 }
 
-// buildProxyLink 生成 "<入口根>/url?t=<临时>&u=<编码后的绝对地址>"。
+// buildProxyLink 生成 "<入口根>/play?t=<临时>&url=<编码后的绝对地址>"。
 // 入口根 opts.SelfRoot 来自请求头 Host（scheme://host[:port]），与上游地址无关——
 // 上游列表里的相对路径绝不能拿来当本站路径。SelfRoot 为空时退化为根相对
-// /url，返回体不带 host；临时 token 为空时退化为原样绝对地址。
+// /play，返回体不带 host；临时 token 为空时退化为原样绝对地址。
 //
-// tempParam/targetParam 是 /url 的查询参数名，与服务端 auth.go 的同名常量
+// tempParam/targetParam 是 /play 的查询参数名，与服务端 auth.go 的同名常量
 // 是同一份契约的两端；playlist 是纯函数包，不该反向依赖 server，故各写一份。
 func buildProxyLink(absURL string, opts RewriteOptions) string {
 	if opts.TempToken == "" {
@@ -259,11 +269,11 @@ func buildProxyLink(absURL string, opts RewriteOptions) string {
 	q := url.Values{}
 	q.Set(tempParam, opts.TempToken)
 	q.Set(targetParam, absURL)
-	return opts.SelfRoot + "/url?" + q.Encode()
+	return opts.SelfRoot + "/play?" + q.Encode()
 }
 
 // attrPattern 匹配 # 行里带 URL 的属性：url-tvg / x-tvg-url / catchup-source /
-// URI，值可带引号或不带（与 PHP 版同形）。
+// URI，值可带引号或不带。
 var attrPattern = regexp.MustCompile(`(?i)\b(url-tvg|x-tvg-url|catchup-source|URI)\s*=\s*("([^"]*)"|[^\s]+)`)
 
 // rewriteAttrs 改写 # 行里的 URL 属性（含 #EXTM3U 头部行）。
@@ -356,7 +366,7 @@ func entryMatches(blockLines, kws []string) bool {
 	return false
 }
 
-// entryNames 取条目名：显示名 + tvg-name（对齐 PHP mytv_entry_matches）。
+// entryNames 取条目名：显示名 + tvg-name。
 // 显示名在「最后一个引号之后的首个逗号」之后；整行无引号则取首个逗号；
 // 连逗号都没有（畸形行）则退回整行——过滤词仍可能命中属性区（如 tvg-id）。
 // 不能直接取最后一个逗号——显示名自身可能含逗号（如「翡翠台,高清」）。
@@ -384,7 +394,7 @@ var tvgNamePattern = regexp.MustCompile(`(?i)tvg-name\s*=\s*"([^"]*)"`)
 // tvgNameBarePattern 是 tvg-name 无引号时的兜底：值不含引号/空白/逗号。
 var tvgNameBarePattern = regexp.MustCompile(`(?i)tvg-name\s*=\s*([^"\s,]+)`)
 
-// extractTvgNames 抽出 tvg-name 属性值；带引号的整行优先，且不重复匹配裸值（对齐 PHP）。
+// extractTvgNames 抽出 tvg-name 属性值；带引号的整行优先，且不重复匹配裸值。
 func extractTvgNames(line string) []string {
 	if ms := tvgNamePattern.FindAllStringSubmatch(line, -1); len(ms) > 0 {
 		return collectSubmatches(ms)

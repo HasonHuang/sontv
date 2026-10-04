@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/config"
-	"github.com/HasonHuang/mytv/go/internal/temptoken"
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/config"
+	"github.com/HasonHuang/sontv/internal/temptoken"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
 // newTestTable 建一份含两行的 token 表文件并装载。
@@ -116,7 +116,7 @@ func TestSubIssuesTempTokenNotStable(t *testing.T) {
 	if strings.Contains(body, "good") {
 		t.Fatalf("#3 正文绝不该含稳定 token: %s", body)
 	}
-	if !strings.Contains(body, "u=http%3A%2F%2Fcdn%2Fa.ts") {
+	if !strings.Contains(body, "url=http%3A%2F%2Fcdn%2Fa.ts") {
 		t.Fatalf("#3 子链接未改写: %s", body)
 	}
 }
@@ -161,8 +161,8 @@ func TestSubChildLinkRoundTrip(t *testing.T) {
 	}
 }
 
-// #10：/url?t=<临时>&u=<本站自身> → 400。
-func TestURLSelfRef400(t *testing.T) {
+// #10：/play?t=<临时>&url=<本站自身> → 400。
+func TestPlaySelfRef400(t *testing.T) {
 	table, _ := newTestTable(t, "good")
 	s := newTestServer(t, testConfig(), table)
 
@@ -175,7 +175,7 @@ func TestURLSelfRef400(t *testing.T) {
 	tok := temptoken.Issue(row, s.now(), time.Hour)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/url?t="+tok+"&u=http%3A%2F%2Fself.example.com%2Fx.ts", nil)
+	req := httptest.NewRequest("GET", "/play?t="+tok+"&url=http%3A%2F%2Fself.example.com%2Fx.ts", nil)
 	req.Host = "self.example.com"
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -183,8 +183,8 @@ func TestURLSelfRef400(t *testing.T) {
 	}
 }
 
-// #11：/url 代理 .ts + Range → 206，Body 就是上游片段。
-func TestURLRange206(t *testing.T) {
+// #11：/play 代理 .ts + Range → 206，Body 就是上游片段。
+func TestPlayRange206(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Range") != "bytes=0-1023" {
 			t.Errorf("Range 未透传: %q", r.Header.Get("Range"))
@@ -200,7 +200,7 @@ func TestURLRange206(t *testing.T) {
 	s := newTestServer(t, testConfig(), table)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/seg.ts"), nil)
+	req := httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/seg.ts"), nil)
 	req.Header.Set("Range", "bytes=0-1023")
 	s.Handler().ServeHTTP(rec, req)
 
@@ -215,8 +215,8 @@ func TestURLRange206(t *testing.T) {
 	}
 }
 
-// #12：/url 稳定 token 入口代理 .m3u8 → 子链接盖临时 token（ADR-0001）。
-func TestURLStableEntryRewritesPlaylist(t *testing.T) {
+// #12：/play 稳定 token 入口代理 .m3u8 → 子链接盖临时 token（ADR-0001）。
+func TestPlayStableEntryRewritesPlaylist(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:-1,A\nhttp://cdn/a.ts\n"))
 	}))
@@ -226,18 +226,18 @@ func TestURLStableEntryRewritesPlaylist(t *testing.T) {
 	s := newTestServer(t, testConfig(), table)
 
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/x.m3u8"), nil))
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/x.m3u8"), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("#12 期望 200，实际 %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "t=") || !strings.Contains(body, "u=http%3A%2F%2Fcdn%2Fa.ts") {
+	if !strings.Contains(body, "t=") || !strings.Contains(body, "url=http%3A%2F%2Fcdn%2Fa.ts") {
 		t.Fatalf("#12 子链接未盖章: %s", body)
 	}
 }
 
 // #18：上游 302 → 服务端跟跳，最终 200，响应无 Location。
-func TestURLFollowsRedirectNoLocation(t *testing.T) {
+func TestPlayFollowsRedirectNoLocation(t *testing.T) {
 	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp2t")
 		_, _ = w.Write([]byte("FINAL"))
@@ -255,7 +255,7 @@ func TestURLFollowsRedirectNoLocation(t *testing.T) {
 	s := newTestServer(t, testConfig(), table)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(hop.URL+"/start.ts"), nil)
+	req := httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(hop.URL+"/start.ts"), nil)
 	s.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -269,8 +269,8 @@ func TestURLFollowsRedirectNoLocation(t *testing.T) {
 	}
 }
 
-// #19：/url 上游返回含相对路径的 m3u8 → 绝对补全 + 盖章。
-func TestURLRelativeChildAbsolutized(t *testing.T) {
+// #19：/play 上游返回含相对路径的 m3u8 → 绝对补全 + 盖章。
+func TestPlayRelativeChildAbsolutized(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:-1,A\nseg/a.ts\n"))
 	}))
@@ -280,9 +280,9 @@ func TestURLRelativeChildAbsolutized(t *testing.T) {
 	s := newTestServer(t, testConfig(), table)
 
 	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/url?token=good&u="+urlEnc(up.URL+"/live/x.m3u8"), nil))
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/play?token=good&url="+urlEnc(up.URL+"/live/x.m3u8"), nil))
 	body := rec.Body.String()
-	if !strings.Contains(body, "u="+urlEnc(up.URL+"/live/seg/a.ts")) {
+	if !strings.Contains(body, "url="+urlEnc(up.URL+"/live/seg/a.ts")) {
 		t.Fatalf("#19 相对路径未补全为绝对: %s", body)
 	}
 	if !strings.Contains(body, "t=") {
@@ -308,7 +308,7 @@ func TestSubChildLinkAbsoluteFromHost(t *testing.T) {
 	req.Host = "tv.example.com"
 	s.Handler().ServeHTTP(rec, req)
 
-	if !strings.Contains(rec.Body.String(), "http://tv.example.com/url?t=") {
+	if !strings.Contains(rec.Body.String(), "http://tv.example.com/play?t=") {
 		t.Fatalf("子链接应为绝对地址且 host 取自请求头: %s", rec.Body.String())
 	}
 }
@@ -332,7 +332,7 @@ func TestSubChildLinkSchemeFromForwardedProto(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "https")
 	s.Handler().ServeHTTP(rec, req)
 
-	if !strings.Contains(rec.Body.String(), "https://tv.example.com/url?t=") {
+	if !strings.Contains(rec.Body.String(), "https://tv.example.com/play?t=") {
 		t.Fatalf("子链接 scheme 应取自 X-Forwarded-Proto: %s", rec.Body.String())
 	}
 }
@@ -345,23 +345,23 @@ func urlEnc(s string) string {
 	return r.Replace(s)
 }
 
-// extractFirstURL 从响应体里取第一条本站 /url 子链接（绝对地址），
+// extractFirstURL 从响应体里取第一条本站 /play 子链接（绝对地址），
 // 只取 path+query——httptest.NewRequest 不吃带 host 的绝对地址。
 func extractFirstURL(t *testing.T, body string) string {
 	t.Helper()
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
-		if i := strings.Index(line, "/url?"); i >= 0 {
+		if i := strings.Index(line, "/play?"); i >= 0 {
 			return line[i:]
 		}
 	}
-	t.Fatalf("正文里没有 /url 子链接:\n%s", body)
+	t.Fatalf("正文里没有 /play 子链接:\n%s", body)
 	return ""
 }
 
 // tamperTemp 把子链接里 t= 值改动一位，破坏签名。
 func tamperTemp(child string) string {
-	// child 形如 http://host/url?t=XXX&u=YYY 或 /url?t=XXX&u=YYY
+	// child 形如 http://host/play?t=XXX&url=YYY 或 /play?t=XXX&url=YYY
 	i := strings.Index(child, "t=")
 	if i < 0 {
 		return child

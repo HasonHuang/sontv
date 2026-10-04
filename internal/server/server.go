@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HasonHuang/mytv/go/internal/config"
-	"github.com/HasonHuang/mytv/go/internal/playlist"
-	"github.com/HasonHuang/mytv/go/internal/temptoken"
-	"github.com/HasonHuang/mytv/go/internal/tokens"
+	"github.com/HasonHuang/sontv/internal/config"
+	"github.com/HasonHuang/sontv/internal/playlist"
+	"github.com/HasonHuang/sontv/internal/temptoken"
+	"github.com/HasonHuang/sontv/internal/tokens"
 )
 
-// UserAgent 伪装浏览器，部分源站对默认 Go UA 拒绝服务（对齐 PHP 版）。
+// UserAgent 伪装浏览器，部分源站对默认 Go UA 拒绝服务。
 // 导出是给项目外的真实客户端测试复用，免得各写一份。
 const UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
@@ -73,7 +73,7 @@ func newHTTPClient() *http.Client {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sub", s.handleSub)
-	mux.HandleFunc("/url", s.handleURL)
+	mux.HandleFunc("/play", s.handlePlay)
 	return mux
 }
 
@@ -186,11 +186,10 @@ func (s *Server) rewriteOpts(r *http.Request, upstream *url.URL, row *tokens.Row
 		BaseDir:        dir,
 		SelfHost:       hostOnly(r.Host),
 		SelfRoot:       selfRoot(r),
-		Unwrap:         s.cfg.UnwrapRemoteProxy,
 	}
 }
 
-// baseOf 从上游地址推出相对路径基准与目录基准（对齐 PHP base_root/base_dir）。
+// baseOf 从上游地址推出相对路径基准与目录基准。
 func baseOf(u *url.URL) (root, dir string) {
 	root = u.Scheme + "://" + u.Host
 	if i := strings.LastIndex(u.Path, "/"); i >= 0 {

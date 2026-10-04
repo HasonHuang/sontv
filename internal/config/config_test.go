@@ -19,6 +19,9 @@ func TestDefaultConfig(t *testing.T) {
 	if !c.UnwrapRemoteProxy {
 		t.Fatalf("缺省应解包远端代理")
 	}
+	if c.LogLevel != "info" {
+		t.Fatalf("日志缺省应为 info，实际 %q", c.LogLevel)
+	}
 }
 
 // TestLoadConfigEmptyPath 空路径不报错、直接给缺省——便于 -config 留空跑测试。
@@ -71,6 +74,40 @@ func TestLoadConfigSanitizes(t *testing.T) {
 	}
 	if c.Listen != "0.0.0.0:9900" {
 		t.Fatalf("空 listen 应回落缺省，实际 %q", c.Listen)
+	}
+	if c.LogLevel != "info" {
+		t.Fatalf("空 log_level 应回落 info，实际 %q", c.LogLevel)
+	}
+}
+
+// TestLoadConfigLogLevel log_level 是常驻部署调日志的主入口，
+// 必须能读回来；未写的配置文件不能把它清空。
+func TestLoadConfigLogLevel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "c.json")
+
+	// 写了就读得到
+	if err := os.WriteFile(path, []byte(`{"log_level":"debug"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if c.LogLevel != "debug" {
+		t.Fatalf("log_level 未生效: %q", c.LogLevel)
+	}
+
+	// 没写的保持缺省：只配 listen 的最小配置不该把日志级别清掉
+	if err := os.WriteFile(path, []byte(`{"listen":":9000"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err = LoadConfig(path)
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if c.LogLevel != DefaultLogLevel {
+		t.Fatalf("未写的 log_level 应保持缺省，实际 %q", c.LogLevel)
 	}
 }
 

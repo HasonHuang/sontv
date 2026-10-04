@@ -270,29 +270,65 @@ func TestConfigureLogging认标准级别名(t *testing.T) {
 		{"瞎写", slog.LevelInfo},
 	} {
 		t.Setenv(LogLevelEnv, tc.env)
-		ConfigureLogging("")
+		ConfigureLogging("", "")
 		if got := level.Level(); got != tc.want {
 			t.Fatalf("%s=%q → %v, want %v", LogLevelEnv, tc.env, got, tc.want)
 		}
 	}
 }
 
-// 参数必须压过环境变量：systemd 部署下 -log-level 是唯一可靠入口，
-// 若环境变量能盖过它，用户在 unit 里加参数会毫无效果。
-func TestConfigureLogging参数压过环境变量(t *testing.T) {
+// 参数压过环境变量，也压过配置文件：临时提门槛的最短路径。
+// 顺序反了的话，用户在 unit 里加参数会毫无效果。
+func TestConfigureLogging参数压过环境变量与配置文件(t *testing.T) {
 	t.Setenv(LogLevelEnv, "error")
-	ConfigureLogging("debug")
+	ConfigureLogging("debug", "warn")
 	if got := level.Level(); got != slog.LevelDebug {
-		t.Fatalf("参数应压过环境变量，得到 %v", got)
+		t.Fatalf("参数应压过环境变量与配置文件，得到 %v", got)
 	}
 }
 
 // 传空参数时才回落环境变量（裸机手工跑的路径）。
 func TestConfigureLogging空参数回落环境变量(t *testing.T) {
 	t.Setenv(LogLevelEnv, "warn")
-	ConfigureLogging("")
+	ConfigureLogging("", "debug")
 	if got := level.Level(); got != slog.LevelWarn {
 		t.Fatalf("应回落环境变量，得到 %v", got)
+	}
+}
+
+// 环境变量也没有时才读 config.json 的 log_level——常驻部署的主路径。
+// 它排在最后，是为了不挡住上面两个临时覆盖手段。
+func TestConfigureLogging空参数回落配置文件(t *testing.T) {
+	ConfigureLogging("", "debug")
+	if got := level.Level(); got != slog.LevelDebug {
+		t.Fatalf("应回落 config.json，得到 %v", got)
+	}
+}
+
+// 三处都没有时才是 info。
+func TestConfigureLogging无来源回落info(t *testing.T) {
+	t.Setenv(LogLevelEnv, "")
+	ConfigureLogging("", "")
+	if got := level.Level(); got != slog.LevelInfo {
+		t.Fatalf("应回落 info，得到 %v", got)
+	}
+}
+
+// 配置里的取值同样认大小写不敏感，也照样校验非法值回落 info。
+func TestConfigureLogging配置文件取值校验(t *testing.T) {
+	for _, tc := range []struct {
+		cfg  string
+		want slog.Level
+	}{
+		{"DEBUG", slog.LevelDebug},
+		{"Error", slog.LevelError},
+		{"瞎写", slog.LevelInfo},
+		{"  ", slog.LevelInfo}, // 纯空白视同没写
+	} {
+		ConfigureLogging("", tc.cfg)
+		if got := level.Level(); got != tc.want {
+			t.Fatalf("log_level=%q → %v, want %v", tc.cfg, got, tc.want)
+		}
 	}
 }
 

@@ -44,16 +44,17 @@ import (
 // LevelVar 内部带原子，读侧无需加锁。
 var level = new(slog.LevelVar)
 
-// ConfigureLogging 设定日志门槛。arg 非空时优先用它，否则读环境变量
-// SONTV_LOG_LEVEL，两者都缺省则回落到 info。
+// ConfigureLogging 设定日志门槛。三个入口按优先级取第一个非空者：
+// flagVal（-log-level 参数）→ SONTV_LOG_LEVEL 环境变量 → cfgVal（config.json
+// 的 log_level）→ info。
 //
-// 两个入口是有原因的，不是冗余：
+// 三个入口各有各的位置，不是冗余：
 //
-//	-log-level 命令行参数——**systemd 部署下唯一可靠的那个**。
-//	  systemd 给服务进程的是它自己的干净环境，容器里 `docker run -e`
-//	  传进去的变量不会传给 unit 起的进程（实测：PID 1 有，sontv-go 没有）。
-//	  所以只认环境变量的话，恰恰在本项目的主部署方式下会失灵。
-//	SONTV_LOG_LEVEL 环境变量——裸机手工跑二进制时最省事，不用记参数。
+//	config.json 的 log_level——正式配置项，常驻部署改这里，不碰服务单元。
+//	  它排在最后，是为了不挡住临时覆盖：改完配置想立刻看效果的人，
+//	  不必先回去把配置改回 info。
+//	-log-level 参数——临时提门槛最省事的一条路，优先级最高。
+//	SONTV_LOG_LEVEL 环境变量——手工跑二进制时的第三种顺手写法。
 //
 // 取值认 slog 的标准写法：debug / info / warn / error（大小写不敏感），
 // 也认 INFO+2 这类偏移写法。非法或未设置时回落到 info——
@@ -61,24 +62,19 @@ var level = new(slog.LevelVar)
 //
 // 放在 server 包而非 cmd，是因为 reqLog 持有的也是同一个门槛；
 // 两处各设一次必然对不上。
-func ConfigureLogging(arg string) {
+func ConfigureLogging(flagVal, cfgVal string) {
 	level.Set(slog.LevelInfo) // 每次调用都从缺省重来，避免重复调用时残留
 	// SetDefault 同时把标准 log 包也接到这条 handler 上：
 	// 启动期那些还没来得及用 slog 的 log.Printf 也会带上级别与格式。
 	slog.SetDefault(slog.New(newHandler(os.Stderr)))
 
-	src := arg
-	if src == "" {
-		src = strings.TrimSpace(os.Getenv(LogLevelEnv))
-	} else {
-		src = strings.TrimSpace(arg)
-	}
+	src, source := pickLogLevel(flagVal, cfgVal)
 	if src == "" {
 		return
 	}
 	if err := level.UnmarshalText([]byte(src)); err != nil {
 		// 门槛回落到 info 已经在上面做过，这里只提示一下配置被忽略了。
-		slog.Warn("日志级别取值非法，已回落 info", "来源", logLevelSource(arg), "取值", src)
+		slog.Warn("日志级别取值非法，已回落 info", "来源", source, "取值", src)
 	}
 }
 
@@ -86,12 +82,19 @@ func ConfigureLogging(arg string) {
 // 免得两处各写一份字符串、改一处漏一处。
 const LogLevelEnv = "SONTV_LOG_LEVEL"
 
-// logLevelSource 说明这次门槛是打哪来的——用户改错入口时能一眼看出来。
-func logLevelSource(arg string) string {
-	if arg != "" {
-		return "-log-level 参数"
+// pickLogLevel 按优先级选出级别取值，并返回它来自哪个入口——
+// 用户改错入口时，警告行里能一眼看出级别当初是从哪读到的。
+func pickLogLevel(flagVal, cfgVal string) (src, source string) {
+	if s := strings.TrimSpace(flagVal); s != "" {
+		return s, "-log-level 参数"
 	}
-	return LogLevelEnv + " 环境变量"
+	if s := strings.TrimSpace(os.Getenv(LogLevelEnv)); s != "" {
+		return s, LogLevelEnv + " 环境变量"
+	}
+	if s := strings.TrimSpace(cfgVal); s != "" {
+		return s, "config.json 的 log_level"
+	}
+	return "", ""
 }
 
 // handler 是本项目自带的 slog.Handler，输出形如：

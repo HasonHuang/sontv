@@ -16,11 +16,14 @@ import (
 
 // main 入口：解析参数、装载 token 表、起服务、等信号。
 func main() {
-	// 先解析参数、再配日志：门槛就写在 -log-level 里，不解析就无从知道。
+	// 顺序有讲究，分两段：先兜一个 info 把 handler 装上（门槛仍写在
+	// -log-level 里，不解析就无从知道），这样加载配置失败的那些 fatal 日志
+	// 也能走项目自己的格式；配置到手后再配一次，那次才把 config.json 的
+	// log_level 算进优先级里。
 	// 代价是 flag 自身的用法报错走的是默认格式——那几行只在参数写错时出现，
 	// 且内容直白，不必也套上我们的级别前缀。
 	cfgArg, logLevel, showOnly := parseFlags()
-	server.ConfigureLogging(*logLevel)
+	server.ConfigureLogging(*logLevel, "")
 
 	cfgPath, err := config.ResolveConfigPath(*cfgArg)
 	if err != nil {
@@ -30,6 +33,7 @@ func main() {
 	if err != nil {
 		fatalf("配置加载失败: %v", err)
 	}
+	server.ConfigureLogging(*logLevel, cfg.LogLevel)
 	table := newTokenTable(cfg.TokensFile)
 	if *showOnly {
 		return
@@ -52,7 +56,7 @@ func parseFlags() (cfgArg, logLevel *string, showOnly *bool) {
 	// 缺省 config.json：相对路径按二进制同级目录解析（见 config.ResolveConfigPath），
 	// 所以「把二进制和 config.json 放一起」就是免配置的默认部署方式。
 	cfgArg = flag.String("config", config.DefaultConfigName, "配置文件路径（相对路径按二进制同级目录解析；传空串用全缺省）")
-	logLevel = flag.String("log-level", "", "日志级别 debug/info/warn/error，缺省 info；未指定时读环境变量 "+server.LogLevelEnv+"。systemd 下请用这个参数，环境变量传不进服务进程")
+	logLevel = flag.String("log-level", "", "日志级别 debug/info/warn/error；缺省读 config.json 的 log_level，再缺省 info。这个参数优先级最高，临时提门槛最省事")
 	showOnly = flag.Bool("check", false, "只做配置与 token 表校验，不启动服务")
 	flag.Parse()
 	return

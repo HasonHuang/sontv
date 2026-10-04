@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // 缺省监听地址。抽成常量：它同时出现在 DefaultConfig、LoadConfig 的兜底与测试里，
@@ -25,7 +26,14 @@ type Config struct {
 	UpstreamM3U       string `json:"upstream_m3u"`
 	Listen            string `json:"listen"`
 	UnwrapRemoteProxy bool   `json:"unwrap_remote_proxy"`
+	// LogLevel 是日志门槛。放在配置文件里而不是让每个部署环境（systemd /
+	// OpenRC / 容器）各自想办法塞参数：服务单元里的参数既难改又会和手改配置
+	// 打架，而环境变量在 systemd 下根本传不进服务进程（README 有实测记录）。
+	LogLevel string `json:"log_level"`
 }
+
+// DefaultLogLevel 是日志门槛的缺省值，与 README 的日志章节一致。
+const DefaultLogLevel = "info"
 
 // DefaultConfig 返回设计文档 §4.2 的全部缺省值。
 // 单独一个函数：测试与「配置文件不存在时照常启动」都依赖它。
@@ -36,6 +44,7 @@ func DefaultConfig() *Config {
 		UpstreamM3U:       "https://cdn.qd.je/live.m3u",
 		Listen:            DefaultListen,
 		UnwrapRemoteProxy: true,
+		LogLevel:          DefaultLogLevel,
 	}
 }
 
@@ -62,6 +71,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Listen == "" {
 		cfg.Listen = DefaultListen
+	}
+	if strings.TrimSpace(cfg.LogLevel) == "" {
+		cfg.LogLevel = DefaultLogLevel
 	}
 	resolveTokensFile(cfg, path)
 	return cfg, nil

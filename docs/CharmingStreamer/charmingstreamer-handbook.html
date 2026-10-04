@@ -280,6 +280,11 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 1.5rem;align-items:center}
 <div class="toc glossary" id="glossary">
   <h2>术语表</h2>
   <p class="sub">正文出现的英文缩写在此对照。可随时回查。</p>
+  <div class="note info">
+  <b>「推流」有两个方向相反的含义。</b>本手册中若无特别说明，均指第一个：
+  <br>① 系统 → 播放器：系统持续处理一个频道，把 HLS 分片发布出去。频道行的「推流」按钮控制这个过程。
+  <br>② 编码器 → 系统：OBS 等编码器把画面推到本系统的 RTMP 端口。仅在使用自建直播源时出现，见下方「上行推流」。
+  </div>
   <div class="tw">
   <table>
   <thead><tr><th>术语</th><th>全称</th><th>含义</th></tr></thead>
@@ -290,6 +295,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 1.5rem;align-items:center}
   <tr><td>m3u8</td><td>—</td><td>HLS 的播放列表文件。记录最近若干分片的地址</td></tr>
   <tr><td>TS</td><td>MPEG Transport Stream</td><td>传统的单一流封装格式。录制为 TS 时单文件可含多音轨</td></tr>
   <tr><td>连续流</td><td>Continuous stream</td><td>没有清单的单一字节流，如 TS、FLV、AAC、MP3</td></tr>
+  <tr><td>推流</td><td>Streaming / Pushing</td><td>系统持续处理一个频道：向上游拉流、解密、切片、封装成 HLS 并发布给请求的播放器。进行中的频道称「推流中」，其状态显示为「运行中」。频道行的「推流」按钮启动该过程，「停止」按钮结束它</td></tr>
+  <tr><td>上行推流</td><td>RTMP ingest</td><td>编码器把画面主动推到本系统的 RTMP 端口 1935，对应频道的「推流（编码器推给我们）」来源方式。仅用于 OBS、ffmpeg 等自建直播源。与上方的「推流」方向相反</td></tr>
   <tr><td>DRM</td><td>Digital Rights Management</td><td>数字版权保护。内容加密，需要密钥才能播放</td></tr>
   <tr><td>ClearKey</td><td>—</td><td>最简单的 DRM。密钥以 KID:KEY 明文形式给出，可直接填写</td></tr>
   <tr><td>KID</td><td>Key ID</td><td>密钥标识。16 字节，写在 MPD 的 default_KID 里。公开可见</td></tr>
@@ -608,6 +615,17 @@ ok</pre>
 
 <h3>4.2 频道与生命周期</h3>
 <p>频道是一条推流任务。每个频道有一个生命周期模式。模式决定频道何时拉流、何时停止。</p>
+
+<div class="note info">
+<b>「推流」指系统把流发布给播放器。</b>
+系统持续向上游拉流、解密、切片、封装成 HLS，再发布给来请求的播放器。这个过程叫推流。
+频道行的「推流」按钮启动它，「停止」按钮结束它。进行中的频道状态显示为「运行中」。
+<br><br>
+<b>另有一个方向相反的「推流」。</b>
+用 OBS、ffmpeg 做自建直播源时，编码器把画面主动推到系统的 RTMP 端口 1935。
+那是频道的「推流（编码器推给我们）」来源方式，见 <a href="#s7">第 7 章</a>。
+除自建源外，不会遇到这一种。
+</div>
 <div class="tw">
 <table>
 <thead><tr><th>模式</th><th>拉流时机</th><th>停止时机</th><th>适用条件</th></tr></thead>

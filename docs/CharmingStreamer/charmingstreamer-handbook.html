@@ -1213,11 +1213,18 @@ TS 使用内置合成，单文件容纳多音轨。MKV 使用 ffmpeg 合成，�
 
 <h3>7.9 流量伪装</h3>
 <p>「流量伪装」改变 HTTP 出口的外观，用于对抗 CDN 的 Cloudflare 校验。磁盘文件与内部管线保持不变。</p>
+
+<div class="note warn">
+<b>前置条件：频道必须处于「转封装推流」模式。</b>
+在「HLS 反向代理」模式下，系统只透传上游播放列表，不把分片落到自己的磁盘上，因此三项设置<b>全部不生效</b>。
+设好伪装却看不到效果时，先检查频道的分发模式。
+</div>
+
 <div class="tw">
 <table>
 <thead><tr><th>字段</th><th>作用</th></tr></thead>
 <tbody>
-<tr><td>分片后缀</td><td>分片的假后缀，不带点。填 <code>jpg</code> 则分片以 <code>12.jpg</code> 提供</td></tr>
+<tr><td>分片后缀</td><td>分片的假后缀，不带点。填 <code>jpg</code> 则分片以 <code>1791109064091.jpg</code> 提供</td></tr>
 <tr><td>分片 Content-Type</td><td>分片响应的 Content-Type。留空时为 <code>application/octet-stream</code></td></tr>
 <tr><td>播放列表 Content-Type</td><td>设置后播放列表以去后缀形式提供，地址形如 <code>.../index</code></td></tr>
 </tbody>
@@ -1227,6 +1234,106 @@ TS 使用内置合成，单文件容纳多音轨。MKV 使用 ffmpeg 合成，�
 <b>去后缀地址会淘汰部分播放器。</b>iOS 与 Safari 原生播放器严格按 <code>.m3u8</code> 后缀识别。
 同时避免使用 <code>ts</code>、<code>m4s</code>、<code>mp4</code>、<code>aac</code>、<code>vtt</code> 作为假后缀。
 确认客户端使用容忍型播放器后再开启：ExoPlayer、VLC、mpv、ffmpeg。
+</div>
+
+<h4>两种模式下的实测对照</h4>
+<p>同一个直播源、同一套伪装配置，只有分发模式不同。</p>
+<div class="tw">
+<table>
+<thead><tr><th>层</th><th>转封装推流</th><th>HLS 反向代理</th></tr></thead>
+<tbody>
+<tr><td>主清单 Content-Type</td><td><code>text/plain</code></td><td><code>application/vnd.apple.mpegurl</code></td></tr>
+<tr><td>主清单地址</td><td><code>/l/&lt;令牌&gt;/index</code></td><td><code>/l/&lt;令牌&gt;/index</code></td></tr>
+<tr><td>媒体清单 Content-Type</td><td><code>text/plain</code></td><td>不适用</td></tr>
+<tr><td>媒体清单地址</td><td><code>/l/&lt;令牌&gt;/video/index</code></td><td>不适用</td></tr>
+<tr><td>分片后缀</td><td><code>.jpg</code></td><td>无</td></tr>
+<tr><td>分片 Content-Type</td><td><code>image/jpeg</code></td><td>不适用</td></tr>
+</tbody>
+</table>
+</div>
+<p>反向代理模式的响应头里带有上游的 <code>server</code> 值。这是判断当前处于哪种模式的快速方法。</p>
+
+<h4>分片命名</h4>
+<p>分片以 <b>Unix 毫秒时间戳</b>命名，如 <code>1791109064091.jpg</code>。</p>
+<div class="tw">
+<table>
+<thead><tr><th>命名方式</th><th>频道重启后</th><th>CDN 缓存</th></tr></thead>
+<tbody>
+<tr><td>序号 <code>12.jpg</code></td><td>从 0 重新计数，URL 复用</td><td>会命中旧分片</td></tr>
+<tr><td>时间戳</td><td>不复用</td><td>安全</td></tr>
+</tbody>
+</table>
+</div>
+<p>时间戳单调递增，同一个 URL 永远不会对应两段不同字节。这是分片可以安全缓存的前提。</p>
+
+<h4>切片不是图片</h4>
+<p>伪装只改 URL 后缀与 Content-Type，分片的每一个字节保持原样。实测：</p>
+<div class="code">
+$ curl -s -D- -o seg.bin \
+    "http://服务器IP:9100/l/&lt;令牌&gt;/video/1791109064091.jpg"
+
+content-type: image/jpeg
+cache-control: no-store
+content-length: 186684
+
+$ xxd -l 16 seg.bin
+00000000: 4740 111d 0042 f025 0001 c100 00ff 01ff  G@...B.%........
+</div>
+<p>首字节 <code>47</code> 是 MPEG-TS 同步字节。文件大小 <code>186684 ÷ 188 = 993</code>，按 188 字节整包对齐。</p>
+<div class="tw">
+<table>
+<thead><tr><th>特征</th><th>字节</th><th>是否存在</th></tr></thead>
+<tbody>
+<tr><td>JPEG</td><td><code>FF D8 FF</code></td><td>否</td></tr>
+<tr><td>PNG</td><td><code>89 50 4E 47</code></td><td>否</td></tr>
+<tr><td>WebP</td><td><code>RIFF</code></td><td>否</td></tr>
+<tr><td>BMP</td><td><code>42 4D</code></td><td>否</td></tr>
+<tr><td>fMP4</td><td><code>ftyp</code> <code>moof</code></td><td>否</td></tr>
+</tbody>
+</table>
+</div>
+<p>把 <code>.jpg</code> 改名成 <code>.ts</code> 后，ffprobe 直接识别为 MPEG-TS，无需任何提示。</p>
+
+<h4>缓存头与 CDN</h4>
+<p>本系统的播放列表与分片都返回 <code>cache-control: no-store</code>。</p>
+<div class="note warn">
+<b>前面挂了 CDN 时必须覆盖这个设置。</b>
+CDN 默认遵循源站的 <code>Cache-Control</code>，遇到 <code>no-store</code> 就是一个字节都不存。
+需要在 CDN 侧配置「忽略源站缓存头」并设置 Edge TTL，否则伪装只改变了外观，没有任何缓存收益。
+</div>
+<div class="tw">
+<table>
+<thead><tr><th>资源</th><th>建议 Edge TTL</th></tr></thead>
+<tbody>
+<tr><td>分片</td><td>60 – 300 秒</td></tr>
+<tr><td>播放列表</td><td>2 – 5 秒</td></tr>
+<tr><td>订阅与 EPG</td><td>30 秒 – 数分钟</td></tr>
+</tbody>
+</table>
+</div>
+<p>播放列表必须短缓存。TTL 过长会让播放器拿到过期窗口，起播变慢。</p>
+
+<div class="note info">
+<b>令牌在路径里，CDN 缓存不共享。</b>
+设备令牌同时出现在播放列表、EPG 与分片请求的路径中（见 <a href="#s15">第 15 章</a>）。
+CDN 的缓存键包含完整路径，因此同一频道的不同设备各自持有一份缓存副本。
+直播分片只出现一次，同一设备不会重复拉取同一分片，命中率因此趋近于零。
+CDN 此时只起代理转发与隐藏源站地址的作用，不节省带宽。
+</div>
+
+<h4>排错</h4>
+<div class="tw">
+<table>
+<thead><tr><th>症状</th><th>原因</th><th>处理</th></tr></thead>
+<tbody>
+<tr><td>设了伪装，分片仍无假后缀</td><td>频道处于 HLS 反向代理模式</td><td>切到「转封装推流」模式</td></tr>
+<tr><td>清单 Content-Type 仍是 <code>application/vnd.apple.mpegurl</code></td><td>同上</td><td>同上</td></tr>
+<tr><td>伪装不生效且分片 404</td><td>推流会话尚未建立完成</td><td>等状态变为「运行中」后再拉取</td></tr>
+<tr><td>CDN 缓存命中率为 0</td><td>源站发 <code>no-store</code></td><td>CDN 侧配置「忽略源站缓存头」</td></tr>
+<tr><td>播放器报「格式不支持」</td><td>客户端不认去后缀地址</td><td>关闭「播放列表 Content-Type」，或改用容忍型播放器</td></tr>
+<tr><td>iOS / Safari 播不了</td><td>同「播放器报格式不支持」</td><td>同「播放器报格式不支持」</td></tr>
+</tbody>
+</table>
 </div>
 
 <h3>7.10 批量操作</h3>
@@ -2900,6 +3007,8 @@ docker compose up -d</pre>
 <tr><td>卡顿</td><td>健康状态为「缓慢」</td><td>更换上游或代理。检查带宽是否足够</td></tr>
 <tr><td>TVHeadend 无多音轨</td><td>下游不支持 HLS 多音轨</td><td>在轨道面板开启「多音轨输出方式」</td></tr>
 <tr><td>4K 源播放不流畅</td><td>分片过大</td><td>关闭轨道面板的「短分片聚合」。每个上游分片按原样输出</td></tr>
+<tr><td>伪装不生效</td><td>频道处于 HLS 反向代理模式</td><td>切到「转封装推流」。详见 <a href="#s7">第 7 章</a></td></tr>
+<tr><td>CDN 缓存命中率为 0</td><td>源站发送 <code>cache-control: no-store</code></td><td>CDN 侧配置「忽略源站缓存头」并设置 Edge TTL</td></tr>
 </tbody>
 </table>
 </div>

@@ -38,7 +38,7 @@ flowchart LR
 
 | 项 | 结果 |
 | --- | --- |
-| `cargo test --offline` | ✅ 179 项（119 单元 + 60 集成） |
+| `cargo test --offline` | ✅ 200 项（133 单元 + 67 集成） |
 | 冒烟脚本 | ✅ 15 个（assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli）；另有真实翻译联调 1 个（需外网） |
 | DASH 回看 | ✅ 容器内 4 项断言 × 3 次 |
 | 格式与静态检查 | ✅ `cargo fmt --check`；`cargo clippy` 0 error |
@@ -129,6 +129,7 @@ flowchart LR
 > - **U-04 `proxy` + MPD**：`mpd_keep_seconds > 0` 时裁剪 `SegmentTemplate/SegmentTimeline` 与 `SegmentList`，并推进 `$Number$` 的 `startNumber`；绝对 `<BaseURL>` 按目标证据保持直连。
 > - **U-05 配置段**：新增 `[cache.{prefetch,segments,ttl,dash,remux}]` 模型；接入切片索引上限、`ttl.sub_url_secs`/`segment_secs`、媒体切片预取、DASH MPD/切片超时、重试退避、会话空闲回收与保留窗口回退、Remux 目标时长/窗口/重连退避。`[cache.dash]` 的 `playlist_min_secs`/`fast_start_secs`/`publish_delay_secs` 与 watchdog 参数仍待接入。
 > - **U-06 资源/台标部分**：`/panel/api/assets/{convert,list,remove}` 支持 `[assets].map` 与本地 HLS，新增公开 `GET /assets/*path`；`/panel/api/logo/{restore,animate}` 已实现，动效覆盖 6 种效果与 APNG 编码，`logo/list` 增加 `has_original`/`animated`。动效当前仅 PNG。
+> - **V-11 真实 HLS/M3U 验证**：用 Mux 与 Higo 真实源对拍目标；补齐 25 秒总超时、流式部分正文、切片 404 → 200 空正文、清单失败 → 302 `error_url`、HLS 清单 4 次重试、主清单属性白名单、VOD/直播媒体缓存头、已知扩展名保留。详见 F-019。Mux 不再 502；Higo `fct`/`wxxw`/`now-wx` 首切片均完整下载。
 
 #### 0.8.2 待验（目标证据）
 
@@ -160,6 +161,20 @@ flowchart LR
 | `cache.backend = memory` | 仅回显 | 实际缓存仍落盘；目标 memory 统计恒 0（F-015） |
 | 播放侧 `compat_mode` 与 `srt_ua_keywords` | 不实现 | 目标未测出行为（D19 §3.5） |
 | `socks5` 代理 | 不支持 | 未知类型直连并告警；目标行为未验 |
+
+#### 0.8.4 真实源验证（2026-10-22）
+
+| 源/项 | 结果 | 证据 |
+| --- | --- | --- |
+| Mux VOD 主清单 | ✅ 选中 1080p；媒体清单 64 条；首切片 25 秒内部分正文，状态 200，不再 502 | F-019 §5.1 |
+| Higo `fct` | ✅ 301 跟随；直播清单 `no-cache, no-store`；`.jpg` 保留；首切片 4,387,168 字节完整；二次命中 `private` | F-019 §5.2 |
+| Higo `wxxw` | ✅ 无扩展名上游切片改写后完整下载 4,103,100 字节 | F-019 §5.3 |
+| Higo `now-wx` | ✅ 首切片 5,866,540 字节完整下载 | F-019 §5.4 |
+| Higo M3U 订阅 | ✅ `/playlist.m3u` 聚合 3 个频道；`x-tvg-url` 由本实现注入 | F-019 §5.5 |
+| 错误路径 | ✅ 慢速正文 25 秒中断仍 200；切片 404 → 200 空；清单 404 → 302 `error_url`；清单重试 4 次 | F-019 §3 |
+| 清单/伪装 | ✅ 主清单 4 属性白名单；VOD/直播缓存头；已知扩展名保留 | F-019 §4 |
+| 扩展名轮换起点 | 🔶 目标算法未解；本实现只保证取自 `formats` | F-018、F-019 §6 |
+| `[playlist.sources]` 扩展字段 | 🔶 目标 `group_map`/`group_mode`/`unlisted_groups` 未逐字段对拍（V-09） | F-019 §5.5 |
 
 ## 1. 已完成（分阶段）
 

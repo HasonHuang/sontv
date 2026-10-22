@@ -24,6 +24,8 @@ use reqwest::{redirect::Policy, Client, Response as HttpResponse};
 
 const LIVE_BODY: &str = "#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nseg1.ts\n#EXTINF:4.0,\nseg2.ts\n#EXT-X-ENDLIST\n";
 const LIVE: &str = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nseg1.ts\n#EXTINF:4.0,\nseg2.ts\n#EXT-X-ENDLIST\n";
+const BADSEG: &str =
+    "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nmissing.ts\n";
 const MASTER: &str = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080\nv0/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nv1/index.m3u8\n";
 const VARIANT: &str =
     "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nv1.ts\n#EXT-X-ENDLIST\n";
@@ -179,6 +181,7 @@ async fn upstream_file(
     }
     let (mime, body): (&str, &[u8]) = match path.as_str() {
         "live.m3u8" => ("application/vnd.apple.mpegurl", LIVE.as_bytes()),
+        "badseg.m3u8" => ("application/vnd.apple.mpegurl", BADSEG.as_bytes()),
         "master.m3u8" => ("application/vnd.apple.mpegurl", MASTER.as_bytes()),
         "v0/index.m3u8" => ("application/vnd.apple.mpegurl", VARIANT.as_bytes()),
         "seg1.ts" | "seg2.ts" | "v0/v1.ts" => ("video/mp2t", SEGMENT),
@@ -359,6 +362,26 @@ access = "public"
 id = "c1"
 name = "透传频道"
 url = "{upstream}/live.m3u8"
+
+[[groups]]
+id = "badlist"
+name = "失败清单组"
+mode = "proxy"
+access = "open"
+[[groups.channels]]
+id = "c1"
+name = "失败清单频道"
+url = "{upstream}/missing.m3u8"
+
+[[groups]]
+id = "badseg"
+name = "失败切片组"
+mode = "proxy"
+access = "open"
+[[groups.channels]]
+id = "c1"
+name = "失败切片频道"
+url = "{upstream}/badseg.m3u8"
 {epg_section}
 {extra_section}
 "#,
@@ -611,6 +634,32 @@ async fn prefetch_caches_media_playlist_segments_except_tail() {
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
     assert_eq!(count, 1, "默认 skip_tail=1，应只预取第一条切片");
+}
+
+#[tokio::test]
+async fn upstream_playlist_failure_redirects_to_error_url() {
+    let fixture = fixture().await;
+    let response = fetch(&fixture, "/badlist/c1.m3u8").await;
+    assert_eq!(response.status(), StatusCode::FOUND);
+    assert_eq!(
+        header(&response, "location"),
+        "http://placeholder.test/mistake.mp4"
+    );
+}
+
+#[tokio::test]
+async fn missing_upstream_segment_returns_empty_200() {
+    let fixture = fixture().await;
+    let response = fetch(&fixture, "/badseg/c1.m3u8").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(header(&response, "cache-control"), "no-cache, no-store");
+    let body = response.text().await.expect("读正文");
+    let url = media_lines(&body)[0].to_string();
+    let path = url.strip_prefix(&fixture.base).expect("切片应为绝对地址");
+    let response = fetch(&fixture, path).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(header(&response, "cache-control"), "public, max-age=300");
+    assert!(response.bytes().await.expect("读字节").is_empty());
 }
 
 #[tokio::test]

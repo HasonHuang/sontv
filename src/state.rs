@@ -20,6 +20,11 @@ use crate::{
     watchdog::Watchdog,
 };
 
+/// 上游请求总超时。
+///
+/// v0.8.2 实测：慢速正文在 **25.0 秒** 中断；中断后仍以 200 返回已收到的部分字节。
+const UPSTREAM_TIMEOUT_SECS: u64 = 25;
+
 pub struct AppState {
     /// 配置文件路径（保存与重载用）。
     pub config_path: PathBuf,
@@ -91,7 +96,7 @@ impl AppState {
             sessions: SessionStore::new(ttl),
             play_tokens: PlayTokenStore::new(),
             http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(20))
+                .timeout(Duration::from_secs(UPSTREAM_TIMEOUT_SECS))
                 .build()
                 .unwrap_or_default(),
             segments,
@@ -153,7 +158,7 @@ impl AppState {
                 candidate = candidate.basic_auth(&proxy.user, &proxy.pass);
             }
             reqwest::Client::builder()
-                .timeout(Duration::from_secs(20))
+                .timeout(Duration::from_secs(UPSTREAM_TIMEOUT_SECS))
                 .proxy(candidate)
                 .build()
         });

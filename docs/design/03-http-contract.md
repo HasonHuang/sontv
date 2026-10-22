@@ -93,7 +93,7 @@ GET /{gid}/{cid}.m3u8
          正文 = #EXTM3U
                 #EXT-X-VERSION:6
                 #EXT-X-INDEPENDENT-SEGMENTS
-                #EXT-X-STREAM-INF:<最佳变体原属性>
+                #EXT-X-STREAM-INF:<白名单属性>
                 http://<host>/{gid}/{cid}/video/index.txt
 GET /{gid}/{cid}/video/index.txt
   → 200  text/plain; charset=utf-8
@@ -109,12 +109,13 @@ GET /{gid}/{cid}/<P>_<S>.<ext>
 
 | 项 | 契约 | 依据 |
 | --- | --- | --- |
-| 清单缓存窗口 | `max-age` = 清单的 `#EXT-X-TARGETDURATION`；缺失时按 6 秒 | F-018 |
+| 清单缓存窗口 | **VOD**：`max-age` = `#EXT-X-TARGETDURATION`（缺失按 6 秒）；**直播**：`no-cache, no-store` | F-018、F-019 |
 | 切片地址 | 绝对地址（`http://<Host>/…`），不是根相对路径 | F-018 |
 | 扩展名 | `format=hls` → `.m3u8`；`format=mpd` → `.mpd` | S-URL-01 |
 | `<S>` | `sha256(上游切片绝对 URL)` 前 32 hex | S-DIS-04 |
 | `<P>` | 16 hex，仅依赖 `(gid,cid)`；错值 → `302` | S-DIS-17、F-017 |
-| 扩展名轮换 | 取 `[cache.disguise].formats`，每频道独立序列 | S-DIS-04 |
+| 扩展名轮换 | 上游扩展名已在 `[cache.disguise].formats` 中时保留；否则按频道序列轮换 | S-DIS-04、F-019 |
+| 上游超时 | 单个上游请求总超时 **25 秒**；正文中断后保持 `200` 并发送已收字节 | F-019 |
 | 切片类型 | 按伪装后缀给 `Content-Type` | S-DIS-13 |
 | 载荷 | 不改字节 | S-DIS-02 |
 | Token | 入口按开关校验；**切片与子路径不校验** | F-007、F-018 |
@@ -139,7 +140,10 @@ GET /{gid}/{cid}/<P>_<S>.<ext>
 | 切片正文 | `cache/seg_bytes/<gid>_<cid>_<S>.<ext>` | 同上 |
 | 伪装关闭 | 媒体清单直接给上游绝对地址，不建索引 | 目标行为未采证 |
 | `#EXT-X-KEY` 等 | `URI="…"` 绝对化，不改名 | S-DIS-02（不改载荷） |
-| 上游失败 | `502` + `Upstream Error` | F-012 §3 错误串 |
+| 主清单属性 | 只保留 `BANDWIDTH`、`CODECS`、`RESOLUTION`、`FRAME-RATE` | F-019 |
+| HLS 清单重试 | 传输错误、正文解码错误、5xx、408、429 最多 4 次；退避 1/2/4 秒；其它 4xx 不重试 | F-019 |
+| 切片失败 | 上游 404/连接错误 → `200` 空正文；正文中断 → `200` 部分正文；半包不写缓存 | F-019 |
+| 清单失败 | 入口或变体清单失败 → `302 error_url` | F-019 |
 
 ### 4.2 直连模式（M3）
 

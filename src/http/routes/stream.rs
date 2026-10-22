@@ -2,7 +2,7 @@
 //!
 //! 契约见 [`docs/design/03-http-contract.md`](../../../docs/design/03-http-contract.md) §4。
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use axum::{
     body::Body,
@@ -10,6 +10,7 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use tokio::sync::mpsc;
 use url::Url;
 
 use crate::{
@@ -142,7 +143,7 @@ async fn redirect_entry(
         return redirect_asset(config, &url);
     }
     let resolved = if proxy::modes::wants_best_quality(&group.redirect_mode) {
-        match fetch(state, channel_url, &group.id, cid).await {
+        match fetch_playlist(state, channel_url, &group.id, cid).await {
             Ok(text) => proxy::modes::best_variant(&text, channel_url)
                 .unwrap_or_else(|| channel_url.to_string()),
             // 失败不缓存（S-MODE-08）。
@@ -170,12 +171,11 @@ async fn rewrite_entry(
     if let Some(body) = state.playlists.get(&key) {
         return rewrite_response(body);
     }
-    let upstream = match fetch(state, channel_url, &group.id, cid).await {
+    let upstream = match fetch_playlist(state, channel_url, &group.id, cid).await {
         Ok(text) => text,
         Err(err) => {
             tracing::warn!(url = %channel_url, error = %err, "抓取上游清单失败");
-            let _ = config;
-            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+            return redirect_asset(config, &config.server.error_url);
         }
     };
     let rendered = proxy::rewrite_media(&upstream, channel_url, &group.id, cid, &[], false, "");
@@ -357,7 +357,7 @@ async fn proxy_entry(
         Err(err) => {
             tracing::warn!(url = %channel_url, error = %err, "抓取上游清单失败");
             state.stats.record_upstream_failure();
-            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+            return redirect_asset(config, &config.server.error_url);
         }
     };
     if proxy::modes::looks_like_mpd(&upstream) {
@@ -383,7 +383,7 @@ fn master_entry(
     ext: &str,
 ) -> Response {
     let attrs = proxy::media::best_variant(upstream, channel_url)
-        .map(|(attrs, _)| attrs)
+        .map(|(attrs, _)| proxy::media::normalize_variant_attrs(&attrs))
         .unwrap_or_else(|| "BANDWIDTH=1000000".to_string());
     let body = format!(
         "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-STREAM-INF:{attrs}\n{self_base}/{gid}/{cid}/video/index.txt\n"
@@ -490,9 +490,8 @@ fn spawn_prefetch(
     });
 }
 
-/// 媒体清单响应：缓存窗口取上游 `#EXT-X-TARGETDURATION`（S-PROXY-03）。
+/// 媒体清单响应：VOD 取上游 `#EXT-X-TARGETDURATION`，直播禁止缓存（S-PROXY-03）。
 fn media_response(body: String, upstream: &str) -> Response {
-    let seconds = proxy::media::target_duration(upstream).unwrap_or(DEFAULT_TARGET_DURATION);
     let mut response = Response::new(Body::from(body));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -501,9 +500,20 @@ fn media_response(body: String, upstream: &str) -> Response {
     insert_header(
         &mut response,
         header::CACHE_CONTROL,
-        &format!("public, max-age={seconds}, s-maxage={seconds}"),
+        &media_cache_control(upstream),
     );
     response
+}
+
+/// v0.8.2 实测：VOD 清单 `public, max-age=<TARGETDURATION>`；直播清单 `no-cache, no-store`。
+fn media_cache_control(upstream: &str) -> String {
+    let vod = upstream.contains("#EXT-X-PLAYLIST-TYPE:VOD") || upstream.contains("#EXT-X-ENDLIST");
+    if vod {
+        let seconds = proxy::media::target_duration(upstream).unwrap_or(DEFAULT_TARGET_DURATION);
+        format!("public, max-age={seconds}, s-maxage={seconds}")
+    } else {
+        "no-cache, no-store".to_string()
+    }
 }
 
 /// 变体媒体清单：抓最佳变体的清单再改写。
@@ -525,19 +535,19 @@ async fn variant_playlist(
         Err(err) => {
             tracing::warn!(%gid, %cid, error = %err, "抓取上游清单失败");
             state.stats.record_upstream_failure();
-            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+            return redirect_asset(&config, &config.server.error_url);
         }
     };
     // 上游是媒体清单时没有变体清单这条路（S-PROXY-07）。
     let Some((_attrs, variant_url)) = proxy::media::best_variant(&upstream, &channel_url) else {
         return redirect_asset(&config, &config.server.error_url);
     };
-    let text = match fetch(state, &variant_url, gid, cid).await {
+    let text = match fetch_playlist(state, &variant_url, gid, cid).await {
         Ok(text) => text,
         Err(err) => {
             tracing::warn!(url = %variant_url, error = %err, "抓取变体清单失败");
             state.stats.record_upstream_failure();
-            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+            return redirect_asset(&config, &config.server.error_url);
         }
     };
     if proxy::modes::looks_like_mpd(&text) {
@@ -557,7 +567,7 @@ async fn upstream_playlist(
     if let Some(text) = state.playlists.get(&key) {
         return Ok(text);
     }
-    let text = fetch(state, url, gid, cid).await?;
+    let text = fetch_playlist(state, url, gid, cid).await?;
     state.playlists.put(&key, text.clone());
     Ok(text)
 }
@@ -962,22 +972,90 @@ async fn segment(state: &Arc<AppState>, gid: &str, cid: &str, name: &str) -> Res
         return segment_response(bytes, &ext, &segment_cache_control(state, false));
     }
     state.stats.record_segment(false);
-    match fetch_bytes(state, &entry.url, gid, cid).await {
-        Ok(bytes) => {
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            if let Err(err) = std::fs::write(&path, &bytes) {
-                tracing::warn!(error = %err, "写切片缓存失败");
-            }
-            segment_response(bytes, &ext, &segment_cache_control(state, true))
-        }
-        Err(err) => {
-            tracing::warn!(url = %entry.url, error = %err, "抓取上游切片失败");
-            state.stats.record_upstream_failure();
-            (StatusCode::BAD_GATEWAY, "Upstream Error").into_response()
-        }
+    stream_segment(
+        state.clone(),
+        gid.to_string(),
+        cid.to_string(),
+        entry.url,
+        path,
+        ext,
+        true,
+    )
+    .await
+}
+
+/// 边转发边写缓存。
+///
+/// v0.8.2 实测：上游正文中断时，客户端仍收到 `200` 和已收到的部分字节，日志记
+/// `片段下载中断`；只有完整正文才落盘。这里用通道维持背压，并在流结束后写缓存。
+async fn stream_segment(
+    state: Arc<AppState>,
+    gid: String,
+    cid: String,
+    url: String,
+    path: PathBuf,
+    ext: String,
+    first: bool,
+) -> Response {
+    let mut request = state.http_for(&gid, &cid).get(&url);
+    for (name, value) in channel_headers(&state, &gid, &cid) {
+        request = request.header(name, value);
     }
+    let cache_control = segment_cache_control(&state, first);
+    let response = match request.send().await {
+        Ok(response) if response.status().is_success() => response,
+        Ok(response) => {
+            // v0.8.2 实测：上游切片 404 也先回 200，正文为空；日志记片段拉取失败。
+            tracing::warn!(url = %url, status = %response.status(), "片段拉取失败");
+            state.stats.record_upstream_failure();
+            return segment_response(Vec::new(), &ext, &cache_control);
+        }
+        Err(error) => {
+            tracing::warn!(url = %url, error = %error, "片段拉取失败");
+            state.stats.record_upstream_failure();
+            return segment_response(Vec::new(), &ext, &cache_control);
+        }
+    };
+    let mime = mime_guess::from_ext(&ext).first_or_octet_stream();
+    let (tx, mut rx) = mpsc::channel::<Result<axum::body::Bytes, std::io::Error>>(8);
+    let log_url = url;
+    tokio::spawn(async move {
+        let mut response = response;
+        let mut cached = Vec::new();
+        let mut complete = true;
+        loop {
+            match response.chunk().await {
+                Ok(Some(bytes)) => {
+                    cached.extend_from_slice(&bytes);
+                    if tx.send(Ok(bytes)).await.is_err() {
+                        // 客户端已断开；不再继续读上游，也不缓存半包。
+                        return;
+                    }
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    tracing::warn!(url = %log_url, error = %error, "片段下载中断");
+                    complete = false;
+                    break;
+                }
+            }
+        }
+        if complete {
+            if let Some(parent) = path.parent() {
+                let _ = tokio::fs::create_dir_all(parent).await;
+            }
+            if let Err(error) = tokio::fs::write(&path, &cached).await {
+                tracing::warn!(error = %error, "写切片缓存失败");
+            }
+        }
+    });
+    let body = Body::from_stream(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx)));
+    let mut response = Response::new(body);
+    if let Ok(value) = HeaderValue::from_str(mime.as_ref()) {
+        response.headers_mut().insert(header::CONTENT_TYPE, value);
+    }
+    insert_header(&mut response, header::CACHE_CONTROL, &cache_control);
+    response
 }
 
 /// 解析分组与频道。
@@ -1097,6 +1175,48 @@ pub(crate) fn channel_headers(state: &AppState, gid: &str, cid: &str) -> Vec<(St
         .collect()
 }
 
+/// HLS 清单拉取重试次数（含首次请求）。v0.8.2 日志为 `第 1/4…3/4 次重试`。
+const PLAYLIST_RETRY_MAX: usize = 4;
+
+/// 抓上游清单；传输错误、正文解码错误与 5xx 按指数退避重试。
+///
+/// v0.8.2 实测：404 等 4xx 不重试，直接转 `error_url`；超时/正文中断最多 4 次。
+async fn fetch_playlist(
+    state: &AppState,
+    url: &str,
+    gid: &str,
+    cid: &str,
+) -> Result<String, reqwest::Error> {
+    let mut attempt = 1usize;
+    loop {
+        match fetch(state, url, gid, cid).await {
+            Ok(text) => return Ok(text),
+            Err(error) => {
+                if attempt >= PLAYLIST_RETRY_MAX || !retryable_playlist_error(&error) {
+                    return Err(error);
+                }
+                let wait = std::time::Duration::from_millis(1_000u64 << (attempt - 1));
+                tracing::debug!(
+                    url = %url,
+                    attempt,
+                    total = PLAYLIST_RETRY_MAX,
+                    wait_ms = wait.as_millis(),
+                    "M3U8 拉取重试"
+                );
+                tokio::time::sleep(wait).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+fn retryable_playlist_error(error: &reqwest::Error) -> bool {
+    match error.status() {
+        Some(status) => status.is_server_error() || matches!(status.as_u16(), 408 | 429),
+        None => true,
+    }
+}
+
 /// 抓上游文本。
 pub(crate) async fn fetch(
     state: &AppState,
@@ -1129,7 +1249,23 @@ pub(crate) async fn fetch_bytes(
 
 #[cfg(test)]
 mod tests {
-    use super::trim_mpd_window;
+    use super::{media_cache_control, trim_mpd_window};
+
+    #[test]
+    fn media_cache_control_matches_vod_and_live_targets() {
+        assert_eq!(
+            media_cache_control("#EXTM3U\n#EXT-X-TARGETDURATION:11\n#EXT-X-PLAYLIST-TYPE:VOD\n"),
+            "public, max-age=11, s-maxage=11"
+        );
+        assert_eq!(
+            media_cache_control("#EXTM3U\n#EXT-X-TARGETDURATION:8\n#EXTINF:8,\nseg.ts\n"),
+            "no-cache, no-store"
+        );
+        assert_eq!(
+            media_cache_control("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-ENDLIST\n"),
+            "public, max-age=4, s-maxage=4"
+        );
+    }
 
     fn template_mpd() -> &'static str {
         r#"<MPD><Period><AdaptationSet><SegmentTemplate timescale="1000" startNumber="10" media="seg-$Number$.m4s"><SegmentTimeline><S t="0" d="2000"/><S t="2000" d="2000"/><S t="4000" d="2000"/><S t="6000" d="2000"/></SegmentTimeline></SegmentTemplate></AdaptationSet></Period></MPD>"#

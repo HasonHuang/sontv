@@ -38,7 +38,7 @@ flowchart LR
 
 | 项 | 结果 |
 | --- | --- |
-| `cargo test --offline` | ✅ 200 项（133 单元 + 67 集成） |
+| `cargo test --offline` | ✅ 201 项（134 单元 + 67 集成） |
 | 冒烟脚本 | ✅ 15 个（assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli）；另有真实翻译联调 1 个（需外网） |
 | DASH 回看 | ✅ 容器内 4 项断言 × 3 次 |
 | 格式与静态检查 | ✅ `cargo fmt --check`；`cargo clippy` 0 error |
@@ -119,7 +119,7 @@ flowchart LR
 
 | ID | 优先级 | 项 | 现状 | 待做 | 依据 |
 | --- | --- | --- | --- | --- | --- |
-| U-05 | P1 | 目标配置段部分接入 | `[cache.prefetch]`、`[cache.segments]`、`[cache.ttl]`、`[cache.dash]`、`[cache.remux]` 已建模；切片索引上限、订阅/切片 TTL、媒体切片预取、DASH 超时/重试/空闲回收/保留窗口回退、Remux 时长/窗口/退避已接入 | 继续接入 `[cache.dash]` 的 `playlist_min_secs`、`fast_start_secs`、`publish_delay_secs` 与 watchdog 参数；未知键继续原样回写 | 目标配置 JSON、S-CACHE-04、`design/04` |
+| U-05 | P1 | 目标配置段部分接入 | `[cache.prefetch]`、`[cache.segments]`、`[cache.ttl]`、`[cache.dash]`、`[cache.remux]` 已建模；切片索引上限、订阅/切片 TTL、媒体切片预取、DASH 超时/重试/空闲回收/保留窗口回退、DASH 看门狗阈值与冷却、Remux 时长/窗口/退避已接入 | 继续接入 `[cache.dash]` 的 `playlist_min_secs`、`fast_start_secs`、`publish_delay_secs`、`watchdog_tick_secs`、`watchdog_stall_secs` 与 `watchdog_rebuild_stagger_ms`；未知键继续原样回写 | 目标配置 JSON、S-CACHE-04、`design/04` |
 | U-06 | P1 | 台标动效兼容缺口 | `/panel/api/logo/animate` 已实现 6 种效果与 APNG 编码，`.orig/` 备份、`quality` 字符串校验、`animated` 列表标志已接入 | 当前仅支持 PNG，解码依赖 `ffmpeg`/`ffprobe`；目标还覆盖 WebP/BMP/AVIF，并做脏矩形优化 | F-012、`findings/dynamic/12` |
 
 > 本轮已完成（2026-10-22）：

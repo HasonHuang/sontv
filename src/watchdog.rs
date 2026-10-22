@@ -45,16 +45,26 @@ impl Watchdog {
     }
 
     /// 记一次失败；返回当前是否已进入冷却。
-    pub fn record_failure(&self, key: &str) -> bool {
+    ///
+    /// `max_failures = 0` 或 `cooldown = 0` 表示禁用冷却。
+    pub fn record_failure_with(&self, key: &str, max_failures: u32, cooldown: Duration) -> bool {
+        if max_failures == 0 || cooldown.is_zero() {
+            return false;
+        }
         let mut map = self.lock();
         let entry = map.entry(key.to_string()).or_default();
         entry.failures += 1;
-        if entry.failures >= MAX_FAILURES {
-            entry.cooling_until = Some(Instant::now() + COOLDOWN);
+        if entry.failures >= max_failures {
+            entry.cooling_until = Some(Instant::now() + cooldown);
             true
         } else {
             false
         }
+    }
+
+    /// 用默认阈值记一次失败。
+    pub fn record_failure(&self, key: &str) -> bool {
+        self.record_failure_with(key, MAX_FAILURES, COOLDOWN)
     }
 
     /// 记一次成功：清零计数与冷却。
@@ -86,6 +96,18 @@ mod tests {
         assert!(watchdog.is_cooling("g/c"));
         watchdog.clear_all();
         assert!(!watchdog.is_cooling("g/c"), "配置重载立即解除冷却");
+    }
+
+    #[test]
+    fn custom_threshold_and_cooldown() {
+        let watchdog = Watchdog::new();
+        assert!(!watchdog.record_failure_with("g/c", 2, Duration::from_secs(10)));
+        assert!(watchdog.record_failure_with("g/c", 2, Duration::from_secs(10)));
+        assert!(watchdog.is_cooling("g/c"));
+        assert!(!watchdog.record_failure_with("g/d", 0, Duration::from_secs(10)));
+        assert!(!watchdog.is_cooling("g/d"));
+        assert!(!watchdog.record_failure_with("g/e", 2, Duration::ZERO));
+        assert!(!watchdog.is_cooling("g/e"));
     }
 
     #[test]

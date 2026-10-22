@@ -193,6 +193,9 @@ async fn dash_entry(
     self_base: &str,
 ) -> Response {
     let key = format!("dash:{}:{cid}", group.id);
+    let dash = state.snapshot().cache.dash.clone();
+    let watchdog_max = dash.watchdog_rebuild_max.max(1);
+    let watchdog_cooldown = std::time::Duration::from_secs(dash.watchdog_cooldown_secs);
     if state.watchdog.is_cooling(&key) {
         return not_ready();
     }
@@ -214,8 +217,17 @@ async fn dash_entry(
         Err(error) => {
             tracing::warn!(url = %channel_url, error = %error, "DASH 主清单失败");
             state.stats.record_upstream_failure();
-            if state.watchdog.record_failure(&key) {
-                tracing::warn!(group = %group.id, %cid, "连续失败 5 次，进入冷却 3600s");
+            if state
+                .watchdog
+                .record_failure_with(&key, watchdog_max, watchdog_cooldown)
+            {
+                tracing::warn!(
+                    group = %group.id,
+                    %cid,
+                    max_failures = watchdog_max,
+                    cooldown_secs = watchdog_cooldown.as_secs(),
+                    "DASH 连续失败，进入冷却"
+                );
             }
             if error.starts_with("MPD 解析失败") {
                 (StatusCode::BAD_GATEWAY, "Upstream Error").into_response()

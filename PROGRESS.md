@@ -38,7 +38,7 @@ flowchart LR
 
 | 项 | 结果 |
 | --- | --- |
-| `cargo test --offline` | ✅ 203 项（136 单元 + 67 集成） |
+| `cargo test --offline` | ✅ 205 项（138 单元 + 67 集成） |
 | 冒烟脚本 | ✅ 15 个（assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli）；另有真实翻译联调 1 个（需外网） |
 | DASH 回看 | ✅ 容器内 4 项断言 × 3 次 |
 | 格式与静态检查 | ✅ `cargo fmt --check`；`cargo clippy` 0 error |
@@ -119,7 +119,7 @@ flowchart LR
 
 | ID | 优先级 | 项 | 现状 | 待做 | 依据 |
 | --- | --- | --- | --- | --- | --- |
-| U-05 | P1 | 目标配置段部分接入 | `[cache.prefetch]`、`[cache.segments]`、`[cache.ttl]`、`[cache.dash]`、`[cache.remux]` 已建模；切片索引上限、订阅/切片 TTL、媒体切片预取、DASH 超时/重试/空闲回收/保留窗口回退、DASH 看门狗阈值与冷却、Remux 时长/窗口/退避已接入 | 继续接入 `[cache.dash]` 的 `playlist_min_secs`、`fast_start_secs`、`publish_delay_secs`、`watchdog_tick_secs`、`watchdog_stall_secs` 与 `watchdog_rebuild_stagger_ms`；未知键继续原样回写 | 目标配置 JSON、S-CACHE-04、`design/04` |
+| U-05 | P1 | 目标配置段部分接入 | `[cache.prefetch]`、`[cache.segments]`、`[cache.ttl]`、`[cache.dash]`、`[cache.remux]` 已建模；切片索引上限、订阅/切片 TTL、媒体切片预取、DASH 超时/重试/空闲回收、媒体窗口 `playlist_min_secs`、`start_time_offset_secs`、DASH 看门狗阈值与冷却、Remux 时长/窗口/退避已接入 | 继续接入 `[cache.dash]` 的 `fast_start_secs`、`publish_delay_secs`、`watchdog_tick_secs`、`watchdog_stall_secs` 与 `watchdog_rebuild_stagger_ms`；未知键继续原样回写 | 目标配置 JSON、S-CACHE-04、`design/04` |
 | U-06 | P1 | 台标动效兼容缺口 | `/panel/api/logo/animate` 已实现 6 种效果与 APNG 编码，`.orig/` 备份、`quality` 字符串校验、`animated` 列表标志已接入；输入扩展名与目标白名单一致（`png/jpg/jpeg/webp/bmp/avif`） | 解码仍依赖 `ffmpeg`/`ffprobe`；尚未实现脏矩形优化 | F-012、`findings/dynamic/12` |
 
 > 本轮已完成（2026-10-22）：
@@ -127,7 +127,7 @@ flowchart LR
 > - **U-02 EPG 端点补齐**：注册 12 个 `/panel/api/epg/*` 端点；`regenerate` 改为读 `epg/raw/`；额外频道持久化并写入输出；脚本上传/删除、Cron 预览、节目表、源频道、建议与时间偏移预览已实现；面板翻译端点补 `/panel/api` 别名。
 > - **U-03 EPG 配置语义**：`public_viewer_enabled` 控制 `/epg`；`allow_scripts=false` 拒绝脚本源；`python_bin`、`script_timeout_secs`、源级 `timeout_secs`、`tz_shift_mins`、源级 `cron` 生效；`record_pad_*` 进入 `/panel/api/epg/programmes`；全局 Cron 支持标准 5 字段。
 > - **U-04 `proxy` + MPD**：`mpd_keep_seconds > 0` 时裁剪 `SegmentTemplate/SegmentTimeline` 与 `SegmentList`，并推进 `$Number$` 的 `startNumber`；绝对 `<BaseURL>` 按目标证据保持直连。
-> - **U-05 配置段**：新增 `[cache.{prefetch,segments,ttl,dash,remux}]` 模型；接入切片索引上限、`ttl.sub_url_secs`/`segment_secs`、媒体切片预取、DASH MPD/切片超时、重试退避、会话空闲回收与保留窗口回退、Remux 目标时长/窗口/重连退避。`[cache.dash]` 的 `watchdog_rebuild_max`/`watchdog_cooldown_secs` 已接入；`playlist_min_secs`/`fast_start_secs`/`publish_delay_secs` 与其余 watchdog 参数仍待接入。
+> - **U-05 配置段**：新增 `[cache.{prefetch,segments,ttl,dash,remux}]` 模型；接入切片索引上限、`ttl.sub_url_secs`/`segment_secs`、媒体切片预取、DASH MPD/切片超时、重试退避、会话空闲回收、媒体窗口 `playlist_min_secs`、`start_time_offset_secs`、Remux 目标时长/窗口/重连退避。`[cache.dash]` 的 `watchdog_rebuild_max`/`watchdog_cooldown_secs` 已接入；`fast_start_secs`/`publish_delay_secs` 与其余 watchdog 参数仍待接入。
 > - **U-06 资源/台标部分**：`/panel/api/assets/{convert,list,remove}` 支持 `[assets].map` 与本地 HLS，新增公开 `GET /assets/*path`；`/panel/api/logo/{restore,animate}` 已实现，动效覆盖 6 种效果与 APNG 编码，`logo/list` 增加 `has_original`/`animated`。动效输入支持目标白名单 `png/jpg/jpeg/webp/bmp/avif`。
 > - **V-11 真实 HLS/M3U 验证**：用 Mux 与 Higo 真实源对拍目标；补齐 25 秒总超时、流式部分正文、切片 404 → 200 空正文、清单失败 → 302 `error_url`、HLS 清单 4 次重试、主清单属性白名单、VOD/直播媒体缓存头、已知扩展名保留。详见 F-019。Mux 不再 502；Higo `fct`/`wxxw`/`now-wx` 首切片均完整下载。
 

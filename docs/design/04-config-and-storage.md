@@ -24,7 +24,7 @@
 | `[cache.prefetch]` | `enabled`、`concurrency`、`timeout`、`prefetch_limit`、`skip_tail`、`mpd_readahead` | 媒体清单刷新后按并发与超时预取切片；`skip_tail` 跳过尾部 |
 | `[cache.segments]` | `global_max`、`per_channel_max`、`retain_count` | 内存切片索引上限 |
 | `[cache.ttl]` | `sub_url_secs`、`segment_secs`、`refresh_ratio`、`fallback_mpd_secs` | 订阅地址与切片缓存时长 |
-| `[cache.dash]` | `mpd_refresh_*`、`*_timeout_secs`、`fetch_concurrency`、`ondemand_idle_secs`、`retry_*`、`watchdog_*` 等 | MPD/切片超时、重试退避、会话空闲回收、`retain_min_secs` 窗口回退、看门狗阈值与冷却已接入；`playlist_min_secs`、`fast_start_secs`、`publish_delay_secs` 等仍待目标语义证据 |
+| `[cache.dash]` | `mpd_refresh_*`、`*_timeout_secs`、`fetch_concurrency`、`ondemand_idle_secs`、`retry_*`、`watchdog_*` 等 | MPD/切片超时、重试退避、会话空闲回收、`playlist_min_secs` 媒体窗口、`start_time_offset_secs`、看门狗阈值与冷却已接入；`fast_start_secs`、`publish_delay_secs` 等仍待目标语义证据 |
 | `[cache.remux]` | `target_duration_secs`、`window_segments`、`publish_delay_segments`、`reconnect_backoff_ms` | Remux 切片时长、窗口与重连退避 |
 | `[auth]` | `token_enabled`、`token_ttl_hours`、`token_failure_url`、`whitelist` | 播放 Token |
 | `[health]`/`[stats]` | `enabled`、`interval_secs`、`online_window_secs` | 健康与指标 |

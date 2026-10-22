@@ -287,3 +287,21 @@ curl -s -H "Authorization: Bearer $T" http://192.168.215.4:19904/panel/api/epg/m
 curl -s http://192.168.215.4:19904/epg.xml
 
 ```
+
+## 11. 2026-10-22 补充：DASH 媒体窗口
+
+用自建动态 MPD 探测 `[cache.dash]` 的窗口字段。MPD 为 `type="dynamic"`，`SegmentTemplate@duration=4s`，源站对任意 `$Number$` 返回同一组 6 个切片。
+
+| 配置 | 目标媒体清单 |
+| --- | --- |
+| `playlist_min_secs=30`、`retain_min_secs=90`、`fetch_extra_segments=2` | **8 条**（32 秒）；`#EXT-X-MEDIA-SEQUENCE` 递增 |
+| `playlist_min_secs=12`、其余不变 | **3 条**（12 秒） |
+| `start_time_offset_secs=15` | 直播清单含 `#EXT-X-START:TIME-OFFSET=-15.000` |
+
+结论：
+
+- `playlist_min_secs` 是**媒体清单目标窗口**，按 `ceil(秒 / 切片时长)` 保留最后 N 条；不是“至少 N 秒”。
+- `retain_min_secs=90` 不扩大媒体清单；它用于缓存保留，不是播放列表窗口。
+- `#EXT-X-START` 只出现在直播清单；VOD 没有该行。
+- `fast_start_secs=12`、`publish_delay_secs=0` 的独立作用未分离；默认 0 的发布延迟没有可观测等待。
+- 目标只有 `duration`、没有 `SegmentTimeline` 时仍按墙钟/duration 估算巨大 `$Number$`；源站必须接受任意编号，否则整轮失败（§2）。

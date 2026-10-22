@@ -156,7 +156,7 @@ GET /{gid}/{cid}/<P>_<S>.<ext>
 | `dash` | `200 application/vnd.apple.mpegurl` + `no-cache, no-store` | MPD→HLS；主清单指向 `/{gid}/{cid}/{track}/index.txt`；轨道名 `video_{高}p` / `audio-{n}`；init/切片伪装为图片；就绪门 30 s，超时 → `503 timeout waiting for master playlist` | S-MODE-06/15 |
 | `proxy` | 代理链路（§4） | — | S-MODE-03 |
 
-> `remux` 已实现（纯 Rust 切片，不调用 ffmpeg）。`dash` 已实现 MPD→HLS：解析 `BaseURL`、`SegmentTemplate`/`SegmentTimeline`、`SegmentList`，按需代理 init 与切片。`proxy` 模式下的 MPD 保留正文，只把相对 `<BaseURL>` 改写到 `/{gid}/{cid}/mpd/` 并代理 init/切片与查询串；绝对 `<BaseURL>` 仍直连上游（目标行为）。`mpd_keep_seconds > 0` 时裁剪时间线，并同步推进 `$Number$` 的 `startNumber`；分组未设置时回退到 `[cache.dash].retain_min_secs`。
+> `remux` 已实现（纯 Rust 切片，不调用 ffmpeg）。`dash` 已实现 MPD→HLS：解析 `BaseURL`、`SegmentTemplate`/`SegmentTimeline`、`SegmentList`，按需代理 init 与切片。`proxy` 模式下的 MPD 保留正文，只把相对 `<BaseURL>` 改写到 `/{gid}/{cid}/mpd/` 并代理 init/切片与查询串；绝对 `<BaseURL>` 仍直连上游（目标行为）。`mpd_keep_seconds > 0` 时裁剪时间线，并同步推进 `$Number$` 的 `startNumber`；DASH 媒体清单窗口按 `[cache.dash].playlist_min_secs`（默认 30 秒）取最后 N 秒，分组 `mpd_keep_seconds > 0` 优先。直播媒体清单按 `start_time_offset_secs` 输出 `#EXT-X-START:TIME-OFFSET=-…`。
 
 ## 5. 订阅契约
 

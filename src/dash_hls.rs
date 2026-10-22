@@ -290,7 +290,7 @@ impl Manager {
         let (_, keep, pool) =
             Self::settings(state, gid, cid).unwrap_or_else(|| (upstream.to_string(), 0, 1));
         let dash = state.snapshot().cache.dash.clone();
-        let keep = effective_keep(keep, dash.retain_min_secs);
+        let keep = effective_keep(keep, dash.playlist_min_secs);
         let xml = fetch_mpd(state, gid, cid, upstream, &dash).await?;
         let presentation = dash::parse_presentation(&xml, upstream)
             .map_err(|error| format!("MPD 解析失败: {error:#}"))?;
@@ -362,6 +362,12 @@ impl Manager {
                 return Some((StatusCode::NOT_FOUND, "Segment not found").into_response());
             };
             let formats = disguise_formats(state);
+            let window = effective_keep(keep, dash.playlist_min_secs);
+            let start_offset = if presentation.is_live {
+                dash.start_time_offset_secs.max(0.0)
+            } else {
+                0.0
+            };
             let rendered = render_media(
                 &presentation,
                 stream,
@@ -369,7 +375,7 @@ impl Manager {
                     gid,
                     cid,
                     self_base,
-                    keep_seconds: keep,
+                    keep_seconds: window,
                     pool_size: pool,
                     formats: &formats,
                     track_index: presentation
@@ -377,6 +383,7 @@ impl Manager {
                         .iter()
                         .position(|candidate| candidate.name == track)
                         .unwrap_or(0),
+                    start_offset,
                 },
             );
             self.upsert(gid, cid, upstream, keep, pool);
@@ -402,7 +409,14 @@ impl Manager {
         if entry.is_none() {
             if let Ok(xml) = crate::http::routes::stream::fetch(state, &upstream, gid, cid).await {
                 if let Ok(presentation) = dash::parse_presentation(&xml, &upstream) {
+                    let dash = state.snapshot().cache.dash.clone();
                     let formats = disguise_formats(state);
+                    let window = effective_keep(keep, dash.playlist_min_secs);
+                    let start_offset = if presentation.is_live {
+                        dash.start_time_offset_secs.max(0.0)
+                    } else {
+                        0.0
+                    };
                     let mut segment_count = 0;
                     for (index, stream) in presentation.streams.iter().enumerate() {
                         let rendered = render_media(
@@ -412,10 +426,11 @@ impl Manager {
                                 gid,
                                 cid,
                                 self_base,
-                                keep_seconds: keep,
+                                keep_seconds: window,
                                 pool_size: pool,
                                 formats: &formats,
                                 track_index: index,
+                                start_offset,
                             },
                         );
                         segment_count = segment_count.max(rendered.segment_count);
@@ -591,6 +606,7 @@ struct MediaOptions<'a> {
     pool_size: u32,
     formats: &'a [String],
     track_index: usize,
+    start_offset: f64,
 }
 
 /// 生成媒体清单并登记 init/切片。
@@ -607,6 +623,7 @@ fn render_media(
         pool_size,
         formats,
         track_index,
+        start_offset,
     } = options;
     let mut picked: Vec<&dash::Segment> = stream.segments.iter().collect();
     if keep_seconds > 0 {
@@ -634,8 +651,12 @@ fn render_media(
     let first = picked.first().map(|segment| segment.number).unwrap_or(0);
     let is_live = presentation.is_live;
     let mut body = format!(
-        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:{target}\n#EXT-X-MEDIA-SEQUENCE:{first}\n#EXT-X-DISCONTINUITY-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n"
+        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:{target}\n#EXT-X-MEDIA-SEQUENCE:{first}\n#EXT-X-DISCONTINUITY-SEQUENCE:0\n"
     );
+    if is_live && start_offset > 0.0 {
+        body.push_str(&format!("#EXT-X-START:TIME-OFFSET=-{start_offset:.3}\n"));
+    }
+    body.push_str("#EXT-X-INDEPENDENT-SEGMENTS\n");
     let mut entries = Vec::new();
     let init_ext = pick_ext(formats, track_index);
     if !stream.init.is_empty() {
@@ -830,12 +851,16 @@ fn retry_delay(config: &crate::config::model::CacheDashCfg, attempt: u32) -> Dur
     Duration::from_millis(delay.max(config.min_request_interval_ms as f64) as u64)
 }
 
-/// 分组未指定窗口时，用 `[cache.dash].retain_min_secs` 作为最短保留窗口。
-fn effective_keep(group_keep: u64, retain_min_secs: f64) -> u64 {
+/// 计算 DASH 媒体清单窗口：分组 `mpd_keep_seconds` 优先，否则用 `playlist_min_secs`。
+///
+/// 目标实测：`playlist_min_secs=30`、4 秒切片 → 8 条；`=12` → 3 条。
+fn effective_keep(group_keep: u64, playlist_min_secs: f64) -> u64 {
     if group_keep > 0 {
         group_keep
+    } else if playlist_min_secs > 0.0 {
+        playlist_min_secs.ceil() as u64
     } else {
-        retain_min_secs.ceil().max(1.0) as u64
+        0
     }
 }
 
@@ -924,6 +949,7 @@ mod tests {
                 pool_size: 1,
                 formats: &["webp".to_string()],
                 track_index: 0,
+                start_offset: 0.0,
             },
         );
         assert!(rendered
@@ -932,6 +958,43 @@ mod tests {
         assert!(rendered.body.contains("#EXT-X-ENDLIST"));
         // 4 秒窗口只保留最后两段。
         assert_eq!(rendered.entries.len(), 1 + 2);
+    }
+
+    #[test]
+    fn playlist_min_keeps_target_window() {
+        let p = parse_presentation(
+            r#"<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic">
+  <Period>
+    <AdaptationSet contentType="video">
+      <SegmentTemplate timescale="1000" initialization="init.mp4" media="s-$Number$.m4s" startNumber="1">
+        <SegmentTimeline><S d="4000" r="9"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation id="v0" width="640" height="360"/>
+    </AdaptationSet>
+  </Period>
+</MPD>"#,
+            "http://origin.example/live.mpd",
+        )
+        .expect("MPD");
+        let stream = &p.streams[0];
+        let rendered = render_media(
+            &p,
+            stream,
+            MediaOptions {
+                gid: "g",
+                cid: "c",
+                self_base: "",
+                keep_seconds: 30,
+                pool_size: 1,
+                formats: &["jpg".to_string()],
+                track_index: 0,
+                start_offset: 0.0,
+            },
+        );
+        assert_eq!(rendered.segment_count, 8);
+        assert_eq!(rendered.body.matches("#EXTINF:").count(), 8);
+        assert!(rendered.body.contains("#EXT-X-MEDIA-SEQUENCE:3"));
     }
 
     #[test]
@@ -975,6 +1038,7 @@ mod tests {
                 pool_size: 1,
                 formats: &["jpg".to_string()],
                 track_index: 0,
+                start_offset: 0.0,
             },
         );
         assert!(!rendered.body.contains("#EXT-X-ENDLIST"));
@@ -997,6 +1061,7 @@ mod tests {
                 pool_size: 1,
                 formats: &["jpg".to_string()],
                 track_index: 0,
+                start_offset: 0.0,
             },
         );
         assert!(rendered.body.contains("#EXT-X-MEDIA-SEQUENCE:1"));
@@ -1004,10 +1069,34 @@ mod tests {
     }
 
     #[test]
-    fn group_keep_overrides_retain_min() {
-        assert_eq!(effective_keep(4, 90.0), 4);
-        assert_eq!(effective_keep(0, 90.0), 90);
-        assert_eq!(effective_keep(0, 0.0), 1);
+    fn group_keep_overrides_playlist_min() {
+        assert_eq!(effective_keep(4, 30.0), 4);
+        assert_eq!(effective_keep(0, 30.0), 30);
+        assert_eq!(effective_keep(0, 0.0), 0);
+    }
+
+    #[test]
+    fn live_media_uses_playlist_min_and_start_offset() {
+        let p = presentation();
+        let stream = p.streams.iter().find(|s| s.kind == "video").unwrap();
+        let mut live = p.clone();
+        live.is_live = true;
+        let rendered = render_media(
+            &live,
+            stream,
+            MediaOptions {
+                gid: "g",
+                cid: "c",
+                self_base: "",
+                keep_seconds: 0,
+                pool_size: 1,
+                formats: &["jpg".to_string()],
+                track_index: 0,
+                start_offset: 15.0,
+            },
+        );
+        assert!(rendered.body.contains("#EXT-X-START:TIME-OFFSET=-15.000"));
+        assert!(!rendered.body.contains("#EXT-X-ENDLIST"));
     }
 
     #[test]

@@ -36,8 +36,8 @@ pub fn animate(
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase())
         .unwrap_or_default();
-    if ext != "png" {
-        bail!("动效目前只支持 PNG 台标");
+    if !crate::logo::ALLOWED_EXTS.contains(&ext.as_str()) {
+        bail!("不支持的台标扩展名");
     }
     let path = crate::logo::dir(cache_dir).join(&file);
     if !path.is_file() {
@@ -342,6 +342,52 @@ mod tests {
         assert!(output.windows(4).any(|window| window == b"fcTL"));
         assert!(output.windows(4).any(|window| window == b"fdAT"));
         assert_eq!(&output[output.len() - 12..], b"\0\0\0\0IEND\xaeB`\x82");
+    }
+
+    #[test]
+    fn non_png_inputs_are_animated() {
+        if std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .is_err()
+            || std::process::Command::new("ffprobe")
+                .arg("-version")
+                .output()
+                .is_err()
+        {
+            return;
+        }
+        let root = std::env::temp_dir().join(format!("logo-anim-fmt-{}", uuid::Uuid::new_v4()));
+        let cache = root.to_string_lossy().to_string();
+        let logos = root.join("logos");
+        fs::create_dir_all(&logos).expect("建台标目录");
+        for ext in ["bmp", "jpg", "avif"] {
+            let path = logos.join(format!("x.{ext}"));
+            let status = std::process::Command::new("ffmpeg")
+                .args([
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=red:s=8x8:d=1",
+                    "-frames:v",
+                    "1",
+                ])
+                .arg(&path)
+                .arg("-y")
+                .status()
+                .expect("执行 ffmpeg");
+            if !status.success() {
+                continue;
+            }
+            let report = animate(&cache, &format!("x.{ext}"), "glow", "80", 64, 80, 80)
+                .unwrap_or_else(|error| panic!("{ext}: {error:#}"));
+            assert!(report.frames > 0);
+            let bytes = fs::read(&path).expect("读输出");
+            assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "{ext}");
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

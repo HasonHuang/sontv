@@ -13,7 +13,7 @@ use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
 /// 允许的图片扩展名。
-pub const ALLOWED_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg"];
+pub const ALLOWED_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "avif"];
 
 /// 台标目录。
 pub fn dir(cache_dir: &str) -> PathBuf {
@@ -277,6 +277,17 @@ mod tests {
         );
         assert!(rename(&cache, "missing.png", "x").is_err());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn allowed_exts_match_target() {
+        assert_eq!(ALLOWED_EXTS, &["png", "jpg", "jpeg", "webp", "bmp", "avif"]);
+        for ext in ["png", "jpg", "jpeg", "webp", "bmp", "avif"] {
+            assert_eq!(check_ext(ext).as_deref(), Some(ext));
+        }
+        for ext in ["gif", "svg", "txt"] {
+            assert!(check_ext(ext).is_none(), "{ext}");
+        }
     }
 
     #[test]

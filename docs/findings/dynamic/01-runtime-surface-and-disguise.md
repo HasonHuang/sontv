@@ -155,7 +155,7 @@ http://127.0.0.1:19899/test1/c1/ea8680a1b61c17e4_4528cb59b78721cf5cba897d6b744f0
 ## 9. 复现
 
 ```bash
-# 见 PROGRESS.md §3：容器 iptv82 + 宿主假源(9999) + 面板 API 建组/建频道
+# 见 PROGRESS_bak.md §3：容器 iptv82 + 宿主假源(9999) + 面板 API 建组/建频道
 T=$(curl -s -X POST http://127.0.0.1:19899/panel/api/login \
       -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}' \
     | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')

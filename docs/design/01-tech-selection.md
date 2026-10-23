@@ -1,7 +1,7 @@
 # 01 · 技术选型（IPTV Proxy 重实现）
 
 > 设计版本 v1.0 ｜ 2026-10-19 ｜ 状态：**已确认（用户决策）**
-> 依据：[`../spec/08-target-spec.md`](../spec/08-target-spec.md)、[`../spec/03-environment-and-tooling.md`](../spec/03-environment-and-tooling.md)、[`../../PROGRESS.md`](../../PROGRESS.md) 附录 A
+> 依据：[`../spec/08-target-spec.md`](../spec/08-target-spec.md)、[`../spec/03-environment-and-tooling.md`](../spec/03-environment-and-tooling.md)、[`../../PROGRESS_bak.md`](../../PROGRESS_bak.md) 附录 A
 
 ## 1. 目标与约束
 

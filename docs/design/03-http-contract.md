@@ -597,25 +597,28 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | 会话 | 键 `gid/cid`；15 分钟无访问回收；索引在内存，重启后从空开始 |
 | 范围 | 代理频道；DASH 频道设 `dash_timeshift = true` 时，用 ffmpeg 转本地 HLS 后缓冲（需 ffmpeg 含 DASH 解复用器） |
 
-## 6.16 订阅源预检（P3 已实现）
+## 6.16 订阅源预检（P3 已实现；F-020 对拍）
 
-证据：S-GAP-07。目标只验证了 `GET /subs/status` → `{sources:[]}`。其余响应形状自定。
+证据：S-GAP-07、F-020。
 
 | 方法 | 路径 | 请求 | 响应 |
 | --- | --- | --- | --- |
-| GET | `/subs/status` | — | `{"sources":[{"id","name","url","enabled","include","exclude"}]}` |
-| POST | `/subs/groups` | `{"url":"<m3u>"}` | `{"groups":[{"name","count"}],"total":<n>}` |
-| POST | `/subs/preview` | `{"source":{"id"?,"url"?,"group_map":{…},"unlisted_groups"?,"include"?,"exclude"?}}` | `{"kept","sample":[{"name","group","url"}]×≤5,"trace":{"total","after_group","after_global_exclude","after_include"},"dropped_groups":[],"out_groups":[{"name","count"}]}` |
+| GET | `/subs/status`、`/panel/api/subs/status` | — | `{"sources":[{"id","name","enabled","error","channels","last_ok","last_try","ttl"}]}` |
+| POST | `/subs/groups`、`/panel/api/subs/groups` | `{"url":"<m3u>"}` | `{"groups":[{"name","count"}],"total":<n>}` |
+| POST | `/subs/preview`、`/panel/api/subs/preview` | `{"source":{"id"?,"url"?,"group_map":{…},"group_mode"?,"merge_group"?,"unlisted_groups"?,"include"?,"exclude"?}}` | `{"kept","sample":[{"name","group","tvg_id"}]×≤5,"trace":{"total","after_group","after_global_exclude","after_include","after_exclude","dropped_groups","out_groups":[{"name","count"}]}}` |
 
 规则：
 
-- `source.id` 命中 `[playlist].sources` 时，空 `url`、`include`、`exclude` 用配置补齐。
-- 没有 `group_map` 时保留全部分组。
-- 有 `group_map` 时，未列出的分组按 `unlisted_groups` 处理：`drop`（默认）或 `keep`。
-- `group_map` 值为 `null` 或空串时丢弃该分组，并记入 `dropped_groups`。
-- 顺序固定：分组映射 → `global_exclude` → 源 `include` / `exclude`。
-- 过滤词：频道名包含；`group:<文本>` 分组包含；`id:<tvg-id>` 精确匹配。
+- `source.id` 命中 `[playlist].sources` 时，未提供的字段用配置补齐。
+- `group_map` 是选择集：键命中即选中；未列出的分组按 `unlisted_groups` 处理：`drop`（默认）或 `keep`。空映射 + `drop` → 零频道。
+- `group_mode`：`keep`（默认/未知值）保留原名；`map` 使用映射值，空值保留原名；`merge` 在 `merge_group` 非空时统一分组。
+- 未带 `group-title` 的条目分组名为 `(无分组)`。
+- 顺序固定：分组选择/改名 → `global_exclude` → 源 `include` → 源 `exclude`。
+- `trace` 的 `after_group` 只计分组阶段；`after_global_exclude`、`after_include`、`after_exclude` 均在分组与全局排除之后，按各自阶段累计。
+- 过滤词：频道名包含；`group:<文本>` 同时匹配原分组与映射分组；`id:<tvg-id>` 精确匹配。
 - 源抓取超时 20 秒。`sample` 最多 5 条。
+- `ttl_secs=0` 按 3600 秒；状态 `channels` 为去重后并入条数。
+- 聚合按 URL 去重，范围覆盖同一源与多个源。
 
 ### 6.17 自助解封（P3 已实现）
 

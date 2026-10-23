@@ -33,6 +33,8 @@
 | `[[epg.sources]]` | `id`、`name`、`kind`、`enabled`、`url`、`script`、`cron`、`timeout_secs`、`tz_shift_mins` | 节目单源 |
 | `[epg.translate]` | `enabled`、`url`/`mtran_url`、`token`/`mtran_token`、`source`、`target(s)`、`mtran_batch` | EPG 机翻 |
 | `[subtitle.translate]` | `enabled`、`url`、`token`、`source`、`target(s)`、`batch` | 字幕机翻 |
+| `[playlist]` | `merge_ttl_secs`、`merge_position`、`global_exclude` | 聚合缓存参数、插入位置与全局排除 |
+| `[[playlist.sources]]` | `id`、`name`、`url`、`enabled`、`ttl_secs`、`group_map`、`group_mode`、`merge_group`、`unlisted_groups`、`include`、`exclude` | 源缓存、分组选择/改名、过滤；`ttl_secs=0` 按 3600 秒 |
 | `[[groups]]`/`[[groups.channels]]` | 见 `02-architecture.md` §4.1 | 数据面 |
 
 ## 2. 热重载矩阵
@@ -48,6 +50,7 @@
 | `[cache.remux]` | 新会话生效；已有会话保留旧参数 | 本实现 |
 | `[epg]` | **需重启**（`enabled` 与源列表在启动时读取） | F-008 |
 | `[epg.translate]`/`[subtitle.translate]` | 立即（下次翻译生效） | 设计决策 |
+| `[playlist]`/`[[playlist.sources]]` | 立即；源正文按源级 TTL 复用 | F-020 |
 | `[panel]` | 立即（新会话按新口令） | 设计决策 |
 
 实现：`notify` 监视配置文件。事件到达后重读；解析失败只记日志、保留旧快照。自身写盘时先登记内容摘要，忽略自己触发的下一次事件（避免写回循环）。

@@ -37,10 +37,15 @@ impl TtlCache {
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
+        let ttl = *self.ttl.read().unwrap_or_else(|e| e.into_inner());
+        self.get_with_ttl(key, ttl)
+    }
+
+    /// 按条目自带 TTL 读取；`ttl` 为零表示不按时间失效。
+    pub fn get_with_ttl(&self, key: &str, ttl: Duration) -> Option<String> {
         let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let (at, value) = guard.get(key)?;
-        let ttl = *self.ttl.read().unwrap_or_else(|e| e.into_inner());
-        if at.elapsed() < ttl {
+        if ttl.is_zero() || at.elapsed() < ttl {
             Some(value.clone())
         } else {
             None

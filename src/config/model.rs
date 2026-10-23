@@ -3,6 +3,8 @@
 //! 字段与目标 v0.8.2 的 `config.toml` 对齐（`docs/spec/08-target-spec.md` §11）。
 //! 未建模的段与键落在 `extra`，保存时原样写回。这样不丢第三方配置。
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// 顶层配置。
@@ -714,6 +716,16 @@ pub struct PlaylistSource {
     pub name: String,
     pub url: String,
     pub enabled: bool,
+    /// 源正文缓存时长（秒）；`0` 表示不按时间失效。
+    pub ttl_secs: u64,
+    /// 源分组名 → 目标分组名；空值表示保留原名。
+    pub group_map: BTreeMap<String, String>,
+    /// `keep`（默认）、`map` 或 `merge`；未知值按 `keep`。
+    pub group_mode: String,
+    /// `merge` 模式的目标分组名；空值表示保留原名。
+    pub merge_group: String,
+    /// 未出现在 `group_map` 的分组：`drop`（默认）或 `keep`。
+    pub unlisted_groups: String,
     /// 频道名白名单；支持 `group:` 与 `id:` 前缀。
     pub include: Vec<String>,
     pub exclude: Vec<String>,
@@ -728,6 +740,11 @@ impl Default for PlaylistSource {
             name: String::new(),
             url: String::new(),
             enabled: true,
+            ttl_secs: 0,
+            group_map: BTreeMap::new(),
+            group_mode: "keep".into(),
+            merge_group: String::new(),
+            unlisted_groups: "drop".into(),
             include: Vec::new(),
             exclude: Vec::new(),
             extra: toml::Table::new(),

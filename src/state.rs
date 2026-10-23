@@ -4,6 +4,7 @@
 //! 配置改动走 [`AppState::mutate`]：以磁盘为准重读 → 改 → 校验落盘 → 替换快照。
 
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -40,8 +41,10 @@ pub struct AppState {
     pub segments: SegmentIndex,
     /// 在线清单缓存（TTL 5 秒）。
     pub playlists: TtlCache,
-    /// 订阅聚合源缓存（键含时间桶，TTL 1 小时）。
+    /// 订阅聚合源缓存。每个源按有效 `ttl_secs` 判定。
     pub sources: TtlCache,
+    /// 订阅聚合源最近一次抓取状态（按源 id）。
+    pub source_status: Mutex<HashMap<String, crate::subs::SourceStatus>>,
     /// 上游解析脚本结果缓存（SWR）。
     pub resolver: crate::resolver::Cache,
     /// Remux 会话。
@@ -102,6 +105,7 @@ impl AppState {
             segments,
             playlists: TtlCache::new(Duration::from_secs(5)),
             sources: TtlCache::new(sources_ttl),
+            source_status: Mutex::new(HashMap::new()),
             resolver: crate::resolver::Cache::default(),
             remux: Arc::new(crate::remux::Manager::default()),
             dash_hls: Arc::new(crate::dash_hls::Manager::new()),

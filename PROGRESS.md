@@ -34,11 +34,11 @@ flowchart LR
 | P2 | 订阅聚合、面板分区、DASH 回看、EPG/字幕翻译 | ██████████ 100% |
 | P3 | 目标剩余端点与兼容细节（见 §0.6） | ██████████ 100% |
 
-### 0.3 质量门（2026-10-22）
+### 0.3 质量门（2026-10-23）
 
 | 项 | 结果 |
 | --- | --- |
-| `cargo test --offline` | ✅ 205 项（138 单元 + 67 集成） |
+| `cargo test --offline` | ✅ 215 项（146 单元 + 69 集成） |
 | 冒烟脚本 | ✅ 15 个（assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli）；另有真实翻译联调 1 个（需外网） |
 | DASH 回看 | ✅ 容器内 4 项断言 × 3 次 |
 | 格式与静态检查 | ✅ `cargo fmt --check`；`cargo clippy` 0 error |
@@ -122,7 +122,10 @@ flowchart LR
 | U-05 | P1 | 目标配置段部分接入 | `[cache.prefetch]`、`[cache.segments]`、`[cache.ttl]`、`[cache.dash]`、`[cache.remux]` 已建模；切片索引上限、订阅/切片 TTL、媒体切片预取、DASH 超时/重试/空闲回收、媒体窗口 `playlist_min_secs`、`start_time_offset_secs`、DASH 看门狗阈值与冷却、Remux 时长/窗口/退避已接入 | 继续接入 `[cache.dash]` 的 `fast_start_secs`、`publish_delay_secs`、`watchdog_tick_secs`、`watchdog_stall_secs` 与 `watchdog_rebuild_stagger_ms`；未知键继续原样回写 | 目标配置 JSON、S-CACHE-04、`design/04` |
 | U-06 | P1 | 台标动效兼容缺口 | `/panel/api/logo/animate` 已实现 6 种效果与 APNG 编码，`.orig/` 备份、`quality` 字符串校验、`animated` 列表标志已接入；输入扩展名与目标白名单一致（`png/jpg/jpeg/webp/bmp/avif`） | 解码仍依赖 `ffmpeg`/`ffprobe`；尚未实现脏矩形优化 | F-012、`findings/dynamic/12` |
 
-> 本轮已完成（2026-10-22）：
+> 本轮已完成（2026-10-23）：
+> - **V-09 订阅聚合字段**：按目标对拍补齐 `ttl_secs`、`group_map`、`group_mode`、`merge_group`、`unlisted_groups`；`ttl_secs=0` 按 3600 秒；`group_map` 改为选择集；未分组名为 `(无分组)`；`group:` 同时匹配原/映射分组；聚合按 URL 跨源去重；`/panel/api/subs/*` 别名；状态字段与目标一致。详见 F-020。
+>
+> 上一轮已完成（2026-10-22）：
 > - **U-01 订阅注入 `x-tvg-url`**：`[epg].enabled = true` 时首行输出 `#EXTM3U x-tvg-url="<host>/epg.xml.gz"`；单元与集成测试覆盖。
 > - **U-02 EPG 端点补齐**：注册 12 个 `/panel/api/epg/*` 端点；`regenerate` 改为读 `epg/raw/`；额外频道持久化并写入输出；脚本上传/删除、Cron 预览、节目表、源频道、建议与时间偏移预览已实现；面板翻译端点补 `/panel/api` 别名。
 > - **U-03 EPG 配置语义**：`public_viewer_enabled` 控制 `/epg`；`allow_scripts=false` 拒绝脚本源；`python_bin`、`script_timeout_secs`、源级 `timeout_secs`、`tz_shift_mins`、源级 `cron` 生效；`record_pad_*` 进入 `/panel/api/epg/programmes`；全局 Cron 支持标准 5 字段。
@@ -138,12 +141,12 @@ flowchart LR
 | V-01 | DASH URL 池正常取用 | 已按视频 `pool[0]`、音频/字幕轮询其余实现；目标在 `pool≥2` 环境只拉 MPD 后零切片 | 目标正常 MPD + 多 `<BaseURL>` 样本；记录实际请求分布与回退顺序 |
 | V-02 | `proxy` + MPD 目标分支 | 相对 `<BaseURL>` 分支已对拍；绝对 `<BaseURL>` 目标行为未验；`mpd_keep_seconds` 时间窗裁剪已实现，缺目标 proxy+MPD 对拍 | 目标容器构造绝对 `<BaseURL>` 与多切片 MPD |
 | V-03 | `/epg/api/*` 响应形状 | 面板私有 EPG 端点已按目标面板调用形状实现；公开 `/epg/api/*` 仍为本实现自定；`spec/08` §16 与 `design/03` §8 对 v0.8.2/v0.8.8 路由版本记载冲突 | 目标公开端点逐字段抓取；先解决版本证据冲突 |
-| V-04 | `/subs/{groups,preview}` 字段 | 行为与主要字段已实现；目标逐字段形状未完全对拍 | 目标请求/响应样本，重点比较 `trace`、`dropped_groups`、`out_groups` |
+| V-04 | `/subs/{groups,preview}` 字段 | ✅ 已按目标逐字段对拍：`trace` 含 `after_exclude`/`dropped_groups`/`out_groups`，`sample` 含 `name/group/tvg_id`；见 F-020 | — |
 | V-05 | 每频道独立代理 | 本实现按频道 > 分组 > 直连，覆盖播放、回看、Remux、录制、DASH 回看 | 目标覆盖顺序、认证头、失败回退与 `socks5` 行为 |
 | V-06 | `/unban` 配额与 `whoami` | 本实现已有每个 IP 30 天 3 次与 `whoami`；目标配额未实测 | 目标连续解封；记录状态码、`remaining` 与窗口重置 |
 | V-07 | 切片 TS 结构 | 本实现只保证字节代理；无 PAT/PMT/SDT 证据 | 真实上游 TS 切片；核对 PID 布局、SDT 与 `lumberjack` 水印（S-DIS-08/09） |
 | V-08 | `<P>` 算法 | 自研 `sha256("<gid>:<cid>")[:16]`；目标算法未解 | 更多 `(gid,cid)` 样本或反编译；低影响，不阻塞发布 |
-| V-09 | `[playlist]` / `[share]` 目标语义 | 本实现已覆盖主要路径；目标多 VPS 与聚合边界未完整对拍 | 目标 `merge_ttl_secs`、`merge_position`、`share` 角色切换与信任 IP 样本 |
+| V-09 | `[playlist]` / `[share]` 目标语义 | ✅ `[playlist.sources]` 字段、分组模式、状态、TTL 与去重已对拍（F-020）；`[share]` 主从、门禁与 token/封禁同步见 F-012 | 仅 `merge_ttl_secs` 的独立缓存效果未观察到可见差异 |
 | V-10 | 面板与录制/EPG 交互差分 | API 对拍 22/22 差异 0；12 个面板分区与录制/EPG 完整流程未逐屏对拍 | 目标容器截图与操作录像；只比对行为，不复制目标前端代码、资源与文案 |
 
 #### 0.8.3 已登记为不做或仅回显
@@ -174,7 +177,7 @@ flowchart LR
 | 错误路径 | ✅ 慢速正文 25 秒中断仍 200；切片 404 → 200 空；清单 404 → 302 `error_url`；清单重试 4 次 | F-019 §3 |
 | 清单/伪装 | ✅ 主清单 4 属性白名单；VOD/直播缓存头；已知扩展名保留 | F-019 §4 |
 | 扩展名轮换起点 | 🔶 目标算法未解；本实现只保证取自 `formats` | F-018、F-019 §6 |
-| `[playlist.sources]` 扩展字段 | 🔶 目标 `group_map`/`group_mode`/`unlisted_groups` 未逐字段对拍（V-09） | F-019 §5.5 |
+| `[playlist.sources]` 扩展字段 | ✅ `group_map`/`group_mode`/`merge_group`/`unlisted_groups`/`ttl_secs`；URL 跨源去重；状态形状已对拍 | F-020 |
 
 ## 1. 已完成（分阶段）
 

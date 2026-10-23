@@ -2,7 +2,7 @@
 //!
 //! 契约见 [`docs/design/03-http-contract.md`](../../../docs/design/03-http-contract.md) §5。
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use axum::{
     body::Body,
@@ -28,49 +28,82 @@ pub async fn total_playlist(State(state): State<Arc<AppState>>, headers: HeaderM
 /// 单个源失败只记日志；本地订阅照常返回。
 async fn aggregate_sources(state: &Arc<AppState>, config: &crate::config::Config) -> String {
     let mut extra = String::new();
-    let ttl = config.playlist.merge_ttl_secs.max(1);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_secs())
-        .unwrap_or(0);
-    let bucket = now / ttl;
+    let mut seen = HashSet::new();
     for source in config
         .playlist
         .sources
         .iter()
         .filter(|source| source.enabled && !source.url.trim().is_empty())
     {
-        let key = format!("sub:{}:{bucket}", source.url);
-        let body = match state.sources.get(&key) {
+        let key = format!("sub:{}:{}", source.id, source.url);
+        let ttl = std::time::Duration::from_secs(crate::subs::effective_ttl_secs(source.ttl_secs));
+        let body = match state.sources.get_with_ttl(&key, ttl) {
             Some(body) => body,
-            None => match state.http.get(&source.url).send().await {
-                Ok(response) if response.status().is_success() => match response.text().await {
-                    Ok(text) => {
-                        state.sources.put(&key, text.clone());
-                        text
-                    }
-                    Err(error) => {
-                        tracing::warn!(url = %source.url, error = %error, "读取聚合源失败");
-                        continue;
-                    }
-                },
-                Ok(response) => {
-                    tracing::warn!(url = %source.url, status = %response.status(), "聚合源返回非成功状态");
-                    continue;
-                }
+            None => match fetch_source(state, source).await {
+                Ok(text) => text,
                 Err(error) => {
                     tracing::warn!(url = %source.url, error = %error, "抓取聚合源失败");
+                    let mut statuses = state
+                        .source_status
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner());
+                    let status = statuses.entry(source.id.clone()).or_default();
+                    status.last_try = now_secs();
+                    status.error = Some(error);
                     continue;
                 }
             },
         };
-        extra.push_str(&playlist::aggregate(
-            source,
-            &config.playlist.global_exclude,
-            &body,
-        ));
+        let (piece, channels) =
+            playlist::aggregate_seen(source, &config.playlist.global_exclude, &body, &mut seen);
+        extra.push_str(&piece);
+        let mut statuses = state
+            .source_status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        statuses.entry(source.id.clone()).or_default().channels = channels;
     }
     extra
+}
+
+/// 抓取单个聚合源；成功时写入缓存与状态。
+async fn fetch_source(
+    state: &Arc<AppState>,
+    source: &crate::config::model::PlaylistSource,
+) -> Result<String, String> {
+    let now = now_secs();
+    let response = state
+        .http
+        .get(&source.url)
+        .send()
+        .await
+        .map_err(|error| format!("抓取失败: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("上游返回 {}", response.status()));
+    }
+    let text = response
+        .text()
+        .await
+        .map_err(|error| format!("读取失败: {error}"))?;
+    state
+        .sources
+        .put(&format!("sub:{}:{}", source.id, source.url), text.clone());
+    let mut statuses = state
+        .source_status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let status = statuses.entry(source.id.clone()).or_default();
+    status.last_try = now;
+    status.last_ok = now;
+    status.error = None;
+    Ok(text)
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0)
 }
 
 /// `GET /{gid}/playlist.m3u`。

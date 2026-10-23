@@ -42,6 +42,7 @@ docs/findings/
 | F-017 | 伪装前缀 `<P>`：输入依赖、校验行为与哈希族排除（算法未解，低影响） | 动态+静态 | 观测/推断 | S-DIS-04/12/17 | 2026-10-18 | [`dynamic/14-disguise-prefix-analysis.md`](dynamic/14-disguise-prefix-analysis.md) |
 | F-018 | P0 对拍：代理入口按上游清单类型分支、缓存窗口取 `TARGETDURATION`、切片绝对地址、Token 与未知路径的判定顺序、`passthrough` 需 Token | 动态 | 对拍 | S-DIS-04/07/13/17, S-MODE-09/11, S-URL-03/04 | 2026-10-20 | [`dynamic/15-contract-reconciliation.md`](dynamic/15-contract-reconciliation.md) |
 | F-019 | 真实 HLS 上游：25 秒总超时、流式部分正文、切片/清单失败语义、清单重试、主清单属性白名单、VOD/直播缓存头 | 动态 | 观测 | S-PROXY-01/03/06/07, S-DIS-04/13, S-MODE-03 | 2026-10-22 | [`dynamic/16-real-upstream-hls.md`](dynamic/16-real-upstream-hls.md) |
+| F-020 | 订阅聚合字段：`group_mode`/`group_map`/`merge_group`/`unlisted_groups`、状态字段、源级 TTL、URL 去重 | 动态 | 观测 | S-GAP-07, S-SUB-02/03/08 | 2026-10-23 | [`dynamic/17-subscription-merge.md`](dynamic/17-subscription-merge.md) |
 
 > 新发现按 `F-0NN` 追加一行；`关联规格 ID` 指向 [`../spec/08-target-spec.md`](../spec/08-target-spec.md) 的 `S-*` 条目。
 

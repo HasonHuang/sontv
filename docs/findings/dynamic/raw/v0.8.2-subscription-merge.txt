@@ -1,0 +1,75 @@
+# v0.8.2 订阅聚合对拍原始记录
+
+环境：容器 `rea82v09`（linux/amd64），目标 `v0.8.2`；本地源站 `README` 见同目录 `17-subscription-merge.md`。
+
+## 1 源清单
+
+```text
+#EXTM3U
+#EXTINF:-1 tvg-id="a1" tvg-name="Alpha" group-title="A",Alpha
+http://up/a1
+#EXTINF:-1 tvg-id="a2" tvg-name="Alpha2" group-title="A",Alpha2
+http://up/a2
+#EXTINF:-1 tvg-id="b1" tvg-name="Beta" group-title="B",Beta
+http://up/b1
+#EXTINF:-1 tvg-id="c1" tvg-name="Gamma" group-title="C",Gamma
+http://up/c1
+#EXTINF:-1 tvg-name="Ungrouped",Ungrouped
+http://up/u1
+```
+
+## 2 预检（group_map 为空，unlisted_groups=keep）
+
+```json
+{"kept":5,"sample":[{"group":"A","name":"Alpha","tvg_id":"a1"},{"group":"A","name":"Alpha2","tvg_id":"a2"},{"group":"B","name":"Beta","tvg_id":"b1"},{"group":"C","name":"Gamma","tvg_id":"c1"},{"group":"(无分组)","name":"Ungrouped","tvg_id":""}],"trace":{"after_exclude":5,"after_global_exclude":5,"after_group":5,"after_include":5,"dropped_groups":[],"out_groups":[{"count":2,"name":"A"},{"count":1,"name":"(无分组)"},{"count":1,"name":"B"},{"count":1,"name":"C"}],"total":5}}
+```
+
+## 3 分组模式（group_map A、B 选中）
+
+| 模式 / 未列出 | 输出分组 |
+| --- | --- |
+| `keep` / `drop` | A、B；C 丢弃 |
+| `keep` / `keep` | A、B、C |
+| `map` / `drop` | MappedA、B；C 丢弃 |
+| `merge` + `merge_group=Merged` / `keep` | 全部 `Merged` |
+| `merge` + `merge_group=""` | 保留各自原名 |
+
+```text
+=== mode=map unlisted=drop ===
+{"kept":3,"sample":[{"group":"MappedA","name":"Alpha","tvg_id":"a1"}, ...],"trace":{"after_exclude":3,"after_global_exclude":3,"after_group":3,"after_include":3,"dropped_groups":["C"],"out_groups":[{"count":2,"name":"MappedA"},{"count":1,"name":"B"}],"total":4}}
+```
+
+补充：
+
+- `group_map={}` 且 `unlisted_groups=drop` → `kept=0`，`dropped_groups=["A","B","C"]`。
+- 缺省 `group_mode` 或未知值 → 按 `keep`。
+- `group_map` 值为空串 → 选中并保留原名；`null` → `422`。
+- `(无分组)` 是未带 `group-title` 条目的分组名。
+- `group:` 过滤同时匹配原分组名和映射后的分组名。
+
+## 4 抓取状态
+
+```json
+{"sources":[{"channels":0,"enabled":true,"error":null,"id":"subsrc1","last_ok":0,"last_try":0,"name":"上游测试源","ttl":3600}]}
+```
+
+成功抓取后：
+
+```json
+{"sources":[{"channels":7,"enabled":true,"error":null,"id":"subsrc1","last_ok":1792321934,"last_try":1792321934,"name":"上游测试源","ttl":3600}]}
+```
+
+- `ttl_secs=0` → 状态显示 `3600`。
+- 源 `ttl_secs=5`、`merge_ttl_secs=20`：请求间隔 7 秒时重新抓取源；源级 TTL 生效。
+- `ttl_secs=0`：请求间隔 31 秒未重新抓取（按 3600 秒处理）。
+
+## 5 URL 去重
+
+源正文含 4 条：同 URL 三次（X、Y、重复 X）、另一 URL 一次（X2）。两个源指向同一正文。
+
+```text
+【订阅】S1: 原始 4 → 过滤后 4 → 去重后并入 2
+【订阅】S2: 原始 4 → 过滤后 4 → 去重后并入 0
+```
+
+输出只保留 `http://up/same` 与 `http://up/other` 各一次；同 `tvg-id` 但不同 URL 的条目保留。去重键为 URL，范围覆盖同一源与多个源。

@@ -3,9 +3,14 @@
 //! 契约见 [`docs/design/03-http-contract.md`](../docs/design/03-http-contract.md) §5。
 //! 证据：F-004、F-009、S-URL-02/04/07。
 
-use crate::config::{
-    model::{Channel, Group, PlaylistSource},
-    Config,
+use std::collections::HashSet;
+
+use crate::{
+    config::{
+        model::{Channel, Group, PlaylistSource},
+        Config,
+    },
+    subs::GroupRules,
 };
 
 /// 渲染失败的原因。
@@ -240,7 +245,27 @@ mod tests {
 /// 过滤词：`group:<文本>` 匹配 `group-title`，`id:<文本>` 匹配 `tvg-id`，
 /// 其余按频道名匹配。都不区分大小写，空列表表示不过滤。
 pub fn aggregate(source: &PlaylistSource, global_exclude: &[String], body: &str) -> String {
+    let mut seen = HashSet::new();
+    aggregate_seen(source, global_exclude, body, &mut seen).0
+}
+
+/// 聚合单个源，并把已并入的 URL 记入 `seen`。
+///
+/// 目标按 URL 去重，范围覆盖同一源和多个源（F-020）。返回正文与实际并入条数。
+pub fn aggregate_seen(
+    source: &PlaylistSource,
+    global_exclude: &[String],
+    body: &str,
+    seen: &mut HashSet<String>,
+) -> (String, usize) {
+    let rules = GroupRules {
+        group_map: &source.group_map,
+        group_mode: &source.group_mode,
+        merge_group: &source.merge_group,
+        unlisted_groups: &source.unlisted_groups,
+    };
     let mut out = String::new();
+    let mut added = 0usize;
     let mut pending: Vec<&str> = Vec::new();
     for line in body.lines() {
         let line = line.trim_end_matches('\r');
@@ -254,27 +279,66 @@ pub fn aggregate(source: &PlaylistSource, global_exclude: &[String], body: &str)
             }
             continue;
         }
-        let entry: Vec<&str> = pending.iter().copied().collect();
+        let entry = pending.clone();
         pending.clear();
         let meta = entry
             .iter()
             .find(|line| line.starts_with("#EXTINF"))
             .map(|line| entry_meta(line))
             .unwrap_or_default();
-        if (!source.include.is_empty() && !matches(&source.include, &meta))
-            || matches(&source.exclude, &meta)
-            || matches(global_exclude, &meta)
+        let original = if meta.1.trim().is_empty() {
+            "(无分组)".to_string()
+        } else {
+            meta.1.trim().to_string()
+        };
+        let Some(group) = rules.target(&original) else {
+            continue;
+        };
+        if (!source.include.is_empty() && !matches(&source.include, &meta, &original, &group))
+            || matches(&source.exclude, &meta, &original, &group)
+            || matches(global_exclude, &meta, &original, &group)
         {
             continue;
         }
+        if !seen.insert(trimmed.to_string()) {
+            continue;
+        }
         for line in &entry {
-            out.push_str(line);
+            if line.starts_with("#EXTINF") && group != original {
+                out.push_str(&set_group_title(line, &group));
+            } else {
+                out.push_str(line);
+            }
             out.push('\n');
         }
         out.push_str(trimmed);
         out.push('\n');
+        added += 1;
     }
-    out
+    (out, added)
+}
+
+/// 改写 `#EXTINF` 的 `group-title`；缺属性时插入到名称逗号之前。
+fn set_group_title(line: &str, group: &str) -> String {
+    if let Some(start) = line.find("group-title=\"") {
+        let value_start = start + "group-title=\"".len();
+        if let Some(end) = line[value_start..].find('"') {
+            let mut out = String::with_capacity(line.len() + group.len());
+            out.push_str(&line[..value_start]);
+            out.push_str(group);
+            out.push_str(&line[value_start + end..]);
+            return out;
+        }
+    }
+    match line.rfind(',') {
+        Some(index) => format!(
+            "{} group-title=\"{}\"{}",
+            &line[..index],
+            group,
+            &line[index..]
+        ),
+        None => format!("{line} group-title=\"{group}\""),
+    }
 }
 
 /// 把聚合条目按位置拼到本地订阅上。
@@ -314,16 +378,22 @@ fn attr(line: &str, key: &str) -> Option<String> {
     Some(rest[..end].to_string())
 }
 
-/// 是否有任一过滤词命中。
-fn matches(patterns: &[String], meta: &(String, String, String)) -> bool {
-    let (name, group, id) = meta;
+/// 是否有任一过滤词命中。`group:` 同时匹配原分组与映射后的分组。
+fn matches(
+    patterns: &[String],
+    meta: &(String, String, String),
+    original: &str,
+    group: &str,
+) -> bool {
+    let (name, _, id) = meta;
     patterns
         .iter()
         .map(|pattern| pattern.trim())
         .filter(|pattern| !pattern.is_empty())
         .any(|pattern| {
             if let Some(want) = pattern.strip_prefix("group:") {
-                group.to_lowercase().contains(&want.trim().to_lowercase())
+                let want = want.trim().to_lowercase();
+                original.to_lowercase().contains(&want) || group.to_lowercase().contains(&want)
             } else if let Some(want) = pattern.strip_prefix("id:") {
                 id.to_lowercase() == want.trim().to_lowercase()
             } else {
@@ -340,6 +410,7 @@ mod aggregate_tests {
 
     fn source(include: &[&str], exclude: &[&str]) -> PlaylistSource {
         PlaylistSource {
+            unlisted_groups: "keep".into(),
             include: include.iter().map(|s| s.to_string()).collect(),
             exclude: exclude.iter().map(|s| s.to_string()).collect(),
             ..Default::default()
@@ -367,6 +438,41 @@ mod aggregate_tests {
         assert!(out.contains("CCTV-1") && !out.contains("CCTV-5"));
         let out = aggregate(&source(&[], &[]), &["group:体育".to_string()], BODY);
         assert!(!out.contains("CCTV-5"));
+    }
+
+    #[test]
+    fn group_map_selects_and_rewrites_groups() {
+        let mut source = source(&[], &[]);
+        source.unlisted_groups = "drop".into();
+        source.group_mode = "map".into();
+        source.group_map.insert("新闻".into(), "映射新闻".into());
+        let out = aggregate(&source, &[], BODY);
+        assert!(out.contains("group-title=\"映射新闻\""), "{out}");
+        assert!(!out.contains("CCTV-5"), "{out}");
+    }
+
+    #[test]
+    fn merge_mode_renames_selected_and_unlisted_groups() {
+        let mut source = source(&[], &[]);
+        source.group_mode = "merge".into();
+        source.merge_group = "合并".into();
+        source.group_map.insert("新闻".into(), String::new());
+        let out = aggregate(&source, &[], BODY);
+        assert_eq!(out.matches("group-title=\"合并\"").count(), 2, "{out}");
+    }
+
+    #[test]
+    fn duplicate_urls_are_dropped() {
+        let body = "#EXTM3U\n#EXTINF:-1 tvg-id=\"a\" group-title=\"新闻\",A\nhttp://a/1.m3u8\n#EXTINF:-1 tvg-id=\"b\" group-title=\"新闻\",B\nhttp://a/1.m3u8\n#EXTINF:-1 tvg-id=\"c\" group-title=\"新闻\",C\nhttp://a/2.m3u8\n";
+        let out = aggregate(&source(&[], &[]), &[], body);
+        assert_eq!(out.matches("http://a/1.m3u8").count(), 1, "{out}");
+        assert!(out.contains("http://a/2.m3u8"), "{out}");
+    }
+
+    #[test]
+    fn empty_map_drops_everything_by_default() {
+        let source = PlaylistSource::default();
+        assert!(aggregate(&source, &[], BODY).is_empty());
     }
 
     #[test]

@@ -64,6 +64,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/panel/api/logout", post(routes::panel::logout))
         .route("/panel/api/status", get(routes::panel::status))
         .route("/panel/api/health", get(routes::dash::health))
+        .route("/panel/api/subs/status", get(routes::subs::panel_status))
+        .route("/panel/api/subs/groups", post(routes::subs::panel_groups))
+        .route("/panel/api/subs/preview", post(routes::subs::panel_preview))
         .route(
             "/panel/api/schedule",
             get(routes::schedule::list).post(routes::schedule::create),

@@ -2111,6 +2111,10 @@ id = "s1"
 name = "远端源"
 url = "{upstream}/extra.m3u8"
 enabled = true
+ttl_secs = 60
+group_mode = "map"
+group_map = { "远端组" = "映射组" }
+unlisted_groups = "keep"
 exclude = ["id:skip"]
 "#;
     let fixture = fixture_with_extra(extra).await;
@@ -2120,6 +2124,10 @@ exclude = ["id:skip"]
         .await
         .expect("读正文");
     assert!(body.contains("远端频道"), "{body}");
+    assert!(
+        body.contains("group-title=\"映射组\",远端频道"),
+        "group_map 应改写分组名: {body}"
+    );
     assert!(!body.contains("跳过频道"), "exclude 应生效");
     assert!(!body.contains("全局排除"), "global_exclude 应生效");
     assert!(body.contains("媒体清单频道"), "本地频道仍应存在");
@@ -2127,6 +2135,47 @@ exclude = ["id:skip"]
     let remote = body.find("远端频道").expect("远端");
     let local = body.find("媒体清单频道").expect("本地");
     assert!(remote < local, "聚合应位于顶部");
+}
+
+#[tokio::test]
+async fn playlist_dedups_urls_across_sources() {
+    let extra = r#"
+[[playlist.sources]]
+id = "s1"
+name = "源一"
+url = "{upstream}/extra.m3u8"
+enabled = true
+unlisted_groups = "keep"
+
+[[playlist.sources]]
+id = "s2"
+name = "源二"
+url = "{upstream}/extra.m3u8"
+enabled = true
+unlisted_groups = "keep"
+"#;
+    let fixture = fixture_with_extra(extra).await;
+    let body = fetch(&fixture, "/playlist.m3u")
+        .await
+        .text()
+        .await
+        .expect("读正文");
+    assert_eq!(body.matches("远端频道").count(), 1, "{body}");
+    let status: serde_json::Value = serde_json::from_str(
+        &fetch(&fixture, "/subs/status")
+            .await
+            .text()
+            .await
+            .expect("读正文"),
+    )
+    .expect("解析 JSON");
+    let channels: Vec<u64> = status["sources"]
+        .as_array()
+        .expect("sources")
+        .iter()
+        .map(|source| source["channels"].as_u64().unwrap_or(0))
+        .collect();
+    assert_eq!(channels, vec![3, 0], "{status}");
 }
 
 #[tokio::test]
@@ -2203,6 +2252,7 @@ id = "s1"
 name = "远端源"
 url = "{upstream}/extra.m3u8"
 enabled = true
+unlisted_groups = "keep"
 include = ["group:远端组"]
 "#;
     let fixture = fixture_with_extra(extra).await;
@@ -2214,7 +2264,62 @@ include = ["group:远端组"]
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0]["id"], "s1");
     assert_eq!(sources[0]["enabled"], true);
-    assert_eq!(sources[0]["include"][0], "group:远端组");
+    assert_eq!(sources[0]["ttl"], 3600);
+    assert_eq!(sources[0]["channels"], 3);
+    assert!(sources[0]["last_ok"].as_u64().unwrap_or(0) > 0);
+    assert!(sources[0]["last_try"].as_u64().unwrap_or(0) > 0);
+    assert!(sources[0]["error"].is_null());
+
+    fetch(&fixture, "/playlist.m3u").await;
+    let body: serde_json::Value = serde_json::from_str(
+        &fetch(&fixture, "/subs/status")
+            .await
+            .text()
+            .await
+            .expect("读正文"),
+    )
+    .expect("解析 JSON");
+    assert_eq!(body["sources"][0]["channels"], 3);
+    assert!(body["sources"][0]["last_ok"].as_u64().unwrap_or(0) > 0);
+    assert!(body["sources"][0]["last_try"].as_u64().unwrap_or(0) > 0);
+}
+
+#[tokio::test]
+async fn panel_subs_aliases_require_session_and_share_logic() {
+    let fixture = fixture().await;
+    let path = format!("{}/panel/api/subs/preview", fixture.base);
+    let body = serde_json::json!({
+        "source": {
+            "url": format!("{}/extra.m3u8", fixture.upstream),
+            "group_map": {},
+            "unlisted_groups": "keep"
+        }
+    });
+    let response = fixture
+        .client
+        .post(&path)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .expect("请求");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let session = login(&fixture).await;
+    let response = fixture
+        .client
+        .post(&path)
+        .header("authorization", format!("Bearer {session}"))
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .expect("请求");
+    assert_eq!(response.status(), StatusCode::OK);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(parsed["kept"], 3);
+    assert_eq!(parsed["trace"]["after_group"], 3);
 }
 
 #[tokio::test]
@@ -2258,6 +2363,7 @@ exclude = ["id:skip"]
             serde_json::json!({
                 "source": {
                     "id": "s1",
+                    "group_mode": "map",
                     "group_map": { "远端组": "映射组" }
                 }
             })
@@ -2272,16 +2378,41 @@ exclude = ["id:skip"]
     assert_eq!(body["trace"]["total"], 3);
     assert_eq!(body["trace"]["after_group"], 3);
     assert_eq!(body["trace"]["after_global_exclude"], 2);
-    assert_eq!(body["trace"]["after_include"], 1);
+    assert_eq!(body["trace"]["after_include"], 2);
+    assert_eq!(body["trace"]["after_exclude"], 1);
     assert_eq!(body["kept"], 1);
-    assert_eq!(body["out_groups"][0]["name"], "映射组");
-    assert_eq!(body["out_groups"][0]["count"], 1);
+    assert_eq!(body["trace"]["out_groups"][0]["name"], "映射组");
+    assert_eq!(body["trace"]["out_groups"][0]["count"], 1);
     assert_eq!(body["sample"][0]["name"], "远端频道");
+    assert!(body["sample"][0].get("url").is_none());
 }
 
 #[tokio::test]
 async fn subs_preview_drops_mapped_group_and_rejects_bad_url() {
     let fixture = fixture().await;
+    let response = fixture
+        .client
+        .post(format!("{}/subs/preview", fixture.base))
+        .header("content-type", "application/json")
+        .body(
+            serde_json::json!({
+                "source": {
+                    "url": format!("{}/extra.m3u8", fixture.upstream),
+                    "group_map": {}
+                }
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .expect("请求");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["kept"], 0);
+    assert_eq!(body["trace"]["after_group"], 0);
+    assert_eq!(body["trace"]["dropped_groups"][0], "远端组");
+
     let response = fixture
         .client
         .post(format!("{}/subs/preview", fixture.base))
@@ -2298,12 +2429,7 @@ async fn subs_preview_drops_mapped_group_and_rejects_bad_url() {
         .send()
         .await
         .expect("请求");
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: serde_json::Value =
-        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["kept"], 0);
-    assert_eq!(body["trace"]["after_group"], 0);
-    assert_eq!(body["dropped_groups"][0], "远端组");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let response = fixture
         .client
@@ -3664,6 +3790,11 @@ async fn playlist_config_roundtrip_and_validation() {
             "name": "上游",
             "url": format!("{}/extra.m3u8", fixture.upstream),
             "enabled": true,
+            "ttl_secs": 30,
+            "group_map": { "远端组": "映射组" },
+            "group_mode": "map",
+            "merge_group": "",
+            "unlisted_groups": "keep",
             "include": [],
             "exclude": []
         }]
@@ -3692,6 +3823,10 @@ async fn playlist_config_roundtrip_and_validation() {
     assert_eq!(body["merge_ttl_secs"], 120);
     assert_eq!(body["sources"][0]["name"], "上游");
     assert!(!body["sources"][0]["id"].as_str().unwrap_or("").is_empty());
+    assert_eq!(body["sources"][0]["ttl_secs"], 30);
+    assert_eq!(body["sources"][0]["group_mode"], "map");
+    assert_eq!(body["sources"][0]["group_map"]["远端组"], "映射组");
+    assert_eq!(body["sources"][0]["unlisted_groups"], "keep");
 
     let bad = serde_json::json!({
         "merge_ttl_secs": 60, "merge_position": "bottom",

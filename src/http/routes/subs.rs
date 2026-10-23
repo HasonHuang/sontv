@@ -9,27 +9,34 @@ use axum::{extract::State, Json};
 use serde_json::{json, Value};
 
 use crate::{
-    http::error::ApiError,
+    http::{error::ApiError, ext::PanelAuth},
     m3u,
     state::AppState,
     subs::{self, PreviewSource},
 };
 
-/// `GET /subs/status`——列出已配置的聚合源。
+/// `GET /subs/status`——列出聚合源最近一次抓取状态。
 pub async fn status(State(state): State<Arc<AppState>>) -> Json<Value> {
     let config = state.snapshot();
+    let statuses = state
+        .source_status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let sources: Vec<Value> = config
         .playlist
         .sources
         .iter()
         .map(|source| {
+            let status = statuses.get(&source.id).cloned().unwrap_or_default();
             json!({
                 "id": source.id,
                 "name": source.name,
-                "url": source.url,
                 "enabled": source.enabled,
-                "include": source.include,
-                "exclude": source.exclude,
+                "error": status.error,
+                "channels": status.channels,
+                "last_ok": status.last_ok,
+                "last_try": status.last_try,
+                "ttl": crate::subs::effective_ttl_secs(source.ttl_secs),
             })
         })
         .collect();
@@ -82,28 +89,50 @@ pub async fn preview(
         .ok_or_else(|| ApiError::bad_request("缺少 url"))?;
     validate_url(url)?;
 
-    let mut source = PreviewSource {
-        unlisted_groups: input
-            .get("unlisted_groups")
-            .and_then(Value::as_str)
-            .unwrap_or("drop")
-            .to_string(),
-        include: strings(&input, "include"),
-        exclude: strings(&input, "exclude"),
-        ..PreviewSource::default()
-    };
-    if source.include.is_empty() {
-        if let Some(configured) = configured {
-            source.include = configured.include.clone();
-            source.exclude = configured.exclude.clone();
-        }
-    }
-    if let Some(map) = input.get("group_map").and_then(Value::as_object) {
-        for (from, value) in map {
-            let to = value.as_str().map(str::trim).filter(|to| !to.is_empty());
-            source
+    let mut source = configured
+        .map(|configured| PreviewSource {
+            group_map: configured
                 .group_map
-                .push((from.clone(), to.map(str::to_string)));
+                .iter()
+                .map(|(from, to)| (from.clone(), to.clone()))
+                .collect(),
+            group_mode: configured.group_mode.clone(),
+            merge_group: configured.merge_group.clone(),
+            unlisted_groups: configured.unlisted_groups.clone(),
+            include: configured.include.clone(),
+            exclude: configured.exclude.clone(),
+        })
+        .unwrap_or_else(|| PreviewSource {
+            group_mode: "keep".into(),
+            unlisted_groups: "drop".into(),
+            ..PreviewSource::default()
+        });
+
+    if let Some(value) = input.get("unlisted_groups").and_then(Value::as_str) {
+        source.unlisted_groups = value.to_string();
+    }
+    if let Some(value) = input.get("group_mode").and_then(Value::as_str) {
+        source.group_mode = value.to_string();
+    }
+    if let Some(value) = input.get("merge_group").and_then(Value::as_str) {
+        source.merge_group = value.to_string();
+    }
+    if input.get("include").is_some() {
+        source.include = strings(&input, "include");
+    }
+    if input.get("exclude").is_some() {
+        source.exclude = strings(&input, "exclude");
+    }
+    if let Some(map) = input.get("group_map") {
+        let map = map
+            .as_object()
+            .ok_or_else(|| ApiError::bad_request("source.group_map 必须是对象"))?;
+        source.group_map.clear();
+        for (from, value) in map {
+            let to = value
+                .as_str()
+                .ok_or_else(|| ApiError::bad_request("source.group_map 的值必须是字符串"))?;
+            source.group_map.insert(from.clone(), to.to_string());
         }
     }
 
@@ -123,7 +152,7 @@ pub async fn preview(
             json!({
                 "name": item.name,
                 "group": item.group,
-                "url": item.url,
+                "tvg_id": item.tvg_id,
             })
         })
         .collect();
@@ -141,10 +170,37 @@ pub async fn preview(
             "after_group": result.trace.after_group,
             "after_global_exclude": result.trace.after_global_exclude,
             "after_include": result.trace.after_include,
+            "after_exclude": result.trace.after_exclude,
+            "dropped_groups": result.dropped_groups,
+            "out_groups": out_groups,
         },
-        "dropped_groups": result.dropped_groups,
-        "out_groups": out_groups,
     })))
+}
+
+/// `GET /panel/api/subs/status`——目标面板路径，需要会话。
+pub async fn panel_status(
+    PanelAuth(_): PanelAuth,
+    State(state): State<Arc<AppState>>,
+) -> Json<Value> {
+    status(State(state)).await
+}
+
+/// `POST /panel/api/subs/groups`——目标面板路径，需要会话。
+pub async fn panel_groups(
+    PanelAuth(_): PanelAuth,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    groups(State(state), Json(body)).await
+}
+
+/// `POST /panel/api/subs/preview`——目标面板路径，需要会话。
+pub async fn panel_preview(
+    PanelAuth(_): PanelAuth,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    preview(State(state), Json(body)).await
 }
 
 /// 抽样条数上限。

@@ -55,6 +55,7 @@ id = "s1"
 name = "远端源"
 url = "http://127.0.0.1:$UP/extra.m3u8"
 enabled = true
+unlisted_groups = "keep"
 exclude = ["id:skip"]
 TOML
 

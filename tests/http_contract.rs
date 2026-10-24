@@ -515,6 +515,15 @@ async fn fetch(fixture: &Fixture, path: &str) -> HttpResponse {
         .expect("发请求")
 }
 
+fn local_base_path(body: &str, self_base: &str) -> String {
+    let start = body.find("<BaseURL>").expect("BaseURL") + "<BaseURL>".len();
+    let end = body[start..].find("</BaseURL>").expect("BaseURL end") + start;
+    body[start..end]
+        .strip_prefix(self_base)
+        .unwrap_or(&body[start..end])
+        .to_string()
+}
+
 fn header(response: &HttpResponse, name: &str) -> String {
     response
         .headers()
@@ -3021,7 +3030,7 @@ url = "{upstream}/dash/base.mpd"
     );
     let body = manifest.text().await.expect("读 MPD");
     assert!(
-        body.contains(&format!("<BaseURL>{}/mpg/c1/mpd/</BaseURL>", fixture.base)),
+        body.contains(&format!("<BaseURL>{}/mpg/c1/mpd/", fixture.base)),
         "{body}"
     );
     assert!(
@@ -3033,34 +3042,33 @@ url = "{upstream}/dash/base.mpd"
     assert!(body.contains("t=\"4000\""), "{body}");
     assert!(body.contains("r=\"1\""), "{body}");
     assert!(!body.contains("<S d=\"2000\" r=\"3\"/>"), "{body}");
+    let local_base = local_base_path(&body, &fixture.base);
 
-    let init = fetch(&fixture, "/mpg/c1/mpd/init-v0.mp4").await;
+    let init = fetch(&fixture, &format!("{local_base}init-v0.mp4")).await;
     assert_eq!(init.status(), StatusCode::OK);
     assert_eq!(init.bytes().await.expect("读 init").as_ref(), b"dash-init");
-    let segment = fetch(&fixture, "/mpg/c1/mpd/chunk-v0-1.m4s").await;
+    let segment = fetch(&fixture, &format!("{local_base}chunk-v0-1.m4s")).await;
     assert_eq!(segment.status(), StatusCode::OK);
     assert_eq!(
         segment.bytes().await.expect("读切片").as_ref(),
         b"dash-segment"
     );
     // BaseURL 的查询串会随切片请求转发。
-    let segment = fetch(&fixture, "/mpg/c1/mpd/chunk-v0-1.m4s?token=abc").await;
+    let segment = fetch(&fixture, &format!("{local_base}chunk-v0-1.m4s?token=abc")).await;
     assert_eq!(segment.status(), StatusCode::OK);
 
-    // 已有的相对 BaseURL 改写后仍保留 `sub/`，切片继续经本服务代理。
+    // 已有的相对 BaseURL 改写后仍指向本服务，切片继续经本服务代理。
     let body = fetch(&fixture, "/mpg/c2.mpd")
         .await
         .text()
         .await
         .expect("读 MPD");
     assert!(
-        body.contains(&format!(
-            "<BaseURL>{}/mpg/c2/mpd/sub/</BaseURL>",
-            fixture.base
-        )),
+        body.contains(&format!("<BaseURL>{}/mpg/c2/mpd/", fixture.base)),
         "{body}"
     );
-    let segment = fetch(&fixture, "/mpg/c2/mpd/sub/chunk-1.m4s").await;
+    let local_base = local_base_path(&body, &fixture.base);
+    let segment = fetch(&fixture, &format!("{local_base}chunk-1.m4s")).await;
     assert_eq!(segment.status(), StatusCode::OK);
     assert_eq!(
         segment.bytes().await.expect("读切片").as_ref(),

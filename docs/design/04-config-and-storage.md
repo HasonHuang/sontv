@@ -86,7 +86,8 @@
 | 切片正文（M2 已实现） | `seg_bytes/<gid>_<cid>_<S>.<ext>`；命中复用，不设上限 | 同上 |
 | DASH 缓存（P4 已实现） | `dash/<gid>/<cid>/<track>/{index.txt,init.<ext>,<序号>_<hash>.<ext>}`；媒体清单按时重取，init/切片命中复用 | `src/dash_hls.rs` |
 | DASH 时间窗 | `[groups].mpd_keep_seconds > 0` 时媒体清单只保留末尾累计时长；`0` 保留全部。`proxy` 模式 MPD 同样裁剪时间线并推进编号 | `src/dash_hls.rs`、`src/http/routes/stream.rs` |
-| DASH URL 池 | 多个 `<BaseURL>` 时视频用首选，音频/字幕在其余地址轮询；`url_pool_size<=1` 不轮询 | `src/dash_hls.rs` |
+| DASH URL 池 | 多个 `<BaseURL>` 时首选地址固定给视频；音频/字幕在 `url_pool_size>1` 时轮询其余地址。目标默认 `url_pool_size=1` 实测音视频都只取首选（F-022） | `src/dash_hls.rs` |
+| proxy MPD 反代 | `<BaseURL>`（绝对/相对/缺失）统一改为 `/{gid}/{cid}/mpd/{token}/{Base64URL(base)}/`；切片请求解码还原上游地址并校验令牌 | `src/http/routes/stream.rs` |
 | 清单复用（M2 已实现） | 进程内 TTL 5 秒（`TtlCache`） | `src/proxy/mod.rs` |
 | flush | 清 `m3u8`/`seg_url`/`seg_bytes`/`sub_url`，**保留 `dash/`** | S-CACHE-06 |
 | 容量上限 | P0 **不实现**（目标上限未生效） | F-015 |

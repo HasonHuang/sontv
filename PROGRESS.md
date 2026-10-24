@@ -47,7 +47,11 @@
   - `publish_delay_secs>0` 按 `ceil(delay/切片时长)` 压后直播清单末端；`=0` 使用 `fetch_extra_segments`。
   - 看门狗接入 `watchdog_tick_secs`、`watchdog_stall_secs`、`watchdog_rebuild_stagger_ms`，并复用重建上限与冷却。
   - `fast_start_secs` 在三类目标场景中无可观测差异，保留配置字段，不改变输出。
-  - 证据：F-018、`docs/findings/dynamic/18-dash-window-knobs.md`。
+  - 证据：F-021、`docs/findings/dynamic/18-dash-window-knobs.md`。
+- **V-01 / V-02 DASH BaseURL 完成**：
+  - 目标 `dash` 默认只取第一个 `<BaseURL>`，音视频一致。
+  - `proxy`+MPD 把绝对/相对/缺失 `<BaseURL>` 全部改写为本地令牌路径，不再直连绝对地址。
+  - 证据：F-022、`docs/findings/dynamic/19-dash-multi-baseurl-proxy.md`。
 
 2026-10-23：
 
@@ -71,12 +75,12 @@
 - 台标扩展名白名单与目标一致。
 - 订阅聚合字段对拍完成。
 
-### 1.4 质量门（2026-10-23）
+### 1.4 质量门（2026-10-24）
 
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 216 项通过（147 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 218 项通过（149 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -101,8 +105,6 @@
 
 | ID | 项 | 当前结论 | 所需证据 |
 | --- | --- | --- | --- |
-| V-01 | DASH URL 池正常取用 | 已实现视频取 `pool[0]`，音频/字幕轮询其余地址；目标只拉 MPD 后零切片 | 目标正常多 `<BaseURL>` 样本；记录实际请求分布与回退顺序 |
-| V-02 | `proxy`+MPD 绝对 `<BaseURL>` | 相对地址已对拍；绝对地址按目标证据保持直连 | 目标构造绝对 `<BaseURL>` 与多切片 MPD，确认是否代理 |
 | V-03 | 公开 `/epg/api/*` 形状 | 面板私有端点已实现；公开端点形状仍为本实现自定 | 目标逐字段抓取；先解决 `spec/08` 的版本冲突 |
 | V-05 | 每频道独立代理 | 实现顺序为频道 > 分组 > 直连 | 目标覆盖顺序、认证头、失败回退、`socks5` 行为 |
 | V-06 | `/unban` 配额与 `whoami` | 已实现每 IP 30 天 3 次；目标未实测 | 目标连续解封；记录状态码、`remaining`、窗口重置 |
@@ -113,6 +115,8 @@
 已完成：
 
 - U-05 `[cache.dash]` 发布延迟与看门狗参数 ✅
+- V-01 DASH 多 `<BaseURL>` 请求分布 ✅
+- V-02 `proxy`+MPD 绝对 `<BaseURL>` 本地反代 ✅
 - V-04 `/subs/{groups,preview}` 字段 ✅
 - V-09 `[playlist]` / `[share]` 目标语义 ✅
 - V-11 真实 HLS/M3U 验证 ✅
@@ -138,12 +142,11 @@
 
 ## 3. 建议推进顺序
 
-1. **V-01、V-02**：补 DASH 多 `<BaseURL>` 与 `proxy`+MPD 绝对 `<BaseURL>` 证据。
-2. **V-03**：补公开 EPG API 响应形状。
-3. **U-06**：评估 APNG 脏矩形优化；确认 WebP 解码路径。
-4. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
-5. 每项完成后更新本文件、对应 `docs/` 文档与测试。
-6. 提交使用 Conventional Commits，并立即 push `rust` 分支。
+1. **V-03**：补公开 EPG API 响应形状。
+2. **U-06**：评估 APNG 脏矩形优化；确认 WebP 解码路径。
+3. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
+4. 每项完成后更新本文件、对应 `docs/` 文档与测试。
+5. 提交使用 Conventional Commits，并立即 push `rust` 分支。
 
 ## 4. 关键设计结论
 

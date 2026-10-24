@@ -57,7 +57,7 @@
 | --- | --- | --- | --- |
 | S-MODE-01 | 面板提供**六种**模式：`proxy`/`remux`/`dash`/`redirect`/`rewrite`/`passthrough`（公开 README 只写四种） | D-README | ✅【观测】面板 `<select id="mg-mode">` 六项 |
 | S-MODE-02 | 模式属于**分组**；同组频道共用 | D-README | ✅【观测】 |
-| S-MODE-03 | Proxy：反代 + 切片缓存；内容格式 HLS / MPD；`MPD 裁剪保留秒数` 仅在格式=MPD 时出现 | D-mode-proxy | 🔶 反代+伪装切片已验；MPD 分支未验 |
+| S-MODE-03 | Proxy：反代 + 切片缓存；内容格式 HLS / MPD；`MPD 裁剪保留秒数` 仅在格式=MPD 时出现 | D-mode-proxy | ✅【观测】反代+伪装切片已验；MPD 的绝对/相对/缺失 `<BaseURL>` 全部改写为本地 `/{gid}/{cid}/mpd/{token}/{base64}/`（F-022） |
 | S-MODE-04 | Proxy + 内容格式=MPD 时，频道多出 **ClearKey 密钥** 字段（`kid_hex:key_hex`，每行一对）；行为为"反代穿透本服务" | D-mode-proxy || ✅【观测】频道 `license_key` 字段；`#KODIPROP` 仅 passthrough（F-016） |
 | S-MODE-05 | Remux：连续流（FLV / 裸 TS / MMT-TLV）→ HLS；**不解码**，CPU 低；`源容器类型`= 自动识别 / TS / FLV / MMT-TLV；**无**内容格式字段 | D-mode-remux | 🔶【观测】容器自动识别（`【remux】自动识别容器: Ts`） |
 | S-MODE-06 | DASH：`.mpd`→HLS 实时转封装，支持 CENC ClearKey 解密；自动 304 增量刷新 / 多 CDN 故障切换 / 防断流备份 / 片段级容错；**无**内容格式字段 | D-mode-dash | ✅【观测】MPD→HLS 成功；track 名 `video_{高}p`/`audio-{n}`；**需 `SegmentTimeline`**；支持 MPD 级 `<BaseURL>`；**未观测到多 CDN 故障切换**（→ D-004） |
@@ -143,8 +143,9 @@
 | S-EPG-06 | 节目裁剪区间 = `[(今天−keep_days) 00:00, (今天+future_days) 23:59:59]`；`keep_days` **内部上限 7**（API 接受 10 但按 7 裁剪） | 二进制 | ✅【观测】`keep_yesterday` 开/关无差异，语义未定 |
 | S-EPG-07 | `match-report` 的 `via`∈`tvg-id` / `name` / `manual` / `duplicate` / `none` | 二进制 | ✅【观测】 |
 | S-DASH-01 | `SegmentTemplate@duration` 缺 `SegmentTimeline` → 按墙钟/duration 推算 `$Number$`（实测 896163185），切片段全 404 | 二进制 | ✅【观测】 |
-| S-DASH-02 | `publish_delay_secs>0` → 直播清单末端压后 `ceil(delay/切片时长)` 段；`=0` → 压后 `fetch_extra_segments` 段 | 二进制 | ✅【观测】4s 切片：0/4/8/12/20/24/30 → 2/1/2/3/5/6/8 段（F-018） |
-| S-DASH-03 | 看门狗每 `watchdog_tick_secs` 扫描；切片进度停滞 `watchdog_stall_secs` → 重建；同轮按 `watchdog_rebuild_stagger_ms` 错开；达到 `watchdog_rebuild_max` → 冷却 `watchdog_cooldown_secs` | 二进制 | ✅【观测】tick=2/stall=5/stagger=500/max=2 已分离（F-018）；`fast_start_secs` 无可观测差异 |
+| S-DASH-02 | `publish_delay_secs>0` → 直播清单末端压后 `ceil(delay/切片时长)` 段；`=0` → 压后 `fetch_extra_segments` 段 | 二进制 | ✅【观测】4s 切片：0/4/8/12/20/24/30 → 2/1/2/3/5/6/8 段（F-021） |
+| S-DASH-03 | 看门狗每 `watchdog_tick_secs` 扫描；切片进度停滞 `watchdog_stall_secs` → 重建；同轮按 `watchdog_rebuild_stagger_ms` 错开；达到 `watchdog_rebuild_max` → 冷却 `watchdog_cooldown_secs` | 二进制 | ✅【观测】tick=2/stall=5/stagger=500/max=2 已分离（F-021）；`fast_start_secs` 无可观测差异 |
+| S-DASH-04 | 多个 `<BaseURL>`、`url_pool_size=1` 时，音视频都只取第一个 BaseURL | 二进制 | ✅【观测】init/video/audio 均只请求 `/a/`，`/b/` 为 0（F-022）；`url_pool_size>1` 未验 |
 | S-LOGO-01 | 台标本地托管，`tvg-logo` 与 EPG `icon` 指向本地；支持上传转码与动效生成 | D-panel | ✅【观测】9 端点全验（见 12）；转码在**浏览器侧**，服务端只存字节 |
 | S-LOGO-02 | 台标库端点：`GET /logo/{list,match-report}`、`POST /logo/{upload,apply,rename,delete,restore,suggest,animate}` | D-panel | ✅【观测】`upload` 需 `name/ext/data`；`animate.quality` 为**字符串** |
 | S-LOGO-03 | 动效纯 Rust 无损编码，覆盖原文件、原图备份到 `logos/.orig/`；6 种效果 | D-panel/二进制 | ✅【观测】`frames/total_ms/bytes_before/after/dirty_ratio`；`restore` 还原 |

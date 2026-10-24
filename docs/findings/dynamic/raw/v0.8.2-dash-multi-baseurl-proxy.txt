@@ -1,0 +1,68 @@
+# v0.8.2 DASH BaseURL / proxy MPD probes (2026-10-24)
+
+Target: linux-amd64 v0.8.2 container.
+Origin: host Python MPD server with two prefixes `/a/` and `/b/`.
+
+## DASH multi-BaseURL
+
+Channel: mode=dash, url_pool_size=1.
+MPD has two BaseURLs.
+
+```text
+init:          a=1 b=0
+video segment: a=12 b=0
+audio segment: a=12 b=0
+```
+
+All requests use the first BaseURL. No second-BaseURL request observed.
+
+## proxy absolute BaseURL
+
+Origin:
+
+```xml
+<BaseURL>http://host.docker.internal:9995/a/</BaseURL>
+```
+
+Target output:
+
+```xml
+<BaseURL>http://127.0.0.1:19968/gproxy/v/mpd/b8e6b8c9fa52ce2faba99adb5c692507/aHR0cDovL2hvc3QuZG9ja2VyLmludGVybmFsOjk5OTUvYS8/</BaseURL>
+```
+
+Base64URL payload decodes to:
+
+```text
+http://host.docker.internal:9995/a/
+```
+
+Local segment fetch:
+
+```text
+GET /gproxy/v/mpd/{token}/{payload}/chunk-0-1.m4s?name=v02
+200, 150146 bytes
+origin saw /a/chunk-0-1.m4s?name=v02
+```
+
+Wrong token:
+
+```text
+302
+```
+
+## proxy relative BaseURL
+
+Origin `<BaseURL>a/</BaseURL>`, MPD URL `http://host.docker.internal:9995/rel.mpd`.
+Decoded local base: `http://host.docker.internal:9995/a/`.
+
+## proxy missing BaseURL
+
+Target inserted a BaseURL. Decoded base: `http://host.docker.internal:9995/`.
+
+## proxy multiple BaseURL
+
+Both absolute BaseURLs were rewritten to separate local token paths.
+
+## Other observation
+
+Target output changed `minimumUpdatePeriod` from `PT2.0S` to `PT1S`.

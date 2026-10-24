@@ -10,6 +10,8 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -377,7 +379,7 @@ async fn proxy_entry(
             .group(gid)
             .map(|group| group.mpd_keep_seconds)
             .unwrap_or(0);
-        return proxy_mpd(&upstream, gid, cid, self_base, keep);
+        return proxy_mpd(&upstream, gid, cid, channel_url, self_base, keep);
     }
     if proxy::media::is_master(&upstream) {
         return master_entry(&upstream, channel_url, gid, cid, self_base, ext);
@@ -584,13 +586,20 @@ async fn upstream_playlist(
     Ok(text)
 }
 
-/// `proxy` 模式的 MPD：保留正文，把相对 `<BaseURL>` 指到本服务的 `mpd/` 路径。
+/// `proxy` 模式的 MPD：保留正文，把所有 `<BaseURL>` 指到本服务的 `mpd/` 路径。
 ///
-/// 目标在 proxy+MPD 下的取用方式未完整观测（F-015、S-MODE-04）。这里只做
-/// 最小改写：绝对 `<BaseURL>` 保持不动，相对地址与本服务同源代理。
-fn proxy_mpd(body: &str, gid: &str, cid: &str, self_base: &str, keep_seconds: u64) -> Response {
+/// 目标实测：绝对、相对与缺失 `<BaseURL>` 都会落成本地反代地址；本地路径带
+/// 令牌和 Base64 编码的原始 BaseURL，切片请求再还原上游地址（F-021）。
+fn proxy_mpd(
+    body: &str,
+    gid: &str,
+    cid: &str,
+    mpd_url: &str,
+    self_base: &str,
+    keep_seconds: u64,
+) -> Response {
     let body = trim_mpd_window(body, keep_seconds);
-    let body = rewrite_mpd_base_urls(&body, gid, cid, self_base);
+    let body = rewrite_mpd_base_urls(&body, gid, cid, mpd_url, self_base);
     let mut response = Response::new(Body::from(body));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -799,13 +808,64 @@ fn format_mpd_number(value: f64) -> String {
     }
 }
 
-fn rewrite_mpd_base_urls(xml: &str, gid: &str, cid: &str, self_base: &str) -> String {
-    let prefix = format!("{}/{}/{}/mpd/", self_base.trim_end_matches('/'), gid, cid);
-    let prefix = if self_base.is_empty() {
+/// 本地 MPD 反代前缀。
+fn local_mpd_prefix(gid: &str, cid: &str, self_base: &str) -> String {
+    if self_base.is_empty() {
         format!("/{gid}/{cid}/mpd/")
     } else {
-        prefix
-    };
+        format!("{}/{gid}/{cid}/mpd/", self_base.trim_end_matches('/'))
+    }
+}
+
+/// 本地 BaseURL 令牌；防止任意改写后的地址直接访问本服务。
+fn mpd_base_token(gid: &str, cid: &str, base: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rea-iptv/mpd-v1\0");
+    hasher.update(gid.as_bytes());
+    hasher.update([0]);
+    hasher.update(cid.as_bytes());
+    hasher.update([0]);
+    hasher.update(base.as_bytes());
+    hex::encode(&hasher.finalize()[..16])
+}
+
+/// 把上游 BaseURL 编成本地路径：`mpd/{token}/{base64}/`。
+fn local_mpd_base(gid: &str, cid: &str, self_base: &str, base: &Url) -> String {
+    let token = mpd_base_token(gid, cid, base.as_str());
+    let encoded = URL_SAFE_NO_PAD.encode(base.as_str());
+    format!(
+        "{}{token}/{encoded}/",
+        local_mpd_prefix(gid, cid, self_base)
+    )
+}
+
+/// 解析一个 `<BaseURL>`：支持绝对、相对与协议相对地址。
+fn resolve_mpd_base(mpd_url: &str, value: &str) -> Option<Url> {
+    if let Ok(url) = Url::parse(value) {
+        return matches!(url.scheme(), "http" | "https").then_some(url);
+    }
+    let joined = Url::parse(mpd_url).ok()?.join(value).ok()?;
+    matches!(joined.scheme(), "http" | "https").then_some(joined)
+}
+
+/// MPD 所在目录；用于缺失 `<BaseURL>` 时的默认基准。
+fn mpd_directory(mpd_url: &str) -> Option<Url> {
+    let mut url = Url::parse(mpd_url).ok()?;
+    url.set_query(None);
+    url.set_fragment(None);
+    let path = url.path().to_string();
+    let cut = path.rfind('/').map(|index| index + 1).unwrap_or(1);
+    url.set_path(&path[..cut]);
+    Some(url)
+}
+
+fn rewrite_mpd_base_urls(
+    xml: &str,
+    gid: &str,
+    cid: &str,
+    mpd_url: &str,
+    self_base: &str,
+) -> String {
     let Ok(document) = roxmltree::Document::parse(xml) else {
         return xml.to_string();
     };
@@ -815,29 +875,29 @@ fn rewrite_mpd_base_urls(xml: &str, gid: &str, cid: &str, self_base: &str) -> St
         .filter(|node| node.is_element() && node.tag_name().name() == "BaseURL")
     {
         let value = node.text().unwrap_or("").trim();
-        if value.is_empty() || is_absolute_url(value) {
+        let Some(base) = resolve_mpd_base(mpd_url, value) else {
             continue;
-        }
-        let local = if value.starts_with('/') {
-            format!("{prefix}root{}", value)
-        } else {
-            format!("{prefix}{value}")
         };
+        let local = local_mpd_base(gid, cid, self_base, &base);
         replacements.push((
             node.range(),
             format!("<BaseURL>{}</BaseURL>", xml_escape(&local)),
         ));
     }
     if replacements.is_empty() {
+        let Some(directory) = mpd_directory(mpd_url) else {
+            return xml.to_string();
+        };
+        let local = local_mpd_base(gid, cid, self_base, &directory);
         let Some(insert_at) = xml
             .find("<MPD")
             .and_then(|start| xml[start..].find('>').map(|end| start + end + 1))
         else {
             return xml.to_string();
         };
-        let mut output = String::with_capacity(xml.len() + prefix.len() + 18);
+        let mut output = String::with_capacity(xml.len() + local.len() + 18);
         output.push_str(&xml[..insert_at]);
-        output.push_str(&format!("<BaseURL>{}</BaseURL>", xml_escape(&prefix)));
+        output.push_str(&format!("<BaseURL>{}</BaseURL>", xml_escape(&local)));
         output.push_str(&xml[insert_at..]);
         return output;
     }
@@ -846,10 +906,6 @@ fn rewrite_mpd_base_urls(xml: &str, gid: &str, cid: &str, self_base: &str) -> St
         output.replace_range(range, &replacement);
     }
     output
-}
-
-fn is_absolute_url(value: &str) -> bool {
-    value.starts_with("http://") || value.starts_with("https://") || value.starts_with("//")
 }
 
 fn xml_escape(value: &str) -> String {
@@ -889,19 +945,47 @@ async fn mpd_segment(
             return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
         }
     };
-    let Ok(base) = Url::parse(&channel_url) else {
-        return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+    let (base, relative, inherited_query) = if let Some((token, rest)) =
+        path.split_once('/').filter(|(token, _)| {
+            token.len() == 32 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+        }) {
+        let (encoded, relative) = rest.split_once('/').unwrap_or((rest, ""));
+        let Some(decoded) = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+        else {
+            return (StatusCode::NOT_FOUND, "Not found").into_response();
+        };
+        if mpd_base_token(gid, cid, &decoded) != token {
+            return (StatusCode::NOT_FOUND, "Not found").into_response();
+        }
+        let Ok(base) = Url::parse(&decoded) else {
+            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+        };
+        if !matches!(base.scheme(), "http" | "https") {
+            return (StatusCode::BAD_REQUEST, "Bad path").into_response();
+        }
+        let inherited = base.query().map(str::to_string);
+        (base, relative.to_string(), inherited)
+    } else {
+        let Ok(channel_base) = Url::parse(&channel_url) else {
+            return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
+        };
+        (channel_base, path.to_string(), None)
     };
-    let target = if let Some(root) = path.strip_prefix("root/") {
+    let target = if let Some(root) = relative.strip_prefix("root/") {
         base.join(&format!("/{root}"))
     } else {
-        base.join(path)
+        base.join(&relative)
     };
     let Ok(mut target) = target else {
         return (StatusCode::BAD_REQUEST, "Bad path").into_response();
     };
     if let Some(query) = query.filter(|query| !query.is_empty()) {
         target.set_query(Some(query));
+    } else if let Some(query) = inherited_query {
+        target.set_query(Some(&query));
     }
     let bytes = match fetch_bytes(state, target.as_str(), gid, cid).await {
         Ok(bytes) => bytes,
@@ -1261,7 +1345,8 @@ pub(crate) async fn fetch_bytes(
 
 #[cfg(test)]
 mod tests {
-    use super::{media_cache_control, trim_mpd_window};
+    use super::{media_cache_control, mpd_base_token, rewrite_mpd_base_urls, trim_mpd_window};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
     #[test]
     fn media_cache_control_matches_vod_and_live_targets() {
@@ -1313,5 +1398,62 @@ mod tests {
         assert_eq!(trim_mpd_window(xml, 0), xml);
         assert_eq!(trim_mpd_window(xml, 100), xml);
         assert_eq!(trim_mpd_window("not xml", 5), "not xml");
+    }
+
+    fn decode_local(xml: &str) -> (String, String) {
+        let start = xml.find("<BaseURL>").expect("BaseURL") + "<BaseURL>".len();
+        let end = xml[start..].find("</BaseURL>").expect("end") + start;
+        let local = &xml[start..end];
+        let rest = local
+            .strip_prefix("http://self/g/c/mpd/")
+            .expect("local prefix");
+        let (token, rest) = rest.split_once('/').expect("token");
+        let (encoded, _) = rest.split_once('/').unwrap_or((rest, ""));
+        let decoded = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .expect("base64")
+            .into_iter()
+            .map(char::from)
+            .collect();
+        (token.to_string(), decoded)
+    }
+
+    #[test]
+    fn rewrites_absolute_base_url_through_local_token() {
+        let xml = r#"<MPD><BaseURL>http://cdn.example/a/</BaseURL><Period/></MPD>"#;
+        let output = rewrite_mpd_base_urls(
+            xml,
+            "g",
+            "c",
+            "http://origin.example/dash/live.mpd",
+            "http://self",
+        );
+        assert!(!output.contains("http://cdn.example/a/"), "{output}");
+        let (token, decoded) = decode_local(&output);
+        assert_eq!(decoded, "http://cdn.example/a/");
+        assert_eq!(mpd_base_token("g", "c", &decoded), token);
+    }
+
+    #[test]
+    fn resolves_relative_and_missing_base_urls() {
+        let relative = r#"<MPD><BaseURL>sub/</BaseURL><Period/></MPD>"#;
+        let output = rewrite_mpd_base_urls(
+            relative,
+            "g",
+            "c",
+            "http://origin.example/dash/live.mpd",
+            "http://self",
+        );
+        assert_eq!(decode_local(&output).1, "http://origin.example/dash/sub/");
+
+        let missing = r#"<MPD><Period/></MPD>"#;
+        let output = rewrite_mpd_base_urls(
+            missing,
+            "g",
+            "c",
+            "http://origin.example/dash/live.mpd",
+            "http://self",
+        );
+        assert_eq!(decode_local(&output).1, "http://origin.example/dash/");
     }
 }

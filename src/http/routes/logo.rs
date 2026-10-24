@@ -376,7 +376,7 @@ pub async fn restore(
     }
 }
 
-/// `POST /panel/api/logo/animate`——生成 APNG 动效并覆盖原图。
+/// `POST /panel/api/logo/animate`——生成动画 WebP 动效并覆盖原图。
 pub async fn animate(
     PanelAuth(_): PanelAuth,
     State(state): State<Arc<AppState>>,
@@ -416,7 +416,20 @@ pub async fn animate(
         frame_ms,
         default_quality,
     )
-    .map_err(|error| ApiError::internal(format!("{error:#}")))?;
+    .map_err(|error| {
+        let message = format!("{error:#}");
+        if message.contains("已经是动画")
+            || message.contains("文件不存在")
+            || message.contains("未知动效")
+            || message.contains("quality")
+            || message.contains("扩展名")
+            || message.contains("文件名不合法")
+        {
+            ApiError::bad_request(message)
+        } else {
+            ApiError::internal(message)
+        }
+    })?;
     Ok(Json(json!({
         "ok": true,
         "frames": report.frames,

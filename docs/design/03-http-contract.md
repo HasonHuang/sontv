@@ -259,7 +259,7 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | POST | `/panel/api/logo/delete` | — | 体 `{"file"}`；成功 `{"ok":true,"removed":1}`；缺文件 → `404` | F-012 |
 | POST | `/panel/api/logo/rename` | — | 体 `{"file","name"}`；保留扩展名；`{"ok":true,"logo":{…}}`；缺文件 → `404`，目标已存在 → `400` | F-012（形状自定） |
 | POST | `/panel/api/logo/restore` | — | 体 `{"file"}`；用 `<cache>/logos/.orig/` 备份覆盖当前文件；`{"ok":true}`；无备份 → `400` | F-012 |
-| POST | `/panel/api/logo/animate` | — | 体 `{"file","effect","quality":"<1..100>"}`；`effect` ∈ `diagonal/vertical/bounce/spot/glow/breathe`；返回 `{"ok":true,"frames","width","height","total_ms","bytes_before","bytes_after","dirty_ratio"}`；当前仅 PNG，解码依赖 `ffmpeg`/`ffprobe` | F-012 |
+| POST | `/panel/api/logo/animate` | — | 体 `{"file","effect","quality":"<1..100>"}`；`effect` ∈ `diagonal/vertical/bounce/spot/glow/breathe`；返回 `{"ok":true,"frames":10,"width","height","total_ms":2220,"bytes_before","bytes_after","dirty_ratio"}`；输出动画 WebP（扩展名不变）；PNG/WebP 纯 Rust 解码，其他格式回退 `ffmpeg`；已动画源图 → `400` | F-012 |
 | GET | `/panel/api/logo/match-report` | — | `{"channels","missing","broken","unused","missing_channels":[…],"broken_logos":[…],"unused_logos":[…]}` | F-012（形状自定） |
 | POST | `/panel/api/logo/apply` | — | 体 `{"gid","cid","file"}`；把 `/logo/<file>` 写入频道 `logo`；`404` 用于缺文件或未知分组/频道 | F-012（形状自定） |
 | POST | `/panel/api/logo/suggest` | — | 体 `{"threshold","limit"}`；按名称相似度推荐，`{"threshold","count","channels":[{"gid","cid","name","suggest":[{"file","score"}]}]}` | F-012（形状自定） |

@@ -148,11 +148,40 @@ pub fn write(cache_dir: &str, name: &str, ext: &str, data: &[u8]) -> Result<Entr
     })
 }
 
-/// 是否为 APNG（含 `acTL` 块）。
+/// 台标库的 `animated` 标志。
+///
+/// 目标 v0.8.2 只对扩展名为 `.webp` 的动画 WebP 报 `true`；动效生成的
+/// WebP 即使写进 `.png` 文件也报 `false`。
 fn is_animated(path: &Path) -> bool {
+    if !path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("webp"))
+    {
+        return false;
+    }
     fs::read(path)
-        .map(|data| data.windows(4).any(|window| window == b"acTL"))
+        .map(|data| has_webp_animation(&data))
         .unwrap_or(false)
+}
+
+/// 源文件内容是否已是动画（APNG 或动画 WebP）。
+///
+/// `logo/animate` 需要按内容拒绝已动画的源图，与扩展名无关。
+pub fn is_animated_content(path: &Path) -> bool {
+    fs::read(path)
+        .map(|data| {
+            data.starts_with(b"\x89PNG\r\n\x1a\n")
+                && data.windows(4).any(|window| window == b"acTL")
+                || has_webp_animation(&data)
+        })
+        .unwrap_or(false)
+}
+
+fn has_webp_animation(data: &[u8]) -> bool {
+    data.starts_with(b"RIFF")
+        && data.get(8..12) == Some(b"WEBP")
+        && data.windows(4).any(|window| window == b"ANIM")
 }
 
 /// 用 `.orig/` 备份覆盖当前台标；没有备份时返回 `Ok(false)`。
@@ -303,6 +332,23 @@ mod tests {
         assert!(remove(&cache, &entry.file).expect("应删除"));
         assert!(!remove(&cache, &entry.file).expect("再删应返回 false"));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn animated_flag_requires_webp_extension_and_animation_chunk() {
+        let root = std::env::temp_dir().join(format!("logo-anim-{}", uuid::Uuid::new_v4()));
+        let directory = dir(root.to_str().expect("路径"));
+        fs::create_dir_all(&directory).expect("建目录");
+        let animated = b"RIFF\x04\x00\x00\x00WEBPWEBPANIM".to_vec();
+        let static_webp = b"RIFF\x04\x00\x00\x00WEBPVP8L".to_vec();
+        fs::write(directory.join("a.webp"), &animated).expect("写动画 WebP");
+        fs::write(directory.join("a.png"), &animated).expect("写伪 PNG");
+        fs::write(directory.join("s.webp"), &static_webp).expect("写静态 WebP");
+        assert!(is_animated(&directory.join("a.webp")));
+        assert!(!is_animated(&directory.join("a.png")));
+        assert!(!is_animated(&directory.join("s.webp")));
+        assert!(is_animated_content(&directory.join("a.png")));
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

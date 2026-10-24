@@ -24,6 +24,8 @@ axum = "0.7"
 base64 = "0.22"
 hex = "0.4"
 flate2 = "1"
+image-webp = "0.2.4"
+png = "0.17.16"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 roxmltree = "0.20"
 mime_guess = "2"

@@ -4274,18 +4274,7 @@ source = "auto"
 }
 
 #[tokio::test]
-async fn logo_animate_generates_apng_when_ffmpeg_is_available() {
-    if std::process::Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .is_err()
-        || std::process::Command::new("ffprobe")
-            .arg("-version")
-            .output()
-            .is_err()
-    {
-        return;
-    }
+async fn logo_animate_generates_animated_webp() {
     let fixture = fixture().await;
     let token = login(&fixture).await;
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -4325,22 +4314,18 @@ async fn logo_animate_generates_apng_when_ffmpeg_is_available() {
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("正文")).expect("JSON");
     assert_eq!(body["ok"], true);
-    assert!(body["frames"].as_u64().unwrap_or(0) > 1);
+    assert_eq!(body["frames"], 10);
+    assert_eq!(body["total_ms"], 2_220);
     assert!(body["bytes_after"].as_u64().unwrap_or(0) > 0);
 
     let bytes = std::fs::read(fixture.dir.join("cache/logos/anim.png")).expect("读动图");
-    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
-    assert!(bytes.windows(4).any(|window| window == b"acTL"));
-    let check = fixture.dir.join("check.png");
-    std::fs::write(&check, &bytes).expect("写校验图");
-    assert!(
-        std::process::Command::new("ffprobe")
-            .args(["-v", "error"])
-            .arg(&check)
-            .status()
-            .expect("ffprobe")
-            .success(),
-        "APNG 应可被 ffprobe 解码"
+    assert_eq!(&bytes[..4], b"RIFF");
+    assert_eq!(&bytes[8..12], b"WEBP");
+    assert!(bytes.windows(4).any(|window| window == b"VP8X"));
+    assert!(bytes.windows(4).any(|window| window == b"ANIM"));
+    assert_eq!(
+        bytes.windows(4).filter(|window| *window == b"ANMF").count(),
+        10
     );
     assert!(fixture.dir.join("cache/logos/.orig/anim.png").is_file());
 
@@ -4359,6 +4344,108 @@ async fn logo_animate_generates_apng_when_ffmpeg_is_available() {
         .iter()
         .find(|item| item["file"] == "anim.png")
         .expect("应列出动图");
-    assert_eq!(item["animated"], true);
+    assert_eq!(item["animated"], false);
     assert_eq!(item["has_original"], true);
+
+    let response = fixture
+        .client
+        .get(format!("{}/logo/anim.png", fixture.base))
+        .send()
+        .await
+        .expect("取动图");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/png")
+    );
+    let served = response.bytes().await.expect("动图字节");
+    assert_eq!(&served[..4], b"RIFF");
+
+    let response = fixture
+        .client
+        .post(format!("{}/panel/api/logo/animate", fixture.base))
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .body(
+            serde_json::json!({
+                "file": "anim.png",
+                "effect": "spot",
+                "quality": "80"
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .expect("再次动效");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let webp = "UklGRhwAAABXRUJQVlA4TA8AAAAvAUAAAAcQ/Y/+ByKi/wEA";
+    let response = fixture
+        .client
+        .post(format!("{}/panel/api/logo/upload", fixture.base))
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .body(
+            serde_json::json!({
+                "items": [{ "name": "anim.webp", "data": format!("data:image/webp;base64,{webp}") }]
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .expect("上传 WebP");
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = fixture
+        .client
+        .post(format!("{}/panel/api/logo/animate", fixture.base))
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {token}"))
+        .body(
+            serde_json::json!({
+                "file": "anim.webp",
+                "effect": "breathe",
+                "quality": "80"
+            })
+            .to_string(),
+        )
+        .send()
+        .await
+        .expect("WebP 动效");
+    assert_eq!(response.status(), StatusCode::OK);
+    let list: serde_json::Value = serde_json::from_str(
+        &fixture
+            .client
+            .get(format!("{}/panel/api/logo/list", fixture.base))
+            .header("authorization", format!("Bearer {token}"))
+            .send()
+            .await
+            .expect("列表")
+            .text()
+            .await
+            .expect("正文"),
+    )
+    .expect("JSON");
+    let item = list["logos"]
+        .as_array()
+        .expect("logos")
+        .iter()
+        .find(|item| item["file"] == "anim.webp")
+        .expect("应列出 WebP");
+    assert_eq!(item["animated"], true);
+    let response = fixture
+        .client
+        .get(format!("{}/logo/anim.webp", fixture.base))
+        .send()
+        .await
+        .expect("取 WebP");
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/webp")
+    );
 }

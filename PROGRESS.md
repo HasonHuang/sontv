@@ -43,6 +43,15 @@
 
 2026-10-24：
 
+- **U-06 台标动效改为动画 WebP**：
+  - 输出固定 10 帧：前 9 帧 80 ms，末帧 1500 ms，`total_ms=2220`。
+  - 生成 `VP8X`/`ANIM`/`ANMF` 容器，帧载荷为无损 `VP8L`。
+  - PNG 与 WebP 改为纯 Rust 解码；其他格式保留 `ffmpeg` 回退。
+  - 第 0 帧整幅、后续帧脏矩形；`x/y` 取偶数；无变化帧用 `2x2`。
+  - `dirty_ratio` 按矩形面积整数百分比计算。
+  - `breathe` 输出与目标逐字节一致；其他效果对齐透明像素、级别量化和移动路径。
+  - `logo/list` 的 `animated` 改为“`.webp` 扩展名 + 动画内容”；已动画源图拒绝再次生成。
+  - 证据：更新 `docs/findings/dynamic/12-logo-library.md`。
 - **V-03 公开 EPG API 完成**：
   - `/epg/api/channels`、`/programmes/:channel`、`/search` 按目标 v0.8.2 抓包对齐。
   - 频道表含 `icon/id/kind/last_stop/name/programme_count/source_id/source_name`；生成时写 `viewer.json`。
@@ -86,7 +95,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 218 项通过（149 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 223 项通过（154 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -94,7 +103,7 @@
 
 ### 1.5 当前工作区
 
-- 基线提交：`4b4aef1`，已推送 `rust` 分支。
+- 基线提交：`8e133bd`，已推送 `rust` 分支。
 - `PROGRESS_bak.md` 保存 2026-10-23 之前的完整 1169 行记录。
 - `dist/` 与 `samples/` 不入库。
 - 目标测试容器、源站与本实现的临时实例应按需清理。
@@ -105,7 +114,7 @@
 
 | ID | 优先级 | 任务 | 当前状态 | 下一步 |
 | --- | --- | --- | --- | --- |
-| U-06 | P1 | 台标动效与解码 | 6 种效果与 APNG 编码已完成；依赖外部 `ffmpeg`/`ffprobe` | 评估 APNG 脏矩形优化；验证 WebP 解码；减少外部依赖 |
+| U-06 | P1 | 台标动效与解码 | ✅ 完成：动画 WebP、10 帧、脏矩形、PNG/WebP 纯 Rust 解码；其他格式回退 `ffmpeg` | 可选：逐像素对齐其余 5 种效果与缩放采样 |
 
 ### 2.2 待补目标证据
 
@@ -148,11 +157,10 @@
 
 ## 3. 建议推进顺序
 
-1. **V-03**：补公开 EPG API 响应形状。
-2. **U-06**：评估 APNG 脏矩形优化；确认 WebP 解码路径。
-3. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
-4. 每项完成后更新本文件、对应 `docs/` 文档与测试。
-5. 提交使用 Conventional Commits，并立即 push `rust` 分支。
+1. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
+2. 可选：逐像素对齐 U-06 其余效果与缩放采样。
+3. 每项完成后更新本文件、对应 `docs/` 文档与测试。
+4. 提交使用 Conventional Commits，并立即 push `rust` 分支。
 
 ## 4. 关键设计结论
 

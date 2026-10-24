@@ -1,13 +1,24 @@
-//! 台标动效：解码静态图、逐帧生成、编码 APNG。
+//! 台标动效：解码静态图、逐帧生成、编码动画 WebP。
 //!
-//! 目标 v0.8.2 用纯 Rust 无损编码（F-012）。本实现借助 `ffmpeg`/`ffprobe`
-//! 解码与缩放，再自行生成帧并写 APNG；`ffmpeg` 缺失时返回错误。
-//! 动效输出覆盖原文件，并在 `.orig/` 保留首次生成的静态原图。
+//! 目标 v0.8.2 使用 10 帧无损动画 WebP（F-012）。PNG 与 WebP 由纯 Rust
+//! 解码；其他白名单格式仍可回退到 `ffmpeg`。动效输出覆盖原文件，并在
+//! `.orig/` 保留首次生成前的静态原图。
 
-use std::{f32::consts::TAU, fs, io::Write, path::Path, process::Command};
+use std::{fs, io::Cursor, path::Path, process::Command};
 
 use anyhow::{bail, Context, Result};
-use flate2::{write::ZlibEncoder, Compression};
+use image_webp::{ColorType, WebPDecoder, WebPEncoder};
+
+/// 动画固定帧数。
+const FRAMES: usize = 10;
+/// 前 9 帧时长。
+const FRAME_MS: u64 = 80;
+/// 末帧时长。
+const LAST_FRAME_MS: u64 = 1_500;
+/// 总时长。
+const TOTAL_MS: u64 = FRAME_MS * 9 + LAST_FRAME_MS;
+/// 单级增亮量。
+const LEVEL: f32 = 0.11;
 
 /// 动效生成结果。
 #[derive(Debug, Clone)]
@@ -21,14 +32,17 @@ pub struct Report {
     pub dirty_ratio: f64,
 }
 
-/// 生成 APNG 动效并覆盖原台标。
+/// 生成动画 WebP 并覆盖原台标。
+///
+/// `frame_ms` 与 `quality` 保留在接口中，目标 v0.8.2 的动效编码固定为
+/// 80/1500 毫秒且无损，不读取这两个值。
 pub fn animate(
     cache_dir: &str,
     file: &str,
     effect: &str,
     quality: &str,
     max_size: u32,
-    frame_ms: u64,
+    _frame_ms: u64,
     default_quality: u8,
 ) -> Result<Report> {
     let file = crate::logo::sanitize(file).context("文件名不合法")?;
@@ -43,6 +57,9 @@ pub fn animate(
     if !path.is_file() {
         bail!("文件不存在");
     }
+    if crate::logo::is_animated_content(&path) {
+        bail!("源图已经是动画,请先用静态图生成");
+    }
     let quality = if quality.trim().is_empty() {
         default_quality
     } else {
@@ -54,19 +71,27 @@ pub fn animate(
     if !(1..=100).contains(&quality) {
         bail!("quality 必须在 1..100");
     }
+    let _ = quality;
+
     let max_size = max_size.clamp(16, 2048);
-    let (width, height) = probe(&path)?;
-    let scale = (max_size as f64 / width.max(height) as f64).min(1.0);
-    let width = ((width as f64 * scale).round() as u32).max(1);
-    let height = ((height as f64 * scale).round() as u32).max(1);
-    let source = decode(&path, width, height)?;
-    let frame_count = if width.max(height) <= 64 { 12 } else { 20 };
-    let delay_ms = frame_ms.clamp(20, 1_000);
-    let frames = render_frames(&source, width, height, effect, frame_count)?;
-    let dirty_ratio = dirty_ratio(&frames);
+    let source = decode(&path)?;
+    let (width, height) = scaled_size(source.width, source.height, max_size);
+    let source = if width == source.width && height == source.height {
+        source
+    } else {
+        Image {
+            width,
+            height,
+            pixels: resize(&source, width, height),
+        }
+    };
+
+    let frames = render_frames(&source, effect)?;
+    let rects = frame_rects(&frames, width, height);
+    let dirty_ratio = dirty_ratio(&rects, width, height);
+    let output = encode_animated_webp(&frames, &rects, width, height)?;
+
     let bytes_before = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-    let level = (((100 - quality) / 10).min(9)) as u32;
-    let output = encode_apng(&frames, width, height, delay_ms, level)?;
     let original = crate::logo::orig_dir(cache_dir).join(&file);
     if !original.is_file() {
         fs::create_dir_all(crate::logo::orig_dir(cache_dir)).context("建原图目录")?;
@@ -77,14 +102,139 @@ pub fn animate(
         frames: frames.len(),
         width,
         height,
-        total_ms: frames.len() as u64 * delay_ms,
+        total_ms: TOTAL_MS,
         bytes_before,
         bytes_after: output.len() as u64,
         dirty_ratio,
     })
 }
 
-fn probe(path: &Path) -> Result<(u32, u32)> {
+#[derive(Debug, Clone)]
+struct Image {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+}
+
+fn scaled_size(width: u32, height: u32, max_size: u32) -> (u32, u32) {
+    let longest = width.max(height);
+    if longest <= max_size {
+        return (width.max(1), height.max(1));
+    }
+    let scale = max_size as f64 / longest as f64;
+    (
+        ((width as f64 * scale).round() as u32).max(1),
+        ((height as f64 * scale).round() as u32).max(1),
+    )
+}
+
+fn decode(path: &Path) -> Result<Image> {
+    let data = fs::read(path).with_context(|| format!("读 {}", path.display()))?;
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return decode_png(&data);
+    }
+    if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
+        return decode_webp(&data);
+    }
+    decode_ffmpeg(path)
+}
+
+fn decode_png(data: &[u8]) -> Result<Image> {
+    let mut decoder = png::Decoder::new(Cursor::new(data));
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().context("解析 PNG")?;
+    let (width, height) = (reader.info().width, reader.info().height);
+    let mut buffer = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buffer).context("解码 PNG")?;
+    let (color, bit_depth) = reader.output_color_type();
+    if bit_depth != png::BitDepth::Eight {
+        bail!("PNG 位深不支持");
+    }
+    let pixels = match color {
+        png::ColorType::Grayscale => {
+            let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+            for value in buffer.iter().take(info.buffer_size()) {
+                rgba.extend_from_slice(&[*value, *value, *value, 255]);
+            }
+            rgba
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+            for pixel in buffer[..info.buffer_size()].as_chunks::<2>().0 {
+                rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
+            }
+            rgba
+        }
+        png::ColorType::Rgb => {
+            let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+            for pixel in buffer[..info.buffer_size()].as_chunks::<3>().0 {
+                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+            }
+            rgba
+        }
+        png::ColorType::Rgba => buffer[..info.buffer_size()].to_vec(),
+        png::ColorType::Indexed => bail!("PNG 调色板未展开"),
+    };
+    let expected = width as usize * height as usize * 4;
+    if pixels.len() != expected {
+        bail!("PNG 输出尺寸不符");
+    }
+    Ok(Image {
+        width,
+        height,
+        pixels,
+    })
+}
+
+fn decode_webp(data: &[u8]) -> Result<Image> {
+    let mut decoder = WebPDecoder::new(Cursor::new(data)).context("解析 WebP")?;
+    let (width, height) = decoder.dimensions();
+    let alpha = decoder.has_alpha();
+    let size = decoder.output_buffer_size().context("WebP 尺寸溢出")?;
+    let mut buffer = vec![0; size];
+    decoder.read_image(&mut buffer).context("解码 WebP")?;
+    let pixels = if alpha {
+        buffer
+    } else {
+        let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+        for pixel in buffer.as_chunks::<3>().0 {
+            rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+        }
+        rgba
+    };
+    Ok(Image {
+        width,
+        height,
+        pixels,
+    })
+}
+
+fn decode_ffmpeg(path: &Path) -> Result<Image> {
+    let (width, height) = probe_ffmpeg(path)?;
+    let output = Command::new("ffmpeg")
+        .args(["-v", "error", "-i"])
+        .arg(path)
+        .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+        .output()
+        .context("执行 ffmpeg 失败")?;
+    if !output.status.success() {
+        bail!(
+            "ffmpeg 解码失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let expected = width as usize * height as usize * 4;
+    if output.stdout.len() != expected {
+        bail!("ffmpeg 输出尺寸不符: {} != {expected}", output.stdout.len());
+    }
+    Ok(Image {
+        width,
+        height,
+        pixels: output.stdout,
+    })
+}
+
+fn probe_ffmpeg(path: &Path) -> Result<(u32, u32)> {
     let output = Command::new("ffprobe")
         .args([
             "-v",
@@ -110,115 +260,269 @@ fn probe(path: &Path) -> Result<(u32, u32)> {
     Ok((width.parse()?, height.parse()?))
 }
 
-fn decode(path: &Path, width: u32, height: u32) -> Result<Vec<u8>> {
-    let scale = format!("scale={width}:{height}");
-    let output = Command::new("ffmpeg")
-        .args(["-v", "error", "-i"])
-        .arg(path)
-        .args([
-            "-frames:v",
-            "1",
-            "-vf",
-            &scale,
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "rgba",
-            "-",
-        ])
-        .output()
-        .context("执行 ffmpeg 失败")?;
-    if !output.status.success() {
-        bail!(
-            "ffmpeg 解码失败: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+/// 双线性缩放；采样点按左上角对齐，避免半像素偏移。
+fn resize(source: &Image, width: u32, height: u32) -> Vec<u8> {
+    let sw = source.width as usize;
+    let sh = source.height as usize;
+    let dw = width as usize;
+    let dh = height as usize;
+    let mut out = vec![0u8; dw * dh * 4];
+    for y in 0..dh {
+        let sy = y as f32 * sh as f32 / dh as f32;
+        let y0 = (sy.floor() as usize).min(sh.saturating_sub(1));
+        let y1 = (y0 + 1).min(sh - 1);
+        let fy = sy - y0 as f32;
+        for x in 0..dw {
+            let sx = x as f32 * sw as f32 / dw as f32;
+            let x0 = (sx.floor() as usize).min(sw.saturating_sub(1));
+            let x1 = (x0 + 1).min(sw - 1);
+            let fx = sx - x0 as f32;
+            let offset = (y * dw + x) * 4;
+            for channel in 0..4 {
+                let a = source.pixels[(y0 * sw + x0) * 4 + channel] as f32;
+                let b = source.pixels[(y0 * sw + x1) * 4 + channel] as f32;
+                let c = source.pixels[(y1 * sw + x0) * 4 + channel] as f32;
+                let d = source.pixels[(y1 * sw + x1) * 4 + channel] as f32;
+                let top = a + (b - a) * fx;
+                let bottom = c + (d - c) * fx;
+                out[offset + channel] = (top + (bottom - top) * fy).round().clamp(0.0, 255.0) as u8;
+            }
+        }
     }
-    let expected = width as usize * height as usize * 4;
-    if output.stdout.len() != expected {
-        bail!("ffmpeg 输出尺寸不符: {} != {expected}", output.stdout.len());
-    }
-    Ok(output.stdout)
+    out
 }
 
-fn render_frames(
-    source: &[u8],
-    width: u32,
-    height: u32,
-    effect: &str,
-    count: usize,
-) -> Result<Vec<Vec<u8>>> {
-    let w = width as usize;
-    let h = height as usize;
-    let mut frames = Vec::with_capacity(count);
-    for frame in 0..count {
-        let t = frame as f32 / count as f32;
-        let mut pixels = source.to_vec();
+fn render_frames(source: &Image, effect: &str) -> Result<Vec<Vec<u8>>> {
+    let w = source.width as usize;
+    let h = source.height as usize;
+    match effect {
+        "diagonal" | "vertical" | "bounce" | "spot" | "glow" | "breathe" => {}
+        other => bail!("未知动效: {other}"),
+    }
+    let mut frames = Vec::with_capacity(FRAMES);
+    for frame in 0..FRAMES {
+        let mut pixels = source.pixels.clone();
         match effect {
-            "diagonal" => sweep(&mut pixels, w, h, t, true),
-            "vertical" => sweep(&mut pixels, w, h, t, false),
-            "bounce" => bounce(&mut pixels, source, w, h, t),
-            "spot" => spot(&mut pixels, w, h, t),
-            "glow" => glow(&mut pixels, t),
-            "breathe" => breathe(&mut pixels, t),
-            other => bail!("未知动效: {other}"),
+            "diagonal" => diagonal(&mut pixels, w, h, frame),
+            "vertical" => vertical(&mut pixels, w, h, frame),
+            "bounce" => bounce(&mut pixels, w, h, frame),
+            "spot" => spot(&mut pixels, w, h, frame),
+            "glow" => glow(&mut pixels, w, h, frame),
+            "breathe" => breathe(&mut pixels, frame),
+            _ => unreachable!(),
         }
         frames.push(pixels);
     }
     Ok(frames)
 }
 
-fn sweep(pixels: &mut [u8], w: usize, h: usize, t: f32, diagonal: bool) {
-    let span = if diagonal { (w + h) as f32 } else { h as f32 };
+/// 斜向扫光：光带方向为 `x + y/4`，宽度 17 像素。
+fn diagonal(pixels: &mut [u8], w: usize, h: usize, frame: usize) {
+    if frame == FRAMES - 1 {
+        return;
+    }
+    let max_pos = (w.saturating_sub(1)) as f32 + (h.saturating_sub(1)) as f32 * 0.25;
+    let center = (frame as f32 / (FRAMES - 1) as f32 * (max_pos + 1.0)).round();
+    sweep(
+        pixels,
+        w,
+        h,
+        |x, y| x as f32 + y as f32 * 0.25,
+        center,
+        &DIAGONAL_PROFILE,
+    );
+}
+
+/// 竖向扫光：第 1 帧从顶部进入，第 8 帧从底部离开。
+fn vertical(pixels: &mut [u8], w: usize, h: usize, frame: usize) {
+    if frame == 0 || frame == FRAMES - 1 {
+        return;
+    }
+    let center = ((frame - 1) as f32 * h as f32 / 7.0).round();
+    sweep(pixels, w, h, |_, y| y as f32, center, &VERTICAL_PROFILE);
+}
+
+/// 来回扫光：斜向光带往返一次。
+fn bounce(pixels: &mut [u8], w: usize, h: usize, frame: usize) {
+    if frame == FRAMES - 1 {
+        return;
+    }
+    let max_pos = (w.saturating_sub(1)) as f32 + (h.saturating_sub(1)) as f32 * 0.25;
+    let phase = match frame {
+        0 => 0.0,
+        1 => 2.0 / 9.0,
+        2 => 4.0 / 9.0,
+        3 => 6.0 / 9.0,
+        4 | 5 => 8.0 / 9.0,
+        6 => 6.0 / 9.0,
+        7 => 4.0 / 9.0,
+        _ => 2.0 / 9.0,
+    };
+    sweep(
+        pixels,
+        w,
+        h,
+        |x, y| x as f32 + y as f32 * 0.25,
+        (phase * (max_pos + 1.0)).round(),
+        &DIAGONAL_PROFILE,
+    );
+}
+
+fn sweep<F>(pixels: &mut [u8], w: usize, h: usize, pos: F, center: f32, profile: &[u8])
+where
+    F: Fn(usize, usize) -> f32,
+{
+    let half = profile.len() as f32 / 2.0;
     for y in 0..h {
         for x in 0..w {
-            let pos = if diagonal { (x + y) as f32 } else { y as f32 };
-            let phase = (pos / span + t).fract();
-            let shine = (phase * TAU).sin().max(0.0).powi(8);
-            add_white(&mut pixels[(y * w + x) * 4..][..4], shine * 0.55);
+            let delta = pos(x, y) - center;
+            if delta < -half || delta >= half {
+                continue;
+            }
+            let index = (delta + half).floor() as usize;
+            let Some(level) = profile.get(index).copied() else {
+                continue;
+            };
+            add_white(&mut pixels[(y * w + x) * 4..][..4], level);
         }
     }
 }
 
-fn bounce(pixels: &mut [u8], source: &[u8], w: usize, h: usize, t: f32) {
-    let shift = (t * TAU).sin() * h as f32 * 0.06;
-    pixels.fill(0);
-    for y in 0..h {
-        let sy = ((y as f32 - shift).round() as isize).clamp(0, h as isize - 1) as usize;
-        pixels[y * w * 4..(y + 1) * w * 4].copy_from_slice(&source[sy * w * 4..(sy + 1) * w * 4]);
+/// 斜向光带级别。
+const DIAGONAL_PROFILE: [u8; 17] = [1, 2, 3, 4, 4, 5, 5, 5, 5, 5, 5, 4, 4, 3, 3, 2, 1];
+/// 竖向光带级别。
+const VERTICAL_PROFILE: [u8; 17] = [1, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 4, 4, 3, 2, 1];
+/// 光点掠过：椭圆光斑从左上向右中移动。
+fn spot(pixels: &mut [u8], w: usize, h: usize, frame: usize) {
+    if frame == FRAMES - 1 {
+        return;
     }
-}
-
-fn spot(pixels: &mut [u8], w: usize, h: usize, t: f32) {
-    let cx = w as f32 * (0.5 + 0.25 * (t * TAU).cos());
-    let cy = h as f32 * (0.5 + 0.25 * (t * TAU).sin());
-    let sigma = w.max(h) as f32 * 0.18;
+    let step = (frame as f32 - 1.0) / 7.0;
+    let cx = step * w as f32;
+    let cy = h as f32 * (0.35 + 0.30 * step);
+    let radius = (w.max(h) as f32 * 0.15).max(3.0);
     for y in 0..h {
         for x in 0..w {
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            let glow = (-(dx * dx + dy * dy) / (2.0 * sigma * sigma)).exp();
-            add_white(&mut pixels[(y * w + x) * 4..][..4], glow * 0.45);
+            let dx = (x as f32 - cx) / radius;
+            let dy = (y as f32 - cy) / radius;
+            let distance_squared = dx * dx + dy * dy;
+            if distance_squared >= 1.0 {
+                continue;
+            }
+            let level = (5.0 * (1.0 - distance_squared)).round().clamp(1.0, 5.0) as u8;
+            add_white(&mut pixels[(y * w + x) * 4..][..4], level);
         }
     }
 }
 
-fn glow(pixels: &mut [u8], t: f32) {
-    let strength = 0.2 + 0.25 * (0.5 + 0.5 * (t * TAU).sin());
-    for pixel in pixels.chunks_exact_mut(4) {
-        add_white(pixel, strength);
+/// 边缘辉光：按帧强度在图形边缘向外扩散 2–3 像素。
+fn glow(pixels: &mut [u8], w: usize, h: usize, frame: usize) {
+    let base = [0u8, 1, 2, 3, 3, 3, 3, 2, 1, 0][frame.min(FRAMES - 1)];
+    if base == 0 {
+        return;
+    }
+    let rings = if base <= 1 { 2 } else { 3 };
+    let distances = edge_distances(pixels, w, h, rings);
+    for (index, distance) in distances.iter().enumerate() {
+        if let Some(distance) = distance {
+            let level = base.saturating_sub(*distance).max(1);
+            add_white(&mut pixels[index * 4..][..4], level);
+        }
     }
 }
 
-fn breathe(pixels: &mut [u8], t: f32) {
-    let alpha = 0.65 + 0.35 * (0.5 + 0.5 * (t * TAU).sin());
-    for pixel in pixels.chunks_exact_mut(4) {
-        pixel[3] = (pixel[3] as f32 * alpha).round().clamp(0.0, 255.0) as u8;
+fn edge_distances(pixels: &[u8], w: usize, h: usize, rings: usize) -> Vec<Option<u8>> {
+    let mut edge = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let index = y * w + x;
+            if pixels[index * 4 + 3] == 0 {
+                continue;
+            }
+            if x == 0
+                || y == 0
+                || x + 1 == w
+                || y + 1 == h
+                || pixels[index * 4 + 3 - 4] == 0
+                || pixels[index * 4 + 3 + 4] == 0
+                || pixels[index * 4 + 3 - w * 4] == 0
+                || pixels[index * 4 + 3 + w * 4] == 0
+                || color_edge(pixels, w, x, y)
+            {
+                edge[index] = true;
+            }
+        }
+    }
+    let mut distances = vec![None; w * h];
+    let mut frontier: Vec<usize> = edge
+        .iter()
+        .enumerate()
+        .filter_map(|(index, value)| (*value && pixels[index * 4 + 3] > 0).then_some(index))
+        .collect();
+    for distance in 0..rings {
+        let mut next = Vec::new();
+        for index in frontier {
+            if distances[index].is_some() {
+                continue;
+            }
+            distances[index] = Some(distance as u8);
+            let x = index % w;
+            let y = index / w;
+            for dy in -1i32..=1 {
+                for dx in -1i32..=1 {
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let neighbor = ny as usize * w + nx as usize;
+                    if distances[neighbor].is_none() && pixels[neighbor * 4 + 3] > 0 {
+                        next.push(neighbor);
+                    }
+                }
+            }
+        }
+        frontier = next;
+    }
+    distances
+}
+
+fn color_edge(pixels: &[u8], w: usize, x: usize, y: usize) -> bool {
+    let index = (y * w + x) * 4;
+    let mut gradient = 0i32;
+    if x + 1 < w {
+        let next = index + 4;
+        for channel in 0..3 {
+            gradient = gradient
+                .max((pixels[index + channel] as i32 - pixels[next + channel] as i32).abs());
+        }
+    }
+    if index + w * 4 + 3 < pixels.len() {
+        let next = index + w * 4;
+        for channel in 0..3 {
+            gradient = gradient
+                .max((pixels[index + channel] as i32 - pixels[next + channel] as i32).abs());
+        }
+    }
+    gradient > 40
+}
+
+/// 呼吸明暗：对全部不透明像素增亮。
+fn breathe(pixels: &mut [u8], frame: usize) {
+    let level = [0u8, 2, 3, 4, 5, 5, 4, 3, 2, 0][frame.min(FRAMES - 1)];
+    if level == 0 {
+        return;
+    }
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        add_white(pixel, level);
     }
 }
 
-fn add_white(pixel: &mut [u8], amount: f32) {
-    let amount = amount.clamp(0.0, 1.0);
+fn add_white(pixel: &mut [u8], level: u8) {
+    if level == 0 || pixel[3] == 0 {
+        return;
+    }
+    let amount = (level.min(5) as f32 * LEVEL).clamp(0.0, 1.0);
     for channel in &mut pixel[..3] {
         *channel = (*channel as f32 + (255.0 - *channel as f32) * amount)
             .round()
@@ -226,178 +530,320 @@ fn add_white(pixel: &mut [u8], amount: f32) {
     }
 }
 
-fn dirty_ratio(frames: &[Vec<u8>]) -> f64 {
-    let Some(first) = frames.first() else {
-        return 0.0;
-    };
-    let total = (first.len() / 4).max(1);
-    let changed: usize = frames
-        .iter()
-        .skip(1)
-        .map(|frame| {
-            frame
-                .chunks_exact(4)
-                .zip(first.chunks_exact(4))
-                .filter(|(left, right)| left != right)
-                .count()
-        })
-        .sum();
-    ((changed as f64 / total as f64) * 1_000.0).round() / 10.0
-}
-
-fn encode_apng(
-    frames: &[Vec<u8>],
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rect {
+    x: u32,
+    y: u32,
     width: u32,
     height: u32,
-    delay_ms: u64,
-    level: u32,
-) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    out.extend_from_slice(b"\x89PNG\r\n\x1a\n");
-    let mut ihdr = Vec::new();
-    ihdr.extend_from_slice(&width.to_be_bytes());
-    ihdr.extend_from_slice(&height.to_be_bytes());
-    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
-    chunk(&mut out, b"IHDR", &ihdr);
-    let mut actl = Vec::new();
-    actl.extend_from_slice(&(frames.len() as u32).to_be_bytes());
-    actl.extend_from_slice(&0u32.to_be_bytes());
-    chunk(&mut out, b"acTL", &actl);
+}
 
-    let mut sequence = 0u32;
+fn frame_rects(frames: &[Vec<u8>], width: u32, height: u32) -> Vec<Rect> {
+    let mut rects = Vec::with_capacity(frames.len());
     for (index, frame) in frames.iter().enumerate() {
-        let mut raw = Vec::with_capacity(height as usize * (1 + width as usize * 4));
-        for row in frame.chunks_exact(width as usize * 4) {
-            raw.push(0);
-            raw.extend_from_slice(row);
-        }
-        let compressed = compress(&raw, level)?;
-        let mut fctl = Vec::new();
-        fctl.extend_from_slice(&sequence.to_be_bytes());
-        sequence += 1;
-        fctl.extend_from_slice(&width.to_be_bytes());
-        fctl.extend_from_slice(&height.to_be_bytes());
-        fctl.extend_from_slice(&0u32.to_be_bytes());
-        fctl.extend_from_slice(&0u32.to_be_bytes());
-        fctl.extend_from_slice(&(delay_ms.min(u16::MAX as u64) as u16).to_be_bytes());
-        fctl.extend_from_slice(&1_000u16.to_be_bytes());
-        // 每帧前清空画布，避免带透明区域的动效留下拖影。
-        fctl.extend_from_slice(&[1, 0]);
-        chunk(&mut out, b"fcTL", &fctl);
         if index == 0 {
-            chunk(&mut out, b"IDAT", &compressed);
-        } else {
-            let mut fdat = Vec::with_capacity(compressed.len() + 4);
-            fdat.extend_from_slice(&sequence.to_be_bytes());
-            sequence += 1;
-            fdat.extend_from_slice(&compressed);
-            chunk(&mut out, b"fdAT", &fdat);
+            rects.push(Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            });
+            continue;
         }
+        let previous = &frames[index - 1];
+        let mut min_x = width;
+        let mut min_y = height;
+        let mut max_x = 0;
+        let mut max_y = 0;
+        let mut changed = false;
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                let offset = (y * width as usize + x) * 4;
+                if frame[offset..offset + 4] != previous[offset..offset + 4] {
+                    changed = true;
+                    min_x = min_x.min(x as u32);
+                    min_y = min_y.min(y as u32);
+                    max_x = max_x.max(x as u32);
+                    max_y = max_y.max(y as u32);
+                }
+            }
+        }
+        if !changed {
+            rects.push(Rect {
+                x: 0,
+                y: 0,
+                width: 2.min(width),
+                height: 2.min(height),
+            });
+            continue;
+        }
+        let x = min_x & !1;
+        let y = min_y & !1;
+        rects.push(Rect {
+            x,
+            y,
+            width: max_x - x + 1,
+            height: max_y - y + 1,
+        });
     }
-    chunk(&mut out, b"IEND", &[]);
+    rects
+}
+
+fn dirty_ratio(rects: &[Rect], width: u32, height: u32) -> f64 {
+    let area: u64 = rects
+        .iter()
+        .map(|rect| rect.width as u64 * rect.height as u64)
+        .sum();
+    let total = width as u64 * height as u64 * rects.len().max(1) as u64;
+    if total == 0 {
+        return 0.0;
+    }
+    ((area as f64 / total as f64) * 100.0).round()
+}
+
+fn encode_animated_webp(
+    frames: &[Vec<u8>],
+    rects: &[Rect],
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>> {
+    if frames.len() != FRAMES || rects.len() != FRAMES {
+        bail!("动画帧数不符");
+    }
+    let mut out = Vec::new();
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(b"WEBP");
+
+    let mut vp8x = Vec::with_capacity(10);
+    vp8x.push(0x12);
+    vp8x.extend_from_slice(&[0, 0, 0]);
+    write_u24(&mut vp8x, width.saturating_sub(1));
+    write_u24(&mut vp8x, height.saturating_sub(1));
+    write_chunk(&mut out, b"VP8X", &vp8x);
+
+    let anim = [0u8; 6];
+    write_chunk(&mut out, b"ANIM", &anim);
+
+    for (index, (frame, rect)) in frames.iter().zip(rects).enumerate() {
+        let payload = encode_vp8l(frame, *rect, width)?;
+        let duration = if index + 1 == FRAMES {
+            LAST_FRAME_MS
+        } else {
+            FRAME_MS
+        };
+        let mut data = Vec::with_capacity(16 + payload.len() + 8);
+        write_u24(&mut data, rect.x / 2);
+        write_u24(&mut data, rect.y / 2);
+        write_u24(&mut data, rect.width.saturating_sub(1));
+        write_u24(&mut data, rect.height.saturating_sub(1));
+        write_u24(&mut data, duration as u32);
+        data.push(0x02);
+        data.extend_from_slice(b"VP8L");
+        data.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        data.extend_from_slice(&payload);
+        if payload.len() % 2 == 1 {
+            data.push(0);
+        }
+        write_chunk(&mut out, b"ANMF", &data);
+    }
+
+    let riff_size = (out.len() - 8) as u32;
+    out[4..8].copy_from_slice(&riff_size.to_le_bytes());
     Ok(out)
 }
 
-fn compress(data: &[u8], level: u32) -> Result<Vec<u8>> {
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(level.min(9)));
-    encoder.write_all(data)?;
-    Ok(encoder.finish()?)
-}
-
-fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
-    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    out.extend_from_slice(kind);
-    out.extend_from_slice(data);
-    let mut crc_input = Vec::with_capacity(4 + data.len());
-    crc_input.extend_from_slice(kind);
-    crc_input.extend_from_slice(data);
-    out.extend_from_slice(&crc32(&crc_input).to_be_bytes());
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xFFFF_FFFFu32;
-    for byte in data {
-        crc ^= *byte as u32;
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                0xEDB8_8320 ^ (crc >> 1)
-            } else {
-                crc >> 1
-            };
-        }
+fn encode_vp8l(frame: &[u8], rect: Rect, canvas_width: u32) -> Result<Vec<u8>> {
+    let mut rgba = Vec::with_capacity(rect.width as usize * rect.height as usize * 4);
+    for y in rect.y..rect.y + rect.height {
+        let start = (y as usize * canvas_width as usize + rect.x as usize) * 4;
+        let end = start + rect.width as usize * 4;
+        rgba.extend_from_slice(&frame[start..end]);
     }
-    !crc
+    let mut container = Vec::new();
+    WebPEncoder::new(&mut container)
+        .encode(&rgba, rect.width, rect.height, ColorType::Rgba8)
+        .context("编码 WebP 帧")?;
+    if container.get(12..16) != Some(b"VP8L") {
+        bail!("WebP 帧不是 VP8L");
+    }
+    let length =
+        u32::from_le_bytes(container[16..20].try_into().context("WebP 帧长度字段")?) as usize;
+    let end = 20 + length;
+    if end > container.len() {
+        bail!("WebP 帧长度越界");
+    }
+    Ok(container[20..end].to_vec())
+}
+
+fn write_u24(out: &mut Vec<u8>, value: u32) {
+    out.push((value & 0xFF) as u8);
+    out.push(((value >> 8) & 0xFF) as u8);
+    out.push(((value >> 16) & 0xFF) as u8);
+}
+
+fn write_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+    out.extend_from_slice(kind);
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(data);
+    if data.len() % 2 == 1 {
+        out.push(0);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn apng_has_expected_chunks() {
-        let frame = vec![255u8; 4 * 4 * 4];
-        let output = encode_apng(&[frame.clone(), frame], 4, 4, 80, 3).expect("编码");
-        assert_eq!(&output[..8], b"\x89PNG\r\n\x1a\n");
-        assert!(output.windows(4).any(|window| window == b"acTL"));
-        assert!(output.windows(4).any(|window| window == b"fcTL"));
-        assert!(output.windows(4).any(|window| window == b"fdAT"));
-        assert_eq!(&output[output.len() - 12..], b"\0\0\0\0IEND\xaeB`\x82");
-    }
-
-    #[test]
-    fn non_png_inputs_are_animated() {
-        if std::process::Command::new("ffmpeg")
-            .arg("-version")
-            .output()
-            .is_err()
-            || std::process::Command::new("ffprobe")
-                .arg("-version")
-                .output()
-                .is_err()
-        {
-            return;
-        }
-        let root = std::env::temp_dir().join(format!("logo-anim-fmt-{}", uuid::Uuid::new_v4()));
-        let cache = root.to_string_lossy().to_string();
-        let logos = root.join("logos");
-        fs::create_dir_all(&logos).expect("建台标目录");
-        for ext in ["bmp", "jpg", "avif"] {
-            let path = logos.join(format!("x.{ext}"));
-            let status = std::process::Command::new("ffmpeg")
-                .args([
-                    "-v",
-                    "error",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "color=c=red:s=8x8:d=1",
-                    "-frames:v",
-                    "1",
-                ])
-                .arg(&path)
-                .arg("-y")
-                .status()
-                .expect("执行 ffmpeg");
-            if !status.success() {
-                continue;
+    fn source() -> Image {
+        let mut pixels = vec![0u8; 16 * 16 * 4];
+        for y in 0..16 {
+            for x in 0..16 {
+                let offset = (y * 16 + x) * 4;
+                pixels[offset] = (x * 12) as u8;
+                pixels[offset + 1] = (y * 12) as u8;
+                pixels[offset + 2] = 80;
+                pixels[offset + 3] = 255;
             }
-            let report = animate(&cache, &format!("x.{ext}"), "glow", "80", 64, 80, 80)
-                .unwrap_or_else(|error| panic!("{ext}: {error:#}"));
-            assert!(report.frames > 0);
-            let bytes = fs::read(&path).expect("读输出");
-            assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "{ext}");
         }
-        let _ = fs::remove_dir_all(&root);
+        Image {
+            width: 16,
+            height: 16,
+            pixels,
+        }
     }
 
     #[test]
-    fn effects_change_pixels() {
-        let source: Vec<u8> = (0..4 * 16 * 16).map(|index| (index % 251) as u8).collect();
-        for effect in ["diagonal", "vertical", "bounce", "spot", "glow", "breathe"] {
-            let frames = render_frames(&source, 16, 16, effect, 4).expect("帧");
-            assert_eq!(frames.len(), 4);
-            assert!(frames.iter().any(|frame| frame != &source), "{effect}");
+    fn animated_webp_has_target_chunks_and_timing() {
+        let source = source();
+        let frames = render_frames(&source, "diagonal").expect("帧");
+        let rects = frame_rects(&frames, source.width, source.height);
+        let output =
+            encode_animated_webp(&frames, &rects, source.width, source.height).expect("编码");
+        assert_eq!(&output[..4], b"RIFF");
+        assert_eq!(&output[8..12], b"WEBP");
+        assert!(output.windows(4).any(|window| window == b"VP8X"));
+        assert!(output.windows(4).any(|window| window == b"ANIM"));
+        assert_eq!(
+            output
+                .windows(4)
+                .filter(|window| *window == b"ANMF")
+                .count(),
+            FRAMES
+        );
+        let frames = decode_webp(&output).expect("解码");
+        assert_eq!((frames.width, frames.height), (16, 16));
+        assert_eq!(rects[0].width, 16);
+        assert_eq!(rects[0].height, 16);
+        for rect in &rects[1..] {
+            assert_eq!(rect.x % 2, 0);
+            assert_eq!(rect.y % 2, 0);
         }
-        assert!(render_frames(&source, 16, 16, "bad", 4).is_err());
+    }
+
+    #[test]
+    fn last_frame_duration_is_long() {
+        let source = source();
+        let frames = render_frames(&source, "breathe").expect("帧");
+        let rects = frame_rects(&frames, source.width, source.height);
+        let output =
+            encode_animated_webp(&frames, &rects, source.width, source.height).expect("编码");
+        let mut offset = 12;
+        let mut durations = Vec::new();
+        while offset + 8 <= output.len() {
+            let kind = &output[offset..offset + 4];
+            let length =
+                u32::from_le_bytes(output[offset + 4..offset + 8].try_into().unwrap()) as usize;
+            if kind == b"ANMF" {
+                let data = &output[offset + 8..offset + 8 + length];
+                durations.push(data[12] as u32 | (data[13] as u32) << 8 | (data[14] as u32) << 16);
+            }
+            offset += 8 + length + (length & 1);
+        }
+        assert_eq!(durations.len(), FRAMES);
+        assert_eq!(durations[..9], [80; 9]);
+        assert_eq!(durations[9], 1_500);
+    }
+
+    #[test]
+    fn effects_keep_transparent_pixels_clear() {
+        let mut source = source();
+        for pixel in source.pixels.as_chunks_mut::<4>().0 {
+            if pixel[0] < 20 {
+                pixel[3] = 0;
+            }
+        }
+        for effect in ["diagonal", "vertical", "bounce", "spot", "glow", "breathe"] {
+            let frames = render_frames(&source, effect).expect("帧");
+            for frame in &frames {
+                for (before, after) in source
+                    .pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(frame.as_chunks::<4>().0)
+                {
+                    if before[3] == 0 {
+                        assert_eq!(before, after, "{effect}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dirty_ratio_counts_rectangles() {
+        let rects = [
+            Rect {
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+            },
+            Rect {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2,
+            },
+        ];
+        assert_eq!(dirty_ratio(&rects, 4, 4), 63.0);
+    }
+
+    #[test]
+    fn unknown_effect_is_an_error() {
+        assert!(render_frames(&source(), "bad").is_err());
+    }
+
+    #[test]
+    fn scaling_uses_longest_side() {
+        assert_eq!(scaled_size(800, 400, 512), (512, 256));
+        assert_eq!(scaled_size(400, 800, 512), (256, 512));
+        assert_eq!(scaled_size(64, 64, 512), (64, 64));
+    }
+
+    #[test]
+    fn png_and_webp_decode_to_rgba() {
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 2, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().expect("PNG 头");
+            writer
+                .write_image_data(&[1, 2, 3, 4, 5, 6, 7, 8])
+                .expect("PNG 数据");
+        }
+        let image = decode_png(&png).expect("解码 PNG");
+        assert_eq!((image.width, image.height), (2, 1));
+        assert_eq!(image.pixels, [1, 2, 3, 4, 5, 6, 7, 8]);
+
+        let mut webp = Vec::new();
+        WebPEncoder::new(&mut webp)
+            .encode(&image.pixels, 2, 1, ColorType::Rgba8)
+            .expect("编码 WebP");
+        let decoded = decode_webp(&webp).expect("解码 WebP");
+        assert_eq!((decoded.width, decoded.height), (2, 1));
+        assert_eq!(decoded.pixels, image.pixels);
     }
 }

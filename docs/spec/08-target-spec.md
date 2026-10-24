@@ -26,7 +26,7 @@
 | S-EP-03 | 频道播放：`GET /{gid}/{cid}.{ext}`（v0.5.1 起路由**不带** `/index.m3u8` 路径段） | D-panel || ✅【观测】`/{gid}/{cid}.m3u8`；`/…/index.m3u8` 无独立路径段（F-004） |
 | S-EP-04 | 回看：`GET /{gid}/{cid}?playseek=<start>-<end>` | D-panel | ✅【观测】只取 `playseek` 原样追加到上游；`start/end/utc/utcend` 丢弃；本地回看忽略该区间 |
 | S-EP-05 | EPG：`/epg.xml`、`/epg.xml.gz`、`/epg`；**EPG 总开关关闭时三者全部 404** | D-panel | ✅【观测】开启后三者 200（`application/xml`/`application/gzip`/`text/html`），均无需登录 |
-| S-EP-06 | 台标：`GET /logo/<文件名>` | D-panel | ✅【观测】200 `image/png`，`public, max-age=86400`；缺→404 |
+| S-EP-06 | 台标：`GET /logo/<文件名>` | D-panel | ✅【观测】200，`content-type` 按扩展名（`.png`→`image/png`，`.webp`→`image/webp`），`public, max-age=86400`；缺→404 |
 | S-EP-07 | 自助解封：`GET /unban`，**无需登录**，每月限 3 次 | D-panel | ✅（见 `07` §2.3） |
 | S-EP-08 | 状态：`/status`（返回 `entry_exts` 等）、`/status/metrics` | D-panel/D-res | ✅【观测】**均非路由**：`/status` 404、`/status/metrics` 302 假路由；实际在 `/panel/api/status` |
 | S-EP-09 | 多 VPS 数据分享端点 `GET /api/share/pull?key=`（**仅 GET/HEAD**）；同步 token/封禁 | 二进制 | ✅【观测】key+`trust_ips` 双门禁（否则 403）；载荷 `{token,token_old,bans,unbans}`；master 轮询从机、follower 禁用本地轮换（见 13） |
@@ -149,7 +149,7 @@
 | S-DASH-04 | 多个 `<BaseURL>`、`url_pool_size=1` 时，音视频都只取第一个 BaseURL | 二进制 | ✅【观测】init/video/audio 均只请求 `/a/`，`/b/` 为 0（F-022）；`url_pool_size>1` 未验 |
 | S-LOGO-01 | 台标本地托管，`tvg-logo` 与 EPG `icon` 指向本地；支持上传转码与动效生成 | D-panel | ✅【观测】9 端点全验（见 12）；转码在**浏览器侧**，服务端只存字节 |
 | S-LOGO-02 | 台标库端点：`GET /logo/{list,match-report}`、`POST /logo/{upload,apply,rename,delete,restore,suggest,animate}` | D-panel | ✅【观测】`upload` 需 `name/ext/data`；`animate.quality` 为**字符串** |
-| S-LOGO-03 | 动效纯 Rust 无损编码，覆盖原文件、原图备份到 `logos/.orig/`；6 种效果 | D-panel/二进制 | ✅【观测】`frames/total_ms/bytes_before/after/dirty_ratio`；`restore` 还原 |
+| S-LOGO-03 | 动效输出纯 Rust 无损**动画 WebP**；固定 10 帧（80 ms × 9 + 1500 ms），覆盖原文件、原图备份到 `logos/.orig/`；6 种效果 | D-panel/二进制 | ✅【观测】`VP8X`/`ANIM`/`ANMF`，`VP8L` 帧；`quality`/`anim_frame_ms` 被忽略；已动画源图 → `400`；`restore` 还原 |
 | S-LOGO-04 | 改名同步刷新频道引用（`updated_channels`）；删除可选清引用（`clear_refs`） | 二进制 | ✅【观测】引用随改名更新（URL 编码），清引用后 `tvg-logo=""` |
 | S-REC-01 | 定时录制：Proxy / DASH 频道；**必须 ffmpeg**，否则任务失败；录制合成 MKV（多音轨，中断可播）；存 `cache/recordings/` | D-panel || ✅【观测】MKV + `ffmpeg -c copy`；`recordings/`；缺 ffmpeg 失败（F-014） |
 | S-REC-02 | 录制成功路径：产物 MKV，`ffmpeg -y -i <merged> -map … -c copy`；proxy 先并 `_merged_video.ts`，DASH 并 `_merged_video_<name>.mp4`+`_merged_audio-<n>.mp4` | 二进制 | ✅【观测】`{idx}` 为列表下标（u64）；静态 MPD 报「录制区间内无可用切片」 |

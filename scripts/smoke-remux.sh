@@ -60,11 +60,11 @@ for _ in $(seq 1 60); do
 done
 check "清单 200" "200" "$CODE"
 check "目标时长 5" "1" "$(grep -c '#EXT-X-TARGETDURATION:5' "$WORK/list.m3u8" || true)"
-check "含伪装切片" "yes" "$(grep -q '/rx/c1/rseg_.*[.][a-z]*' "$WORK/list.m3u8" && echo yes || echo no)"
+check "含伪装切片" "yes" "$(grep -q '/rx/c1/seg_.*[.][a-z]*' "$WORK/list.m3u8" && echo yes || echo no)"
 
-SEG=$(grep -o '/rx/c1/rseg_[0-9]*\.[a-z]*' "$WORK/list.m3u8" | head -1)
+SEG=$(grep -o '/rx/c1/seg_[0-9]*\.[a-z]*' "$WORK/list.m3u8" | head -1)
 check "切片 200" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$B$SEG")"
 check "切片类型为图片" "1" "$(curl -s -o /dev/null -D - "$B$SEG" | grep -ci '^content-type: image/')"
-check "未知切片 404" "404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/rx/c1/rseg_999999999999.png")"
+check "未知切片 404" "404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/rx/c1/seg_999999999999.png")"
 
 if [ "$fail" = "0" ]; then echo "Remux 冒烟测试全部通过"; else echo "Remux 冒烟测试有失败项"; exit 1; fi

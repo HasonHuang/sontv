@@ -3428,7 +3428,7 @@ url = "{upstream}/live.ts"
     assert!(body.contains("#EXT-X-TARGETDURATION:5"));
     let segments = media_lines(&body);
     assert!(!segments.is_empty());
-    assert!(segments[0].starts_with("/rx/c1/rseg_"));
+    assert!(segments[0].starts_with("/rx/c1/seg_"));
 
     let response = fixture
         .client

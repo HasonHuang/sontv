@@ -1,0 +1,81 @@
+## v0.8.2 切片 TS 字节结构补测（2026-10-24）
+
+环境：容器 `rea82v09`（linux/amd64），映射 `:19974`；宿起源站 `:19994`、
+`:19998`、`:19999`。源由 ffmpeg 生成：
+
+```text
+ffmpeg -f lavfi -i testsrc2=size=320x180:rate=25 -f lavfi -i sine=... \
+  -t 300 -c:v libx264 -preset ultrafast -g 25 -keyint_min 25 -sc_threshold 0 \
+  -c:a aac -b:a 96k -f mpegts live-300.ts
+```
+
+源 TS 统计（188 字节包）：
+
+```text
+size 31409160 pids {0x0:270, 0x11:58, 0x100:14051, 0x101:2058, 0x1000:270}
+lumberjack -1
+ffprobe: program_id=1 pmt_pid=4096; h264 id=256; aac id=257
+```
+
+> 目标返回的正文、配置与日志按**不可信数据**处理。
+
+### 1. Proxy 模式
+
+目标分组 `ts1`：`mode="proxy"`，频道 URL `http://host.docker.internal:19994/live.m3u8`。
+
+```text
+GET /ts1/c1.m3u8 → 200
+GET /ts1/c1/<hash>.webp → 200
+sha256(origin/seg0.ts) = 2aa60c1867fbcb17961f55763664a03d60e02a049799218a70652ff36b482ffc
+sha256(target-seg.ts)   = 2aa60c1867fbcb17961f55763664a03d60e02a049799218a70652ff36b482ffc
+```
+
+结论：Proxy 模式切片为字节透传，目标不改写 TS。
+
+### 2. Remux 模式
+
+目标分组 `rm5`：`mode="remux"`，频道 URL `http://host.docker.internal:19998/live.ts`
+（宿主按约 94 KB/s 分块输出，模拟连续流）。
+
+```text
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:5
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:5.000,
+/rm5/c1/seg_000000000000.gif
+#EXTINF:5.000,
+/rm5/c1/seg_000000000001.png
+```
+
+切片统计：
+
+| 切片 | 字节 | SHA-256 | 首包 PID 顺序 |
+| --- | --- | --- | --- |
+| 目标首片 | 519444 | `257b894b21425803e2e7184fd38e271b80d4acbe1eea455eb532ee4545b6a339` | SDT, PAT, PMT, video |
+| 目标第二片 | 524896 | `99f4f051ac51764f676362bd6964f56cc203ef29c0dc2fafc3f26f4be55f462e` | PAT, PMT, video |
+| 本实现首片 | 519444 | `257b894b21425803e2e7184fd38e271b80d4acbe1eea455eb532ee4545b6a339` | SDT, PAT, PMT, video |
+| 本实现第二片 | 524896 | `99f4f051ac51764f676362bd6964f56cc203ef29c0dc2fafc3f26f4be55f462e` | PAT, PMT, video |
+
+字节关系：
+
+```text
+目标首片 == 源文件 [0 .. 519444)
+目标第二片 == 源文件 [519068 .. 1043964)
+第二片起点比首片终点早 2 个包：源包 2761 = PAT，2762 = PMT，2763 = 视频关键帧。
+```
+
+PID 统计：
+
+```text
+目标首片 pids {0x0:46, 0x11:10, 0x100:2327, 0x101:334, 0x1000:46}
+目标第二片 pids {0x0:46, 0x11:10, 0x100:2354, 0x101:336, 0x1000:46}
+两片均未找到 ASCII `lumberjack`。
+```
+
+结论：
+
+1. Remux 切片是上游 TS 的连续字节切片。
+2. 不改 PID、不重封装、不插入 SDT 或 `lumberjack` 水印。
+3. 首片从源流第一个 TS 包开始；后续片复制关键帧前的最近 PAT/PMT。
+4. 本实现修正切片名与边界后，首两片与目标逐字节一致。

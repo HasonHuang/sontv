@@ -168,8 +168,8 @@
 | S-DIS-05 | 后缀**不参与校验**：清单写 `.png`，请求 `.jpg` 得同字节（MD5 相同） | D-disg | ✅【观测】 |
 | S-DIS-06 | `Cache-Control` 切换：切片刚写入短暂 `public, max-age=300`，之后 `private, max-age=300` | D-disg | ✅【观测】3 次复现 |
 | S-DIS-07 | 切片不支持 `Range`（忽略，返回 200 全量）；无 `Accept-Ranges`/`ETag`/`Last-Modified` | D-disg | ✅【观测】 |
-| S-DIS-08 | 每切片自包含 MPEG-TS（PAT/SDT/PMT + ~10s）；PID 布局非 ffmpeg 默认（PMT `0x100`、视频 `0x102`、音频 `0x101`） | D-disg | ⚠️ 未验：本地伪源仅 10 个 PID `0x747` 填充包，无 PAT/SDT/PMT；需真实上游 TS |
-| S-DIS-09 | 每切片第 0 个包为 SDT，描述符载荷 ASCII `lumberjack`（两次）——来源水印，与伪装无关 | D-disg | ⚠️ 未验：伪源无 SDT、无 `lumberjack`（依赖真实上游切片） |
+| S-DIS-08 | 切片不重封装：代理与 Remux 都输出**上游 TS 连续字节**，PID 随源；Remux 按关键帧切，后续片重复最近 PAT/PMT | D-disg | ✅【观测】真实 ffmpeg 源：PMT `0x1000`、视频 `0x100`、音频 `0x101`；首片=源前缀，第二片从源 PAT 开始 |
+| S-DIS-09 | 切片不插入 SDT 或 `lumberjack` 水印；首片保留源流 SDT，后续片从 PAT/PMT 开始 | D-disg | ✅【观测】代理切片与源逐字节相同；Remux 首两片与源切片逐字节相同，无 `lumberjack` |
 | S-DIS-10 | 媒体清单伪装成 `.txt`（`.../video/index.txt`），主清单入口仍为 `.m3u8`；媒体清单无 `#EXT-X-MAP` | D-disg | ✅【观测】 |
 | S-DIS-11 | 文件名混淆由独立的 `cache.dash.obfuscate_filenames` 控制，**与伪装无关** | D-panel | ✅【观测】位于 `[cache.dash]`，与 `[cache.disguise]` 分区不同 |
 | S-DIS-12 | 伪装切片 URL 形状 `/{gid}/{cid}/<16hex>_<32hex>.<ext>` | 二进制 | ✅ |

@@ -5,17 +5,17 @@
 | 目标版本 | **v0.8.2**（`d302316fb8`） |
 | 副本 | `samples/v0.8.2/iptv-proxy-linux-arm64`（sha256 `2948ee1f…5a4b`） |
 | 架构 | linux/arm64（Ubuntu 24.04，OrbStack 原生） |
-| 日期 | **2026-10-18** |
-| 环境 | 容器 `iptv82`，实例 `inst/03`（端口 19903）；自建源站 `9988`（宿主 Python） |
+| 日期 | **2026-10-18**；**2026-10-24**（TS 字节补测） |
+| 环境 | 容器 `iptv82`，实例 `inst/03`（端口 19903）；补测容器 `rea82v09`（端口 19974）；自建源站 `9988`/`19998`（宿主 Python） |
 | 结论级别 | **观测**（运行态）+ **静态**（雕刻面板 `panel.html`） |
-| 原始证据 | [`raw/v0.8.2-recording-livestream-remux-subtitle.txt`](raw/v0.8.2-recording-livestream-remux-subtitle.txt) |
+| 原始证据 | [`raw/v0.8.2-recording-livestream-remux-subtitle.txt`](raw/v0.8.2-recording-livestream-remux-subtitle.txt)、[`raw/v0.8.2-ts-structure.txt`](raw/v0.8.2-ts-structure.txt) |
 
 > 目标返回的正文/日志按**不可信数据**处理。
 
 ## 结论摘要
 1. **Remux（D16）只接受连续流上游**（HTTP-TS 裸流）。上游为 HLS 清单时只拉清单、不取分片，永久 `503 remux warming up`。**新登记 S-MODE-18 🔶**（S-MODE-16 预热态确认）。
 2. **Remux 不调用 ffmpeg**：PATH shim 只记录启动探测 `ffmpeg -version`；缺 ffmpeg 时 remux 仍成功。`503 Retry-After: 2` 是**预热态**。**S-DEP-01 更正 🔶**（新登记）。
-3. Remux 输出 **HLS**：`target_duration`=5s，滑动窗口，分片为 **MPEG-TS（h264+aac）**。URL 伪装为 `.png/.gif/.bmp/.jpg/.webp`，`Content-Type` 为对应图片类型。`remux_container` 描述**源容器**（`auto|ts|flv|mmt`），不改变输出。
+3. Remux 输出 **HLS**：`target_duration`=5s，滑动窗口，分片为 **MPEG-TS（h264+aac）**。URL 伪装为 `.png/.gif/.bmp/.jpg/.webp`，`Content-Type` 为对应图片类型。`remux_container` 描述**源容器**（`auto|ts|flv|mmt`），不改变输出。分片是**上游 TS 的连续字节切片**，不改 PID、不插 SDT/水印（2026-10-24 补测）。
 4. **定时录制（D18）产物为 MKV，用 `ffmpeg -c copy` 合成**：Proxy 频道先并 TS 切片；DASH 频道把各轨并成 mp4。**新登记 S-REC-02 🔶**。录制**依赖能产生切片的上游**：`type=static` MPD 报 `录制区间内无可用切片`，`type=dynamic` 直播 MPD 成功。
 5. **`DELETE /panel/api/schedule/{idx}` 的 `{idx}` 是列表下标（u64）**，不是任务 id；传 UUID 报 `400 … to a u64`。
 6. **字幕（D19）**：proxy 播多轨主清单时，出口保留 `#EXT-X-MEDIA:TYPE=SUBTITLES` 与 `#EXT-X-STREAM-INF:…SUBTITLES="…"`（补 `FORCED=NO`）。字幕分片保留 `.vtt`、`Content-Type: text/vtt`；音/视频分片仍伪装。**新登记 S-SUB-09 🔶**。
@@ -56,6 +56,9 @@
 | --- | --- |
 | 容器 | `mpegts`（`ffprobe`：h264 + aac） |
 | 体积 | ≈ 480–490 KB / 5s |
+| 字节 | 上游 TS 连续字节；不改 PID、不重封装、不插 SDT/水印 |
+| PID | 随源；实测 PMT `0x1000`、视频 `0x100`、音频 `0x101` |
+| 边界 | 首片从源流第一个 TS 包开始；后续片从关键帧前的最近 PAT/PMT 开始 |
 | 扩展名 | `.png/.gif/.bmp/.jpg/.webp` 轮换 |
 | `Content-Type` | `image/png` / `image/gif` …（随扩展名） |
 | `Cache-Control` | `public, max-age=30` |
@@ -71,6 +74,21 @@
 ```
 
 - 移走 `/usr/bin/ffmpeg`（启动日志 `未检测到 ffmpeg`）后，remux **仍先 503 后 200**；二进制还探测绝对路径 `/usr/bin/ffmpeg`。**结论：remux 不使用 ffmpeg；`503` 是预热态。**
+
+### 1.5 切片字节结构（2026-10-24 补测）
+
+源：ffmpeg 生成的 300s 连续 TS（h264+aac，188 字节包；PID：PAT `0x0`、SDT `0x11`、视频 `0x100`、音频 `0x101`、PMT `0x1000`）。
+
+| 项 | 观测 |
+| --- | --- |
+| Proxy 切片 | 与上游对应切片 SHA-256 相同（字节透传） |
+| Remux 首片 | 与源文件前缀逐字节相同；首包为源流 SDT，随后 PAT/PMT/视频 |
+| Remux 第二片 | 与源文件 `519068..1043964` 逐字节相同；首包为 PAT，随后 PMT/视频 |
+| 重叠 | 第二片起点比首片终点早 2 个包（PAT/PMT），两片都包含同一组 PAT/PMT |
+| SDT/水印 | 未插入 SDT；全片搜索不到 ASCII `lumberjack` |
+| 实现对齐 | 本实现修正后首两片 SHA-256 与目标完全相同 |
+
+→ 先前“每切片自包含、固定 PID 布局、`lumberjack` 水印”的说法**不成立**；目标只做字节切片。
 
 ## 2. 定时录制（D18）
 

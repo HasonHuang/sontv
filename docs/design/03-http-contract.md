@@ -541,14 +541,18 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | 输入 | 连续 TS（HTTP 裸流）；HLS 上游不会产出切片 |
 | 输出 | `#EXT-X-VERSION:3`、`#EXT-X-TARGETDURATION:5`、`#EXT-X-MEDIA-SEQUENCE`，窗口 4 条 |
 | 切片 | 按视频关键帧切分（PTS 计时，5 秒）；扩展名轮换 `png/gif/bmp/jpg/webp` |
-| 路径 | `/{gid}/{cid}/rseg_<12 位序号>.<ext>` |
+| 路径 | `/{gid}/{cid}/seg_<12 位序号>.<ext>` |
+| 字节 | **上游 TS 的连续字节切片**；不重封装、不改 PID、不插 SDT/水印 |
+| 首片 | 从源流第一个 TS 包开始（保留源流 SDT/PAT/PMT） |
+| 后续片 | 从关键帧前的最近一组 PAT/PMT 开始复制，再进入关键帧 |
+| PID | 保留上游 PID；实测 PMT `0x1000`、视频 `0x100`、音频 `0x101`（随源） |
 | Content-Type | 与扩展名一致的图片类型 |
 | Cache-Control | 切片 `public, max-age=30`；清单 `no-cache, must-revalidate` |
 | 预热 | 未产出首片 → `503` + `Retry-After: 2` + `remux warming up` |
 | 会话 | 键 `gid/cid`；上游断开后每 500 ms 重连；空闲 90 秒回收并删目录 |
-| 上游头 | 附加 `channel.headers` |
+| 上游头 | 附加分组/频道合并头 |
 
-> 目标按关键帧对齐；本实现用 PES PTS 与 H264/HEVC 关键帧 NAL 判定。
+> 目标按关键帧对齐；本实现用 PES PTS 与 H264/HEVC 关键帧 NAL 判定。2026-10-24 实测首两片与目标逐字节一致。
 
 ### 6.14 定时录制与直播开关（P1 已实现）
 

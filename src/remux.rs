@@ -112,9 +112,9 @@ fn valid_name(name: &str) -> bool {
         return false;
     };
     EXTS.contains(&ext)
-        && stem.len() == 17
-        && stem.starts_with("rseg_")
-        && stem[5..].bytes().all(|byte| byte.is_ascii_digit())
+        && stem.len() == 16
+        && stem.starts_with("seg_")
+        && stem[4..].bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn content_type(ext: &str) -> &'static str {
@@ -254,7 +254,7 @@ fn cut(session: &Session, data: Vec<u8>, duration: f64) {
     let mut inner = session.inner.lock().unwrap_or_else(|e| e.into_inner());
     let seq = inner.next_seq;
     let ext = EXTS[(seq as usize) % EXTS.len()];
-    let name = format!("rseg_{seq:012}.{ext}");
+    let name = format!("seg_{seq:012}.{ext}");
     let path = session.dir.join(&name);
     if let Err(error) = fs::write(&path, &data) {
         warn!(path = %path.display(), %error, "写 remux 切片失败");
@@ -348,9 +348,12 @@ struct Parser {
     video_pid: Option<u16>,
     video_type: Option<u8>,
     current: Vec<u8>,
+    started: bool,
     start_pts: Option<u64>,
     pending: Option<u64>,
     last_pts: Option<u64>,
+    last_pat: Option<[u8; 188]>,
+    last_pmt: Option<[u8; 188]>,
 }
 
 impl Parser {
@@ -361,10 +364,28 @@ impl Parser {
             video_pid: None,
             video_type: None,
             current: Vec::new(),
+            started: false,
             start_pts: None,
             pending: None,
             last_pts: None,
+            last_pat: None,
+            last_pmt: None,
         }
+    }
+
+    /// 新切片前缀：重复最近一组 PAT/PMT。
+    ///
+    /// 目标在关键帧处切分，但前后切片都包含同一组 PAT/PMT；实测第二片
+    /// 从关键帧前的 PAT 包开始。返回空表示尚未看到 PAT/PMT。
+    fn boundary_prefix(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(376);
+        if let Some(packet) = self.last_pat {
+            out.extend_from_slice(&packet);
+        }
+        if let Some(packet) = self.last_pmt {
+            out.extend_from_slice(&packet);
+        }
+        out
     }
 
     fn push(&mut self, chunk: &[u8], session: &Session) {
@@ -400,18 +421,26 @@ impl Parser {
         if control == 2 || control == 3 {
             payload_start += 1 + packet[4] as usize;
         }
-        if payload_start >= 188 || control == 2 {
-            return;
-        }
-        let payload = &packet[payload_start..];
+        let has_payload = control != 2 && payload_start < 188;
+        let payload = if has_payload {
+            &packet[payload_start..]
+        } else {
+            &[][..]
+        };
 
-        if pid == 0 && pusi {
+        if !self.started {
+            self.started = true;
+        }
+
+        if has_payload && pid == 0 && pusi {
             self.parse_pat(payload);
-        } else if Some(pid) == self.pmt_pid && pusi {
+            self.last_pat = Some(packet.try_into().unwrap_or([0; 188]));
+        } else if has_payload && Some(pid) == self.pmt_pid && pusi {
             self.parse_pmt(payload);
+            self.last_pmt = Some(packet.try_into().unwrap_or([0; 188]));
         }
 
-        if pusi && Some(pid) == self.video_pid {
+        if has_payload && pusi && Some(pid) == self.video_pid {
             if let Some((pts, key)) = video_pes(payload, self.video_type == Some(0x24)) {
                 let pts = pts.filter(|value| *value > 0);
                 if let Some(pts) = pts {
@@ -433,6 +462,7 @@ impl Parser {
                         let data = std::mem::take(&mut self.current);
                         cut(session, data, elapsed);
                         self.start_pts = boundary;
+                        self.current = self.boundary_prefix();
                     } else if self.start_pts.is_none() {
                         self.start_pts = boundary;
                     }
@@ -440,7 +470,7 @@ impl Parser {
             }
         }
 
-        if self.start_pts.is_some() || pid == 0 || Some(pid) == self.pmt_pid {
+        if self.started {
             self.current.extend_from_slice(packet);
         }
     }
@@ -567,9 +597,9 @@ mod tests {
 
     #[test]
     fn names_and_content_types() {
-        assert!(valid_name("rseg_000000000000.png"));
-        assert!(!valid_name("rseg_1.png"));
-        assert!(!valid_name("rseg_000000000000.exe"));
+        assert!(valid_name("seg_000000000000.png"));
+        assert!(!valid_name("seg_1.png"));
+        assert!(!valid_name("seg_000000000000.exe"));
         assert_eq!(content_type("gif"), "image/gif");
         assert_eq!(content_type("webp"), "image/webp");
     }
@@ -584,7 +614,7 @@ mod tests {
         let body = session.playlist().expect("清单");
         assert!(body.contains("#EXT-X-TARGETDURATION:5"));
         assert!(body.contains("#EXT-X-MEDIA-SEQUENCE:2"));
-        assert!(body.contains("/g/c/rseg_000000000002.bmp"));
+        assert!(body.contains("/g/c/seg_000000000002.bmp"));
         // 窗口只保留 4 条。
         assert_eq!(body.matches("#EXTINF").count(), 4);
         let _ = fs::remove_dir_all(&session.dir);
@@ -615,6 +645,11 @@ mod tests {
         let session = session();
         std::fs::create_dir_all(&session.dir).expect("建目录");
         let mut parser = Parser::new();
+        // 源流开头的 SDT 应进入首片；后续切片从 PAT/PMT 开始。
+        parser.push(
+            &packet(0x11, true, &[0x42, 0xF0, 0x25, 0x00, 0x01]),
+            &session,
+        );
         let pat = [
             0x00u8, 0x00, 0xB0, 0x0D, 0x00, 0x01, 0xC1, 0x00, 0x00, 0x00, 0x01, 0xE1, 0x00, 0, 0,
             0, 0,
@@ -626,7 +661,7 @@ mod tests {
         ];
         parser.push(&packet(0x100, true, &pmt), &session);
         for index in 0..3u64 {
-            let pts = index * 90_000 * 5;
+            let pts = (index + 1) * 90_000 * 5;
             let mut pes = vec![0x00, 0x00, 0x01, 0xE0, 0x00, 0x00, 0x80, 0x80, 0x05];
             pes.extend_from_slice(&pts_bytes(pts));
             pes.extend_from_slice(&[0x00, 0x00, 0x00, 0x01, 0x65]);
@@ -634,6 +669,12 @@ mod tests {
             parser.push(&packet(0x101, true, &pes), &session);
         }
         assert!(session.playlist().is_some(), "应有切片");
+        let pid = |packet: &[u8]| (((packet[1] & 0x1f) as u16) << 8) | packet[2] as u16;
+        let first = fs::read(session.dir.join("seg_000000000000.png")).expect("首片");
+        assert_eq!(pid(&first[..188]), 0x11, "首片以源流 SDT 开头");
+        let second = fs::read(session.dir.join("seg_000000000001.gif")).expect("第二片");
+        assert_eq!(pid(&second[..188]), 0x0, "第二片先复制 PAT");
+        assert_eq!(pid(&second[188..376]), 0x100, "第二片再复制 PMT");
         let _ = fs::remove_dir_all(&session.dir);
     }
 

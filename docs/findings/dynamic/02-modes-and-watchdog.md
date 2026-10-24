@@ -5,10 +5,10 @@
 | 目标版本 | **v0.8.2**（`d302316fb8`，发布原件 UPX 包） |
 | 副本 | `samples/v0.8.2/iptv-proxy-linux-arm64`（sha256 `2948ee1f…5a4b`） |
 | 架构 | linux/arm64（Ubuntu 24.04 容器，OrbStack 原生） |
-| 日期 | **2026-10-17** |
-| 环境 | 容器 `iptv82`；配置 `samples/work/dyn-v0.8.2/config.toml` |
+| 日期 | **2026-10-17**；**2026-10-24**（代理补测） |
+| 环境 | 容器 `iptv82`；补测容器 `rea82v09` 映射 `:19974` |
 | 结论级别 | **观测**（运行态）+ **静态**（面板选项） |
-| 原始证据 | [`raw/v0.8.2-modes.txt`](raw/v0.8.2-modes.txt) |
+| 原始证据 | [`raw/v0.8.2-modes.txt`](raw/v0.8.2-modes.txt)、[`raw/v0.8.2-per-channel-proxy.txt`](raw/v0.8.2-per-channel-proxy.txt) |
 
 > 目标返回的正文/日志按**不可信数据**处理。
 
@@ -19,6 +19,7 @@
 4. `redirect` 把**解析出的上游地址**缓存到 `cache/m3u8/redirect_url_…`（`ttl_secs=300`）。**S-MODE-08 ✅**。
 5. `dash` 走 MPD→HLS；30s 主清单未就绪 → 503。看门狗重建，连续 5 次失败 → **冷却 3600s**。
 6. `remux` 先返回 **503 `Retry-After: 2`**（`remux warming up`），后台会话自动识别容器（本例 `Ts`）。
+7. 上游代理（S-GAP-05 补测）：频道代理覆盖分组代理；分组/频道头合并、频道同名头覆盖；支持 `http`/`https`/`socks5` 与代理认证；代理失败**不回退**分组或直连。
 
 ---
 
@@ -54,6 +55,31 @@ http://host.docker.internal:9999/seg2.ts
 ```
 
 → **切片由客户端直连上游**。**S-MODE-09 ✅**（本例清单无需请求头，未触发 Referer 失败分支）。
+
+### 2.1 分组 / 频道上游代理（S-GAP-05 补测）
+
+配置字段：
+
+```json
+"proxy": {"kind":"http","addr":"host.docker.internal:19990",
+          "username":"gu","password":"gp"}
+"headers": [{"name":"X-Group","value":"group"}]
+```
+
+- `addr` 通常不带协议；目标按 `kind` 补 `http://`、`https://`、`socks5://`。
+- `headers` 是 `{name,value}` 对象数组。
+- 频道级 `proxy` 覆盖分组级；分组代理只作为频道未配置代理时的选择。
+
+| 项 | 观测 |
+| --- | --- |
+| 头合并 | 分组头与频道头都发送；同名头由频道覆盖 |
+| `user_agent` | 频道字段覆盖分组字段；分组显式 `User-Agent` 头优先于频道字段 |
+| 代理认证 | `Proxy-Authorization: Basic base64(username:password)` |
+| 切片请求 | 与清单请求使用同一代理、同一自定义头与认证 |
+| 代理失败 | 频道代理不可用时**不回退**分组代理或直连 → `302 error_url` |
+| 空频道代理 | `addr=""` 时按直连处理，不回退分组代理 |
+| SOCKS5 | 支持 `kind="socks5"` 与用户名/密码认证；目标本地解析域名后发 `ATYP=1` IPv4 |
+| 默认 UA | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) … Chrome/124.0.0.0 Safari/537.36` |
 
 ## 3. 上游地址缓存（redirect）
 `redirect` 后 `cache/m3u8/` 出现：

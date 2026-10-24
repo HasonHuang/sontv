@@ -1245,9 +1245,10 @@ fn insert_header(response: &mut Response, name: header::HeaderName, value: &str)
     }
 }
 
-/// 频道自定义上游头：`channel.headers` 中的 `"名称: 值"` 字符串。
+/// 上游自定义头：分组头与频道头合并，频道覆盖同名分组头。
 ///
-/// 由 M3U 导入写入（`#EXTVLCOPT`、`#EXTHTTP` 与行内头）。
+/// 目标配置把 `headers` 存为 `[{name,value}]`；本实现同时接受旧的
+/// `"名称: 值"` 字符串。`user_agent` 是独立字段，显式同名头优先。
 pub(crate) fn channel_headers(state: &AppState, gid: &str, cid: &str) -> Vec<(String, String)> {
     let config = state.snapshot();
     let Some((group, _)) = resolve(&config, gid, cid) else {
@@ -1256,19 +1257,81 @@ pub(crate) fn channel_headers(state: &AppState, gid: &str, cid: &str) -> Vec<(St
     let Some(channel) = group.channels.iter().find(|channel| channel.id == cid) else {
         return Vec::new();
     };
-    channel
-        .headers
+    merge_upstream_headers(
+        &group.headers,
+        user_agent(&group.extra),
+        &channel.headers,
+        user_agent(&channel.extra),
+    )
+}
+
+fn user_agent(extra: &toml::Table) -> Option<&str> {
+    extra
+        .get("user_agent")
+        .and_then(toml::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+/// 纯函数形式，便于单测。
+fn merge_upstream_headers(
+    group_headers: &[toml::Value],
+    group_agent: Option<&str>,
+    channel_headers: &[toml::Value],
+    channel_agent: Option<&str>,
+) -> Vec<(String, String)> {
+    let mut merged = Vec::new();
+    for header in group_headers {
+        if let Some((name, value)) = header_pair(header) {
+            push_header(&mut merged, &name, &value);
+        }
+    }
+    // 目标先取频道 UA、其次分组 UA；但分组显式 User-Agent 头优先。
+    if let Some(agent) = channel_agent.or(group_agent) {
+        push_header_if_absent(&mut merged, "User-Agent", agent);
+    }
+    for header in channel_headers {
+        if let Some((name, value)) = header_pair(header) {
+            push_header(&mut merged, &name, &value);
+        }
+    }
+    merged
+}
+
+fn header_pair(value: &toml::Value) -> Option<(String, String)> {
+    if let Some(text) = value.as_str() {
+        let (name, value) = text.split_once(':')?;
+        let name = name.trim();
+        if name.is_empty() {
+            return None;
+        }
+        return Some((name.to_string(), value.trim().to_string()));
+    }
+    let table = value.as_table()?;
+    let name = table.get("name")?.as_str()?.trim();
+    let value = table.get("value")?.as_str()?.trim();
+    (!name.is_empty()).then(|| (name.to_string(), value.to_string()))
+}
+
+fn push_header(headers: &mut Vec<(String, String)>, name: &str, value: &str) {
+    if let Some(existing) = headers
+        .iter_mut()
+        .find(|(existing, _)| existing.eq_ignore_ascii_case(name))
+    {
+        existing.0 = name.to_string();
+        existing.1 = value.to_string();
+    } else {
+        headers.push((name.to_string(), value.to_string()));
+    }
+}
+
+fn push_header_if_absent(headers: &mut Vec<(String, String)>, name: &str, value: &str) {
+    if !headers
         .iter()
-        .filter_map(|value| {
-            let text = value.as_str()?;
-            let (name, value) = text.split_once(':')?;
-            let name = name.trim();
-            if name.is_empty() {
-                return None;
-            }
-            Some((name.to_string(), value.trim().to_string()))
-        })
-        .collect()
+        .any(|(existing, _)| existing.eq_ignore_ascii_case(name))
+    {
+        headers.push((name.to_string(), value.to_string()));
+    }
 }
 
 /// HLS 清单拉取重试次数（含首次请求）。v0.8.2 日志为 `第 1/4…3/4 次重试`。
@@ -1345,7 +1408,10 @@ pub(crate) async fn fetch_bytes(
 
 #[cfg(test)]
 mod tests {
-    use super::{media_cache_control, mpd_base_token, rewrite_mpd_base_urls, trim_mpd_window};
+    use super::{
+        media_cache_control, merge_upstream_headers, mpd_base_token, rewrite_mpd_base_urls,
+        trim_mpd_window,
+    };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
     #[test]
@@ -1361,6 +1427,70 @@ mod tests {
         assert_eq!(
             media_cache_control("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-ENDLIST\n"),
             "public, max-age=4, s-maxage=4"
+        );
+    }
+
+    fn header(name: &str, value: &str) -> toml::Value {
+        toml::Value::Table(
+            [
+                ("name".to_string(), toml::Value::String(name.into())),
+                ("value".to_string(), toml::Value::String(value.into())),
+            ]
+            .into_iter()
+            .collect(),
+        )
+    }
+
+    #[test]
+    fn merges_group_and_channel_headers_with_channel_winning() {
+        let merged = merge_upstream_headers(
+            &[header("X-Group", "g"), header("X-Both", "group")],
+            None,
+            &[header("X-Channel", "c"), header("X-Both", "channel")],
+            None,
+        );
+        assert_eq!(
+            merged,
+            vec![
+                ("X-Group".into(), "g".into()),
+                ("X-Both".into(), "channel".into()),
+                ("X-Channel".into(), "c".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn user_agent_precedence_matches_target() {
+        let group = [header("User-Agent", "GroupHeader")];
+        let merged = merge_upstream_headers(&group, Some("GroupField"), &[], Some("ChannelField"));
+        assert_eq!(merged, vec![("User-Agent".into(), "GroupHeader".into())]);
+
+        let merged = merge_upstream_headers(&[], Some("GroupField"), &[], Some("ChannelField"));
+        assert_eq!(merged, vec![("User-Agent".into(), "ChannelField".into())]);
+
+        let merged = merge_upstream_headers(
+            &[],
+            Some("GroupField"),
+            &[header("User-Agent", "ChannelHeader")],
+            Some("ChannelField"),
+        );
+        assert_eq!(merged, vec![("User-Agent".into(), "ChannelHeader".into())]);
+    }
+
+    #[test]
+    fn accepts_legacy_header_strings() {
+        let merged = merge_upstream_headers(
+            &[toml::Value::String("X-Token: abc".into())],
+            None,
+            &[toml::Value::String("Referer: http://ref/".into())],
+            None,
+        );
+        assert_eq!(
+            merged,
+            vec![
+                ("X-Token".into(), "abc".into()),
+                ("Referer".into(), "http://ref/".into()),
+            ]
         );
     }
 

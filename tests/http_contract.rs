@@ -163,13 +163,29 @@ async fn upstream_file(
         let token = incoming
             .get("x-token")
             .and_then(|value| value.to_str().ok());
-        if seek.is_some() || token.is_some() {
+        let group = incoming
+            .get("x-group")
+            .and_then(|value| value.to_str().ok());
+        let both = incoming.get("x-both").and_then(|value| value.to_str().ok());
+        let user_agent = incoming
+            .get(header::USER_AGENT)
+            .and_then(|value| value.to_str().ok());
+        if seek.is_some() || token.is_some() || group.is_some() {
             let mut extra = String::new();
             if let Some(seek) = seek {
                 extra.push_str(&format!("# playseek={seek}\n"));
             }
             if let Some(token) = token {
                 extra.push_str(&format!("# x-token={token}\n"));
+            }
+            if let Some(group) = group {
+                extra.push_str(&format!("# x-group={group}\n"));
+            }
+            if let Some(both) = both {
+                extra.push_str(&format!("# x-both={both}\n"));
+            }
+            if let Some(user_agent) = user_agent {
+                extra.push_str(&format!("# user-agent={user_agent}\n"));
             }
             let body = format!("#EXTM3U\n{extra}{LIVE_BODY}");
             return (
@@ -325,11 +341,12 @@ id = "pg"
 name = "代理组"
 mode = "proxy"
 access = "public"
+headers = ["X-Group: group", "X-Both: group"]
 [[groups.channels]]
 id = "c1"
 name = "媒体清单频道"
 url = "{upstream}/live.m3u8"
-headers = ["X-Token: abc123"]
+headers = ["X-Token: abc123", "X-Both: channel"]
 
 [[groups]]
 id = "pm"
@@ -1917,6 +1934,9 @@ async fn channel_headers_are_sent_upstream() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.text().await.expect("读正文");
     assert!(body.contains("# x-token=abc123"), "{body}");
+    assert!(body.contains("# x-group=group"), "{body}");
+    assert!(body.contains("# x-both=channel"), "{body}");
+    assert!(body.contains("Chrome/124.0.0.0"), "{body}");
 }
 
 #[tokio::test]

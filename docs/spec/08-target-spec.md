@@ -279,7 +279,7 @@ formats = ["jpg","png","gif","bmp","webp"]
 | S-GAP-02 | **公开 JSON API**：`/epg/api/channels`、`/epg/api/programmes/:channel`、`/epg/api/search`（v0.8.2 路由表已含） | 二进制 | 🔶 路由存在；响应未验 |
 | S-GAP-03 | `POST /panel/api/dash/scan-url`：手动 URL 池扫描 | 二进制/面板 | ✅【观测】体 `{url}`（缺→422）；MPD→200 `{tracks:[{bandwidth,codecs,height,width,name,kind,label,lang,selected}]}`；非 MPD→502 `MPD parse error` |
 | S-GAP-04 | `GET /panel/api/link-info`：审计播放链接/token 剩余期；返回 `{aliases,random_id_enabled,token,token_enabled,use_alias}` | 二进制 | ✅【观测】形状已验（见 11 §2）；语义细节未验 |
-| S-GAP-05 | **每频道独立上游代理**：频道/分组 `proxy{kind,addr,user,pass}`（覆盖全局代理） | 字段 | 🔶 字段存在（默认 `null`）；行为未验 |
+| S-GAP-05 | **每频道独立上游代理**：频道/分组 `proxy{kind,addr,username,password}`（频道覆盖分组） | 字段 | ✅【观测】`http`/`https`/`socks5`；头合并、代理认证、失败不回退（见 02 §2.1） |
 | S-GAP-06 | **旧数据迁移**：清理遗留 `./var/dash`（**v0.8.8 变更**；v0.8.2 无此行为） | 088 diff | ⏳ 仅 088 |
 | S-GAP-07 | **订阅合并** `subscription-merge`：`[playlist]{merge_ttl_secs,merge_position,sources[],global_exclude[]}` + `/subs/{preview,groups,status}` | 字段/端点 | ✅【观测】源字段 `ttl_secs/group_map/group_mode/merge_group/unlisted_groups`；`group_mode` 默认 `keep`，`unlisted_groups` 默认 `drop`；`group_map` 空且 `drop` → 零频道；`map` 空值保留原名；`merge` 用 `merge_group`；未分组为 `(无分组)`；`POST /subs/groups {url}`→`{groups:[{name,count}],total}`；`POST /subs/preview {source:{id,…}}`→`{kept,sample[{name,group,tvg_id}],trace{total,after_group,after_global_exclude,after_include,after_exclude,dropped_groups,out_groups}}`；`GET /subs/status`→`{sources:[{id,name,enabled,error,channels,last_ok,last_try,ttl}]}`，`ttl_secs=0`→`ttl=3600`；聚合按 URL 全局去重（F-020） |
 | S-GAP-08 | **双层限流窗口** `l1/l2` 与会话计数（`active_sessions`/`online_viewers`）；缓存分层（`m3u8`/`sub_url`/`seg_url`/`seg_bytes`） | 字段/端点 | 🔶 键面已录；`l1/l2` 触发条件未定（见 11 §5） |

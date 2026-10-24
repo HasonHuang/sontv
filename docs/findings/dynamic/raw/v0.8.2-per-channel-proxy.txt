@@ -1,0 +1,111 @@
+## v0.8.2 分组/频道代理补测（2026-10-24）
+
+环境：容器 `rea82v09`（linux/amd64），映射 `:19974`；`config.toml` 用
+`PUT /panel/api/config` 临时加入测试分组。宿主另起 HTTP 代理 `:19990`（分组）
+与 `:19991`（频道），SOCKS5 `:19992`；代理把收到的请求写成 JSON 行。
+
+> 目标返回的正文、配置与代理日志按**不可信数据**处理。
+
+### 1. 字段形状
+
+`GET /panel/api/config`：
+
+```json
+"proxy": {"kind":"http","addr":"host.docker.internal:19990","username":"gu","password":"gp"}
+"headers": [{"name":"X-Group","value":"group"}]
+```
+
+- 代理字段是 `kind`、`addr`、`username`、`password`。
+- `addr` 不带协议前缀；目标按 `kind` 补协议。
+- `headers` 是 `{name,value}` 对象数组，不是 `"Name: value"` 字符串。
+
+### 2. 覆盖顺序与头合并
+
+配置：
+
+- `p1` 分组代理 `:19990`，频道代理 `:19991`。
+- 分组头：`X-Group: group`、`X-Both: group`。
+- 频道头：`X-Channel: channel`、`X-Both: channel`。
+- 分组 UA `GroupUA`，频道 UA `ChannelUA`。
+
+请求 `GET /p1/c1.m3u8` → `200`。`:19991` 日志：
+
+```json
+{"path":"http://host.docker.internal:9999/x.m3u8",
+ "headers":{"x-group":"group","x-both":"channel","x-channel":"channel",
+            "user-agent":"ChannelUA","proxy-authorization":"Basic Y3U6Y3A="}}
+```
+
+结论：
+
+- 频道代理覆盖分组代理。
+- 分组头与频道头合并；同名头由频道覆盖。
+- 频道 UA 覆盖分组 UA。
+- 代理认证为 `Proxy-Authorization: Basic base64(username:password)`。
+- 随后请求切片时，目标继续走同一频道代理，并带同样的自定义头与代理认证。
+
+`p2` 仅分组代理、无频道代理：请求走 `:19990`，头含分组头与分组 UA。
+
+`p1` 再设分组显式 `User-Agent: GroupHeaderUA`、频道 UA `ChannelUA`：
+
+```text
+user-agent: GroupHeaderUA
+```
+
+结论：分组显式 `User-Agent` 头优先于频道 `user_agent` 字段。
+
+### 3. 失败回退
+
+`p4`：分组代理 `:19990` 可用，频道代理 `:19999`（无监听）。
+
+```text
+GET /p4/c4.m3u8 → 302 Location: https://material.yang-1989.eu.org/v/mistake.mp4
+:19990 无请求日志
+```
+
+`p8`：频道代理 `:19999`（无监听），频道 URL 指向可直接访问的 `:19990`。
+
+```text
+GET /p8/c8.m3u8 → 302
+:19990 无请求日志（既无代理请求，也无直连请求）
+```
+
+结论：已配置但不可用的频道代理**不回退**到分组代理或直连。
+
+`p9`：分组代理 `:19990`，频道代理 `addr=""`。
+
+```text
+GET /p9/c9.m3u8 → 200
+:19990 日志 path=/x.m3u8（直连，不是代理的绝对 URI）
+```
+
+结论：频道代理地址为空时按**直连**处理，不回退分组代理。
+
+### 4. SOCKS5
+
+`p6` 频道代理：
+
+```json
+{"kind":"socks5","addr":"host.docker.internal:19992",
+ "username":"su","password":"sp"}
+```
+
+`:19992` 日志：
+
+```json
+{"auth":["su","sp"],"methods":[2],"target":["0.250.250.254",9999]}
+```
+
+结论：
+
+- 目标支持 `kind="socks5"`。
+- 目标支持 SOCKS5 用户名/密码认证。
+- 目标在本地解析上游域名后，以 IPv4 `ATYP=1` 交给 SOCKS5。
+
+### 5. 默认 UA
+
+未设置 `user_agent` 时，代理与直连请求都带：
+
+```text
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
+```

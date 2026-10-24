@@ -30,7 +30,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 roxmltree = "0.20"
 mime_guess = "2"
 notify = "8.2.0"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "deflate", "brotli"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "deflate", "brotli", "socks"] }
 rust-embed = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

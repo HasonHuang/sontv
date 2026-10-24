@@ -640,16 +640,20 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 
 ### 6.18 上游代理覆盖（P3 已实现）
 
-证据：S-GAP-05。目标只登记字段，行为未验。
+证据：S-GAP-05、F-010 §3.2、F-002 §2.1。
 
 | 项 | 规则 |
 | --- | --- |
-| 字段 | `[[groups]]` 或 `[[groups.channels]]` 的 `proxy{kind,addr,user,pass}` |
-| 优先级 | 频道级 > 分组级 > 直连 |
-| 支持 | `http` 与 `https`；`user` 非空时用 basic auth |
+| 字段 | `[[groups]]` 或 `[[groups.channels]]` 的 `proxy{kind,addr,username,password}`；兼容旧 `user/pass` |
+| 地址 | `addr` 可省略协议；按 `kind` 补 `http://`、`https://`、`socks5://` |
+| 优先级 | 频道级 > 分组级 > 直连；频道 `addr=""` 时直连，不回退分组 |
+| 支持 | `http`、`https`、`socks4`、`socks4a`、`socks5`、`socks5h`；有用户名时 basic auth |
+| 失败 | 已配置代理不可用时**不回退**分组或直连；由上层转 `error_url` |
+| 头合并 | 分组 `headers` + 频道 `headers`；同名（忽略大小写）频道覆盖分组 |
+| 头形状 | 接受目标 `{name,value}` 对象与旧的 `"Name: value"` 字符串 |
+| UA | 默认 Chrome/124；`user_agent` 频道覆盖分组；分组显式 `User-Agent` 头优先 |
 | 生效范围 | 清单、切片、回看、Remux、录制、DASH 回看 |
-| 不支持 | `socks5` 等类型；遇到时不代理并记告警 |
-| 客户端缓存 | 键为 `kind\|addr\|user\|pass`，配置热重载后按新键重建 |
+| 客户端缓存 | 键为规范化 URL + `username` + `password`，配置热重载后按新键重建 |
 
 ## 7. 错误串对照
 

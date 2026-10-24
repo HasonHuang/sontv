@@ -43,6 +43,14 @@
 
 2026-10-24：
 
+- **V-05 每频道代理按目标对齐**：
+  - 频道代理覆盖分组代理；频道代理失败不回退分组或直连。
+  - 分组头与频道头合并，频道同名头覆盖；支持 `{name,value}` 与旧字符串。
+  - `user_agent` 频道覆盖分组；分组显式 `User-Agent` 头优先。
+  - 代理字段改为目标 `kind/addr/username/password`；`addr` 可省略协议。
+  - 支持 `http`/`https`/`socks4`/`socks5`/`socks5h`，含 SOCKS5 用户名密码认证。
+  - 默认上游 UA 对齐目标 Chrome/124。
+  - 证据：`docs/findings/dynamic/02-modes-and-watchdog.md` §2.1。
 - **V-06 自助解封按目标对齐**：
   - `/unban/whoami` 返回 `banned/enabled/ip/max_per_month/remaining/used`；IP 管控关闭时只返回 `enabled/ip`。
   - `POST /unban` 固定 `200` + `{"msg","ok"}`；只有成功解封消耗配额。
@@ -102,7 +110,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 227 项通过（158 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 232 项通过（163 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -127,7 +135,6 @@
 
 | ID | 项 | 当前结论 | 所需证据 |
 | --- | --- | --- | --- |
-| V-05 | 每频道独立代理 | 实现顺序为频道 > 分组 > 直连 | 目标覆盖顺序、认证头、失败回退、`socks5` 行为 |
 | V-07 | 切片 TS 结构 | 当前只做字节代理；无 PAT/PMT/SDT 证据 | 真实 TS 切片；核对 PID、SDT 与 `lumberjack` 水印 |
 | V-08 | 切片前缀 `<P>` 算法 | 自研 `sha256("<gid>:<cid>")[:16]`；目标算法未解 | 更多 `(gid,cid)` 样本或反编译；低影响 |
 | V-10 | 面板与录制/EPG 交互 | API 对拍 22/22 差异 0；12 个面板分区未逐屏对拍 | 目标操作录像；只比对行为，不复制前端代码、资源与文案 |

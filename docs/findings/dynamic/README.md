@@ -15,7 +15,7 @@
 | --- | --- | --- | --- | --- |
 | D1 | 端点探测 | `curl` | S-EP-* | ✅ [`01`](01-runtime-surface-and-disguise.md) §2 |
 | D2 | 扩展名规则 | 对照 `/status.entry_exts` | S-URL-01 | ✅ [`01`](01-runtime-surface-and-disguise.md)（format→hls=.m3u8/mpd=.mpd） |
-| D3 | 六种模式行为 | 各模式实测 | S-MODE-* | ✅ [`02`](02-modes-and-watchdog.md)（proxy/redirect/rewrite/passthrough 实测）；remux 成功路径见 [`09`](09-recording-livestream-remux-subtitle.md) |
+| D3 | 六种模式行为 | 各模式实测 | S-MODE-*, S-GAP-05 | ✅ [`02`](02-modes-and-watchdog.md)（proxy/redirect/rewrite/passthrough 实测；§2.1 代理覆盖/头合并/SOCKS5）；remux 成功路径见 [`09`](09-recording-livestream-remux-subtitle.md) |
 | D4 | 切片伪装（字节级复现） | 下载+比对+哈希 | S-DIS-* | 🔶 后缀已破解；前缀 **输入依赖/校验已解**、算法未解 [`01`](01-runtime-surface-and-disguise.md) §5 + [`14`](14-disguise-prefix-analysis.md) |
 | D5 | 缓存窗口与响应头 | 时序采样 | S-DIS-06/07 | ✅ [`03`](03-cache-layout-and-window.md)（首写 public→命中 private） |
 | D6 | Token / 随机频道 ID / IP 管控 | 请求矩阵 | S-AUTH-* | ✅ Token 已验；随机 ID/IP 管控部分 [`04`](04-auth-token-and-guards.md) |

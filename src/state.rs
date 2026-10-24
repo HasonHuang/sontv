@@ -26,6 +26,10 @@ use crate::{
 /// v0.8.2 实测：慢速正文在 **25.0 秒** 中断；中断后仍以 200 返回已收到的部分字节。
 const UPSTREAM_TIMEOUT_SECS: u64 = 25;
 
+/// 目标默认上游 User-Agent（F-010 §3.2）。
+pub(crate) const DEFAULT_USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 pub struct AppState {
     /// 配置文件路径（保存与重载用）。
     pub config_path: PathBuf,
@@ -100,6 +104,7 @@ impl AppState {
             play_tokens: PlayTokenStore::new(),
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(UPSTREAM_TIMEOUT_SECS))
+                .user_agent(DEFAULT_USER_AGENT)
                 .build()
                 .unwrap_or_default(),
             segments,
@@ -133,21 +138,20 @@ impl AppState {
 
     /// 选择频道上游客户端。
     ///
-    /// 频道级代理优先于分组级。没有代理或代理无效时返回全局客户端。
+    /// 频道级代理优先于分组级。目标在代理不可用时**不回退**到分组代理或直连；
+    /// 这里只对“未配置代理”或代理配置无效（无法构造客户端）回退直连。
     pub fn http_for(&self, gid: &str, cid: &str) -> reqwest::Client {
         let config = self.snapshot();
         let Some(proxy) = config.proxy_for(gid, cid) else {
             return self.http.clone();
         };
-        let addr = proxy.addr.trim();
-        if addr.is_empty() {
+        let Some(addr) = proxy.url() else {
+            tracing::warn!(kind = %proxy.kind, "代理地址为空；改用直连");
             return self.http.clone();
-        }
-        if !matches!(proxy.kind.as_str(), "" | "http" | "https") {
-            tracing::warn!(kind = %proxy.kind, "不支持的代理类型；改用直连");
-            return self.http.clone();
-        }
-        let key = format!("{}|{}|{}|{}", proxy.kind, addr, proxy.user, proxy.pass);
+        };
+        let user = proxy.username().unwrap_or("");
+        let pass = proxy.password().unwrap_or("");
+        let key = format!("{addr}|{user}|{pass}");
         {
             let cache = self
                 .proxy_clients
@@ -157,12 +161,13 @@ impl AppState {
                 return client.clone();
             }
         }
-        let built = reqwest::Proxy::all(addr).and_then(|mut candidate| {
-            if !proxy.user.is_empty() {
-                candidate = candidate.basic_auth(&proxy.user, &proxy.pass);
+        let built = reqwest::Proxy::all(&addr).and_then(|mut candidate| {
+            if !user.is_empty() {
+                candidate = candidate.basic_auth(user, pass);
             }
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(UPSTREAM_TIMEOUT_SECS))
+                .user_agent(DEFAULT_USER_AGENT)
                 .proxy(candidate)
                 .build()
         });

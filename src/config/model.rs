@@ -481,15 +481,18 @@ impl Default for StatsCfg {
 
 /// 上游代理覆盖（分组或频道级）。
 ///
-/// 证据：S-GAP-05。目标字段为 `proxy{kind,addr,user,pass}`；行为未验。
-/// 本实现只用 `http`/`https`；其它 `kind` 忽略并记日志。
+/// 证据：S-GAP-05、F-010 §3.2。目标字段为
+/// `proxy{kind,addr,username,password}`；`addr` 通常不带协议前缀。
+/// `kind` 见 `http`/`https`/`socks5`/`socks5h`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct ProxyCfg {
     pub kind: String,
     pub addr: String,
-    pub user: String,
-    pub pass: String,
+    #[serde(rename = "username", alias = "user")]
+    pub user: Option<String>,
+    #[serde(rename = "password", alias = "pass")]
+    pub pass: Option<String>,
 }
 
 impl Default for ProxyCfg {
@@ -497,9 +500,51 @@ impl Default for ProxyCfg {
         Self {
             kind: "http".into(),
             addr: String::new(),
-            user: String::new(),
-            pass: String::new(),
+            user: None,
+            pass: None,
         }
+    }
+}
+
+impl ProxyCfg {
+    /// 构造 reqwest 可接受的代理 URL。
+    ///
+    /// 目标允许 `addr` 省略协议：`kind` 决定协议，`addr` 只写 `host:port`。
+    pub fn url(&self) -> Option<String> {
+        let addr = self.addr.trim();
+        if addr.is_empty() {
+            return None;
+        }
+        if addr.contains("://") {
+            return Some(addr.to_string());
+        }
+        let kind = self.kind.trim().to_ascii_lowercase();
+        let scheme = match kind.as_str() {
+            "" | "http" => "http",
+            "https" => "https",
+            "socks4" => "socks4",
+            "socks4a" => "socks4a",
+            "socks5" => "socks5",
+            "socks5h" => "socks5h",
+            other => {
+                tracing::warn!(kind = other, "未知代理类型；按 http 处理");
+                "http"
+            }
+        };
+        Some(format!("{scheme}://{addr}"))
+    }
+
+    /// 代理认证用户名；空字符串按未配置处理。
+    pub fn username(&self) -> Option<&str> {
+        self.user
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+    }
+
+    /// 代理认证密码。
+    pub fn password(&self) -> Option<&str> {
+        self.pass.as_deref()
     }
 }
 
@@ -868,8 +913,8 @@ name = "组"
 [groups.proxy]
 kind = "http"
 addr = "http://127.0.0.1:8080"
-user = "u"
-pass = "p"
+username = "u"
+password = "p"
 [[groups.channels]]
 id = "c"
 name = "频道"
@@ -878,6 +923,71 @@ url = "http://up/live.m3u8"
         let config: Config = toml::from_str(text).expect("解析配置");
         let proxy = config.proxy_for("g", "c").expect("代理");
         assert_eq!(proxy.kind, "http");
-        assert_eq!(proxy.user, "u");
+        assert_eq!(proxy.user.as_deref(), Some("u"));
+        assert_eq!(proxy.pass.as_deref(), Some("p"));
+    }
+
+    #[test]
+    fn panel_json_accepts_target_proxy_and_header_objects() {
+        let body = serde_json::json!({
+            "groups": [{
+                "id": "g",
+                "name": "组",
+                "headers": [{"name": "X-Group", "value": "g"}],
+                "proxy": {
+                    "kind": "socks5",
+                    "addr": "127.0.0.1:1080",
+                    "username": "u",
+                    "password": "p"
+                },
+                "channels": [{
+                    "id": "c",
+                    "name": "频道",
+                    "url": "http://up/live.m3u8",
+                    "headers": [{"name": "X-Channel", "value": "c"}]
+                }]
+            }]
+        });
+        let config: Config = serde_json::from_value(body).expect("解析面板 JSON");
+        let proxy = config.proxy_for("g", "c").expect("代理");
+        assert_eq!(proxy.url().as_deref(), Some("socks5://127.0.0.1:1080"));
+        assert_eq!(proxy.username(), Some("u"));
+        assert_eq!(proxy.password(), Some("p"));
+        let group = config.group("g").expect("分组");
+        assert_eq!(
+            group.headers[0]
+                .as_table()
+                .and_then(|table| table.get("name"))
+                .and_then(toml::Value::as_str),
+            Some("X-Group")
+        );
+
+        let encoded = serde_json::to_value(&config).expect("序列化面板 JSON");
+        assert_eq!(encoded["groups"][0]["proxy"]["username"], "u");
+        assert!(encoded["groups"][0]["proxy"].get("user").is_none());
+    }
+
+    #[test]
+    fn proxy_url_uses_kind_as_scheme() {
+        let proxy = ProxyCfg {
+            kind: "socks5".into(),
+            addr: "127.0.0.1:1080".into(),
+            ..ProxyCfg::default()
+        };
+        assert_eq!(proxy.url().as_deref(), Some("socks5://127.0.0.1:1080"));
+
+        let proxy = ProxyCfg {
+            kind: "socks5".into(),
+            addr: "socks5h://proxy:1080".into(),
+            ..ProxyCfg::default()
+        };
+        assert_eq!(proxy.url().as_deref(), Some("socks5h://proxy:1080"));
+
+        let proxy = ProxyCfg {
+            kind: "http".into(),
+            addr: "".into(),
+            ..ProxyCfg::default()
+        };
+        assert!(proxy.url().is_none());
     }
 }

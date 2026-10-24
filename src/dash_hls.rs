@@ -100,6 +100,15 @@ fn track_statuses(presentation: &Presentation) -> Vec<TrackStatus> {
     presentation.streams.iter().map(track_status).collect()
 }
 
+fn latest_segment(presentation: &Presentation) -> u64 {
+    presentation
+        .streams
+        .iter()
+        .filter_map(|stream| stream.segments.last().map(|segment| segment.number))
+        .max()
+        .unwrap_or(0)
+}
+
 fn audio_label(stream: &Stream) -> String {
     match stream.audio_channels.as_deref() {
         Some("1") => format!("{} (Mono)", stream.name),
@@ -119,7 +128,16 @@ struct Session {
     ready: bool,
     segment_count: usize,
     started: Instant,
+    /// 最近一次客户端请求时间。
     last: Instant,
+    /// 最近一次发现新切片的时间；用于看门狗判定停更。
+    progress: Instant,
+    /// 已见最大切片编号。
+    latest: u64,
+    /// 当前连续重建次数。
+    rebuilds: u32,
+    /// 冷却截止时间。
+    cooling_until: Option<Instant>,
 }
 
 /// DASH 会话管理器。
@@ -169,6 +187,10 @@ impl Manager {
                 segment_count: 0,
                 started: Instant::now(),
                 last: Instant::now(),
+                progress: Instant::now(),
+                latest: 0,
+                rebuilds: 0,
+                cooling_until: None,
             });
     }
 
@@ -193,17 +215,27 @@ impl Manager {
                 segment_count: 0,
                 started: Instant::now(),
                 last: Instant::now(),
+                progress: Instant::now(),
+                latest: 0,
+                rebuilds: 0,
+                cooling_until: None,
             });
         session.entries.extend(entries);
         session.last = Instant::now();
     }
 
-    fn set_ready(&self, gid: &str, cid: &str, segment_count: usize) {
+    fn set_ready(&self, gid: &str, cid: &str, segment_count: usize, latest: u64) {
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(session) = sessions.get_mut(&Self::key(gid, cid)) {
             session.ready = true;
             session.segment_count = segment_count;
             session.last = Instant::now();
+            if latest > session.latest {
+                session.latest = latest;
+                session.progress = Instant::now();
+                session.rebuilds = 0;
+                session.cooling_until = None;
+            }
         }
     }
 
@@ -255,7 +287,7 @@ impl Manager {
             .and_then(|session| session.entries.get(path).cloned())
     }
 
-    fn ensure_janitor(self: &Arc<Self>, state: &Arc<AppState>) {
+    fn ensure_maintenance(self: &Arc<Self>, state: &Arc<AppState>) {
         if self.janitor.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -263,17 +295,90 @@ impl Manager {
         let state = state.clone();
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                let idle = Duration::from_secs(
-                    state
-                        .snapshot()
-                        .cache
-                        .dash
-                        .ondemand_idle_secs
-                        .clamp(5, 86_400),
-                );
-                let mut sessions = manager.sessions.lock().unwrap_or_else(|e| e.into_inner());
-                sessions.retain(|_, session| session.last.elapsed() <= idle);
+                let dash = state.snapshot().cache.dash.clone();
+                let tick = dash.watchdog_tick_secs.clamp(1, 3_600);
+                tokio::time::sleep(Duration::from_secs(tick)).await;
+
+                let idle = Duration::from_secs(dash.ondemand_idle_secs.clamp(5, 86_400));
+                let stall = Duration::from_secs(dash.watchdog_stall_secs.clamp(1, 86_400));
+                let active = Duration::from_secs(tick.saturating_mul(3).max(3));
+                let mut due = Vec::new();
+                {
+                    let now = Instant::now();
+                    let mut sessions = manager.sessions.lock().unwrap_or_else(|e| e.into_inner());
+                    sessions.retain(|_, session| session.last.elapsed() <= idle);
+                    for (key, session) in sessions.iter_mut() {
+                        if let Some(until) = session.cooling_until {
+                            if until > now {
+                                continue;
+                            }
+                            session.cooling_until = None;
+                            session.rebuilds = 0;
+                            session.progress = now;
+                        }
+                        // 只检查仍有客户端请求的会话，避免空闲会话被反复重建。
+                        if dash.watchdog_stall_secs == 0
+                            || session.last.elapsed() > active
+                            || session.progress.elapsed() < stall
+                        {
+                            continue;
+                        }
+                        due.push(key.clone());
+                    }
+                }
+
+                let stagger = Duration::from_millis(dash.watchdog_rebuild_stagger_ms.min(60_000));
+                let max = dash.watchdog_rebuild_max;
+                let cooldown = Duration::from_secs(dash.watchdog_cooldown_secs);
+                for (index, key) in due.iter().enumerate() {
+                    if index > 0 && !stagger.is_zero() {
+                        tokio::time::sleep(stagger).await;
+                    }
+                    let (gid, cid) = key.split_once('/').unwrap_or((key.as_str(), ""));
+                    let stalled = {
+                        let now = Instant::now();
+                        let mut sessions =
+                            manager.sessions.lock().unwrap_or_else(|e| e.into_inner());
+                        let Some(session) = sessions.get_mut(key) else {
+                            continue;
+                        };
+                        if session.cooling_until.is_some()
+                            || session.progress.elapsed() < stall
+                            || session.last.elapsed() > active
+                        {
+                            continue;
+                        }
+                        let stalled_secs = session.progress.elapsed().as_secs();
+                        session.rebuilds = session.rebuilds.saturating_add(1);
+                        session.entries.clear();
+                        session.ready = false;
+                        session.segment_count = 0;
+                        session.progress = now;
+                        session.last = now;
+                        if max > 0 && session.rebuilds >= max && !cooldown.is_zero() {
+                            session.cooling_until = Some(now + cooldown);
+                        }
+                        (session.rebuilds, stalled_secs)
+                    };
+                    if stalled.0 >= max && max > 0 && !cooldown.is_zero() {
+                        warn!(
+                            gid,
+                            cid,
+                            attempt = stalled.0,
+                            stalled_secs = stalled.1,
+                            cooldown_secs = cooldown.as_secs(),
+                            "DASH 看门狗连续重建仍未恢复，进入冷却"
+                        );
+                    } else {
+                        warn!(
+                            gid,
+                            cid,
+                            attempt = stalled.0,
+                            stalled_secs = stalled.1,
+                            "DASH 看门狗销毁重建"
+                        );
+                    }
+                }
             }
         });
     }
@@ -306,8 +411,9 @@ impl Manager {
                 .map(|stream| stream.segments.len())
                 .max()
                 .unwrap_or(0),
+            latest_segment(&presentation),
         );
-        self.ensure_janitor(state);
+        self.ensure_maintenance(state);
         info!(
             gid,
             cid,
@@ -384,11 +490,13 @@ impl Manager {
                         .position(|candidate| candidate.name == track)
                         .unwrap_or(0),
                     start_offset,
+                    publish_delay_secs: dash.publish_delay_secs,
+                    fetch_extra_segments: dash.fetch_extra_segments,
                 },
             );
             self.upsert(gid, cid, upstream, keep, pool);
             self.set_tracks(gid, cid, track_statuses(&presentation));
-            self.set_ready(gid, cid, rendered.segment_count);
+            self.set_ready(gid, cid, rendered.segment_count, rendered.latest_number);
             self.set_entries(gid, cid, rendered.entries);
             self.touch(gid, cid);
             let mut response = Response::new(Body::from(rendered.body));
@@ -431,12 +539,14 @@ impl Manager {
                                 formats: &formats,
                                 track_index: index,
                                 start_offset,
+                                publish_delay_secs: dash.publish_delay_secs,
+                                fetch_extra_segments: dash.fetch_extra_segments,
                             },
                         );
                         segment_count = segment_count.max(rendered.segment_count);
                         self.set_entries(gid, cid, rendered.entries);
                     }
-                    self.set_ready(gid, cid, segment_count);
+                    self.set_ready(gid, cid, segment_count, latest_segment(&presentation));
                 }
             }
             entry = self.entry(gid, cid, rest);
@@ -508,6 +618,7 @@ struct RenderedMedia {
     body: String,
     entries: Vec<(String, Entry)>,
     segment_count: usize,
+    latest_number: u64,
 }
 
 /// 生成 HLS master。
@@ -607,6 +718,8 @@ struct MediaOptions<'a> {
     formats: &'a [String],
     track_index: usize,
     start_offset: f64,
+    publish_delay_secs: f64,
+    fetch_extra_segments: u64,
 }
 
 /// 生成媒体清单并登记 init/切片。
@@ -624,8 +737,16 @@ fn render_media(
         formats,
         track_index,
         start_offset,
+        publish_delay_secs,
+        fetch_extra_segments,
     } = options;
     let mut picked: Vec<&dash::Segment> = stream.segments.iter().collect();
+    if presentation.is_live {
+        // 目标行为：publish_delay_secs > 0 时按该延迟压后清单末端；
+        // 为 0 时使用 fetch_extra_segments 段作为备用缓冲。
+        let withhold = publish_withhold(&picked, publish_delay_secs, fetch_extra_segments);
+        picked.truncate(picked.len().saturating_sub(withhold));
+    }
     if keep_seconds > 0 {
         let mut total = 0.0;
         let mut start = picked.len();
@@ -706,6 +827,7 @@ fn render_media(
         body,
         entries,
         segment_count: picked.len(),
+        latest_number: picked.last().map(|segment| segment.number).unwrap_or(0),
     }
 }
 
@@ -851,6 +973,35 @@ fn retry_delay(config: &crate::config::model::CacheDashCfg, attempt: u32) -> Dur
     Duration::from_millis(delay.max(config.min_request_interval_ms as f64) as u64)
 }
 
+/// 计算清单末端需压后的切片数。
+///
+/// 目标实测（4 秒切片）：
+/// - `publish_delay_secs=0` → 压后 `fetch_extra_segments` 段；
+/// - `publish_delay_secs=4/8/20/24/30` → 分别压后 1/2/5/6/8 段。
+fn publish_withhold(
+    segments: &[&dash::Segment],
+    publish_delay_secs: f64,
+    fetch_extra_segments: u64,
+) -> usize {
+    if segments.is_empty() {
+        return 0;
+    }
+    if publish_delay_secs > 0.0 {
+        let mut total = 0.0;
+        let mut count = 0;
+        for segment in segments.iter().rev() {
+            total += segment.duration.max(0.001);
+            count += 1;
+            if total >= publish_delay_secs {
+                break;
+            }
+        }
+        count.min(segments.len())
+    } else {
+        (fetch_extra_segments as usize).min(segments.len())
+    }
+}
+
 /// 计算 DASH 媒体清单窗口：分组 `mpd_keep_seconds` 优先，否则用 `playlist_min_secs`。
 ///
 /// 目标实测：`playlist_min_secs=30`、4 秒切片 → 8 条；`=12` → 3 条。
@@ -950,6 +1101,8 @@ mod tests {
                 formats: &["webp".to_string()],
                 track_index: 0,
                 start_offset: 0.0,
+                publish_delay_secs: 0.0,
+                fetch_extra_segments: 0,
             },
         );
         assert!(rendered
@@ -990,11 +1143,63 @@ mod tests {
                 formats: &["jpg".to_string()],
                 track_index: 0,
                 start_offset: 0.0,
+                publish_delay_secs: 0.0,
+                fetch_extra_segments: 0,
             },
         );
         assert_eq!(rendered.segment_count, 8);
         assert_eq!(rendered.body.matches("#EXTINF:").count(), 8);
         assert!(rendered.body.contains("#EXT-X-MEDIA-SEQUENCE:3"));
+    }
+
+    #[test]
+    fn publish_delay_withholds_live_edge() {
+        let p = parse_presentation(
+            r#"<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic">
+  <Period>
+    <AdaptationSet contentType="video">
+      <SegmentTemplate timescale="1000" initialization="init.mp4" media="s-$Number$.m4s" startNumber="1">
+        <SegmentTimeline><S d="4000" r="9"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation id="v0" width="640" height="360"/>
+    </AdaptationSet>
+  </Period>
+</MPD>"#,
+            "http://origin.example/live.mpd",
+        )
+        .expect("MPD");
+        let stream = &p.streams[0];
+        let make = |publish_delay_secs: f64, fetch_extra_segments: u64| {
+            render_media(
+                &p,
+                stream,
+                MediaOptions {
+                    gid: "g",
+                    cid: "c",
+                    self_base: "",
+                    keep_seconds: 12,
+                    pool_size: 1,
+                    formats: &["jpg".to_string()],
+                    track_index: 0,
+                    start_offset: 0.0,
+                    publish_delay_secs,
+                    fetch_extra_segments,
+                },
+            )
+        };
+        // 延迟 20s / 4s = 5 段；余下最后 12s 窗口 3 段。
+        let delayed = make(20.0, 2);
+        assert_eq!(delayed.segment_count, 3);
+        assert_eq!(delayed.latest_number, 5);
+        assert!(delayed.body.contains("#EXT-X-MEDIA-SEQUENCE:3"));
+        // 延迟为 0 时压后 fetch_extra_segments 段。
+        let buffered = make(0.0, 2);
+        assert_eq!(buffered.segment_count, 3);
+        assert_eq!(buffered.latest_number, 8);
+        // 30s 延迟向上取整为 8 段。
+        let ceil = make(30.0, 0);
+        assert_eq!(ceil.latest_number, 2);
     }
 
     #[test]
@@ -1039,6 +1244,8 @@ mod tests {
                 formats: &["jpg".to_string()],
                 track_index: 0,
                 start_offset: 0.0,
+                publish_delay_secs: 0.0,
+                fetch_extra_segments: 0,
             },
         );
         assert!(!rendered.body.contains("#EXT-X-ENDLIST"));
@@ -1062,6 +1269,8 @@ mod tests {
                 formats: &["jpg".to_string()],
                 track_index: 0,
                 start_offset: 0.0,
+                publish_delay_secs: 0.0,
+                fetch_extra_segments: 0,
             },
         );
         assert!(rendered.body.contains("#EXT-X-MEDIA-SEQUENCE:1"));
@@ -1093,6 +1302,8 @@ mod tests {
                 formats: &["jpg".to_string()],
                 track_index: 0,
                 start_offset: 15.0,
+                publish_delay_secs: 0.0,
+                fetch_extra_segments: 0,
             },
         );
         assert!(rendered.body.contains("#EXT-X-START:TIME-OFFSET=-15.000"));

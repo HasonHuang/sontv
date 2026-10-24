@@ -41,6 +41,14 @@
 
 ### 1.3 最近完成
 
+2026-10-24：
+
+- **U-05 `[cache.dash]` 剩余参数完成**：
+  - `publish_delay_secs>0` 按 `ceil(delay/切片时长)` 压后直播清单末端；`=0` 使用 `fetch_extra_segments`。
+  - 看门狗接入 `watchdog_tick_secs`、`watchdog_stall_secs`、`watchdog_rebuild_stagger_ms`，并复用重建上限与冷却。
+  - `fast_start_secs` 在三类目标场景中无可观测差异，保留配置字段，不改变输出。
+  - 证据：F-018、`docs/findings/dynamic/18-dash-window-knobs.md`。
+
 2026-10-23：
 
 - **V-09 订阅聚合字段对齐**：
@@ -68,7 +76,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 215 项通过（146 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 216 项通过（147 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -87,15 +95,7 @@
 
 | ID | 优先级 | 任务 | 当前状态 | 下一步 |
 | --- | --- | --- | --- | --- |
-| U-05 | P1 | `[cache.dash]` 剩余参数 | `fast_start_secs`、`publish_delay_secs`、`watchdog_tick_secs`、`watchdog_stall_secs`、`watchdog_rebuild_stagger_ms` 已建模，未完整接入 | 补目标证据；实现参数语义；补测试与文档 |
 | U-06 | P1 | 台标动效与解码 | 6 种效果与 APNG 编码已完成；依赖外部 `ffmpeg`/`ffprobe` | 评估 APNG 脏矩形优化；验证 WebP 解码；减少外部依赖 |
-
-U-05 最新探测记录：
-
-- `publish_delay_secs` 会压后媒体清单末端。目标测试中 `30s` 配置比 `0s` 多滞后约 6 至 8 个 4 秒切片。
-- `fast_start_secs` 在上游已有历史窗口时无可观测差异。需要用“新直播源、历史切片逐步出现”的场景验证首次清单窗口。
-- 看门狗日志显示：常驻频道失败后会按 tick 重建；`watchdog_stall_secs` 与 `watchdog_rebuild_stagger_ms` 的独立效果仍需分离。
-- 现有实现只接入 `watchdog_rebuild_max` 与 `watchdog_cooldown_secs`。
 
 ### 2.2 待补目标证据
 
@@ -112,6 +112,7 @@ U-05 最新探测记录：
 
 已完成：
 
+- U-05 `[cache.dash]` 发布延迟与看门狗参数 ✅
 - V-04 `/subs/{groups,preview}` 字段 ✅
 - V-09 `[playlist]` / `[share]` 目标语义 ✅
 - V-11 真实 HLS/M3U 验证 ✅
@@ -137,16 +138,12 @@ U-05 最新探测记录：
 
 ## 3. 建议推进顺序
 
-1. **U-05**：分离 `fast_start_secs`、`publish_delay_secs` 与看门狗三参数。
-   - 用新直播源验证首次清单。
-   - 用固定切片时长验证发布延迟公式。
-   - 用可控停更源验证 tick/stall/stagger。
-2. **U-06**：评估 APNG 脏矩形优化；确认 WebP 解码路径。
-3. **V-01、V-02**：补 DASH 多 `<BaseURL>` 与 `proxy`+MPD 证据。
-4. **V-03**：补公开 EPG API 响应形状。
-5. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
-6. 每项完成后更新本文件、对应 `docs/` 文档与测试。
-7. 提交使用 Conventional Commits，并立即 push `rust` 分支。
+1. **V-01、V-02**：补 DASH 多 `<BaseURL>` 与 `proxy`+MPD 绝对 `<BaseURL>` 证据。
+2. **V-03**：补公开 EPG API 响应形状。
+3. **U-06**：评估 APNG 脏矩形优化；确认 WebP 解码路径。
+4. **V-05 至 V-10**：按影响排序补证据；低影响项保持登记。
+5. 每项完成后更新本文件、对应 `docs/` 文档与测试。
+6. 提交使用 Conventional Commits，并立即 push `rust` 分支。
 
 ## 4. 关键设计结论
 

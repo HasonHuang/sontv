@@ -143,6 +143,8 @@
 | S-EPG-06 | 节目裁剪区间 = `[(今天−keep_days) 00:00, (今天+future_days) 23:59:59]`；`keep_days` **内部上限 7**（API 接受 10 但按 7 裁剪） | 二进制 | ✅【观测】`keep_yesterday` 开/关无差异，语义未定 |
 | S-EPG-07 | `match-report` 的 `via`∈`tvg-id` / `name` / `manual` / `duplicate` / `none` | 二进制 | ✅【观测】 |
 | S-DASH-01 | `SegmentTemplate@duration` 缺 `SegmentTimeline` → 按墙钟/duration 推算 `$Number$`（实测 896163185），切片段全 404 | 二进制 | ✅【观测】 |
+| S-DASH-02 | `publish_delay_secs>0` → 直播清单末端压后 `ceil(delay/切片时长)` 段；`=0` → 压后 `fetch_extra_segments` 段 | 二进制 | ✅【观测】4s 切片：0/4/8/12/20/24/30 → 2/1/2/3/5/6/8 段（F-018） |
+| S-DASH-03 | 看门狗每 `watchdog_tick_secs` 扫描；切片进度停滞 `watchdog_stall_secs` → 重建；同轮按 `watchdog_rebuild_stagger_ms` 错开；达到 `watchdog_rebuild_max` → 冷却 `watchdog_cooldown_secs` | 二进制 | ✅【观测】tick=2/stall=5/stagger=500/max=2 已分离（F-018）；`fast_start_secs` 无可观测差异 |
 | S-LOGO-01 | 台标本地托管，`tvg-logo` 与 EPG `icon` 指向本地；支持上传转码与动效生成 | D-panel | ✅【观测】9 端点全验（见 12）；转码在**浏览器侧**，服务端只存字节 |
 | S-LOGO-02 | 台标库端点：`GET /logo/{list,match-report}`、`POST /logo/{upload,apply,rename,delete,restore,suggest,animate}` | D-panel | ✅【观测】`upload` 需 `name/ext/data`；`animate.quality` 为**字符串** |
 | S-LOGO-03 | 动效纯 Rust 无损编码，覆盖原文件、原图备份到 `logos/.orig/`；6 种效果 | D-panel/二进制 | ✅【观测】`frames/total_ms/bytes_before/after/dirty_ratio`；`restore` 还原 |

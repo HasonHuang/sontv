@@ -1,0 +1,85 @@
+# v0.8.2 DASH window/watchdog probes (2026-10-24)
+
+Target: linux-amd64 v0.8.2 container.
+Origin: host Python MPD server, 4-second fMP4 segments.
+
+## publish_delay_secs
+
+Method: session warm; for 10 consecutive client media-playlist reads, compare the
+target media playlist end number with the highest segment number in the target's
+upstream request log.
+
+| publish_delay_secs | lags (10 samples) | median |
+| --- | --- | ---: |
+| 0.0 | 2 2 2 2 2 2 2 2 2 2 | 2 |
+| 4.0 | 1 1 1 1 1 1 1 1 1 1 | 1 |
+| 8.0 | 2 2 2 2 2 2 2 2 2 2 | 2 |
+| 20.0 | 5 5 5 5 5 5 5 5 5 5 | 5 |
+| 24.0 | 6 6 6 6 6 6 6 6 6 6 | 6 |
+| 30.0 | 8 (prior sample) | 8 |
+
+Formula:
+
+```text
+delay > 0  => withhold = ceil(delay / segment_duration)
+delay == 0 => withhold = fetch_extra_segments
+```
+
+## fast_start_secs
+
+Origin: dynamic MPD with SegmentTimeline growing from one segment.
+Target config: `playlist_min_secs=30`, `publish_delay_secs=0`.
+
+| fast_start_secs | master | first media playlist | later |
+| ---: | --- | --- | --- |
+| 0 | 200 immediate | 3 segments | grows to 8 |
+| 12 | 200 immediate | 3 segments | grows to 8 |
+| 30 | 200 immediate | 3 segments | grows to 8 |
+
+Full-history origin with `playlist_min_secs=30`: all three values => 8 segments.
+`playlist_min_secs=0`: `fast_start_secs=0` and `=12` => 8 segments.
+
+No observable difference.
+
+## Watchdog
+
+Target config:
+
+```toml
+watchdog_tick_secs = 2
+watchdog_stall_secs = 5
+watchdog_rebuild_max = 2
+watchdog_cooldown_secs = 3600
+watchdog_rebuild_stagger_ms = 500
+```
+
+Origin serves HTTP 200 but freezes MPD and segment numbering.
+
+```text
+12:40:42 DEBUG MPD parse done v2
+12:40:42 DEBUG MPD parse done v1
+12:40:48 WARN watchdog rebuild stream=v1 attempt=1 stalled_secs=5
+12:40:48 WARN watchdog rebuild stream=v2 attempt=1 stalled_secs=6
+12:40:54 WARN watchdog rebuild stream=v1 attempt=2 stalled_secs=6
+12:40:55 WARN watchdog rebuild stream=v2 attempt=2 stalled_secs=6
+12:41:01 WARN watchdog cooldown stream=v1 fails=2 cooldown_secs=3600
+12:41:01 WARN watchdog cooldown stream=v2 fails=2 cooldown_secs=3600
+```
+
+Origin stopped after sessions were ready:
+
+```text
+12:39:34 DEBUG DASH round failed v2 attempt=1
+12:39:34 DEBUG DASH round failed v1 attempt=1
+12:39:34 WARN DASH continuous failure stop v2 fails=1
+12:39:34 WARN DASH continuous failure stop v1 fails=1
+12:39:36 WARN watchdog rebuild v2 attempt=1 stalled_secs=0
+12:39:36 WARN watchdog rebuild v1 attempt=1 stalled_secs=0
+```
+
+Interpretation:
+
+- Scan period = `watchdog_tick_secs`.
+- Stall threshold = `watchdog_stall_secs` of no segment progress.
+- Stagger applies between rebuilds in one scan.
+- `watchdog_rebuild_max` consecutive rebuilds, then cooldown.

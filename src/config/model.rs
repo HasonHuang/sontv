@@ -275,8 +275,10 @@ pub struct CacheDashCfg {
     pub playlist_min_secs: f64,
     pub retain_min_secs: f64,
     pub fetch_extra_segments: u64,
+    /// 快速起播窗口。目标 v0.8.2 无可观测语义；保留字段以兼容配置回写。
     pub fast_start_secs: f64,
     pub start_time_offset_secs: f64,
+    /// 直播清单发布延迟；>0 时按切片时长向上取整压后末端。
     pub publish_delay_secs: f64,
     pub continuous_tail_min_ratio: f64,
     pub retry_max: u32,

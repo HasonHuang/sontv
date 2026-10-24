@@ -10,11 +10,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::{
-    auth::unban::WINDOW_SECS,
-    http::{error::ApiError, ext::client_ip_with_peer},
-    state::AppState,
-};
+use crate::{auth::unban::MONTHLY_LIMIT, http::ext::client_ip_with_peer, state::AppState};
 
 /// `302 Found`。目标用 302 做占位跳转（S-DIS-15）。
 fn found(url: &str) -> Response {
@@ -60,44 +56,51 @@ pub async fn fallback(State(_): State<Arc<AppState>>, uri: Uri) -> Response {
     (StatusCode::NOT_FOUND, "not found").into_response()
 }
 
-/// `GET /whoami`、`GET /unban/whoami`——返回调用方地址。
+/// `GET /unban/whoami`——返回调用方地址、封禁状态与本月配额。
 ///
-/// 响应形状为本实现自定。目标只登记了路由存在性（S-EP-15）。
-pub async fn whoami(ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> Json<Value> {
-    Json(json!({ "ip": client_ip_with_peer(&headers, Some(peer)) }))
+/// 目标在 IP 管控关闭时只返回 `enabled` 与 `ip`。
+pub async fn whoami(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Json<Value> {
+    let ip = client_ip_with_peer(&headers, Some(peer));
+    if !state.snapshot().auth.ip_guard_enabled {
+        return Json(json!({ "enabled": false, "ip": ip }));
+    }
+    let used = state.unban_quota.used(&ip);
+    Json(json!({
+        "banned": state.ip_guard.is_banned(&ip),
+        "enabled": true,
+        "ip": ip,
+        "max_per_month": MONTHLY_LIMIT,
+        "remaining": MONTHLY_LIMIT.saturating_sub(used),
+        "used": used,
+    }))
 }
 
 /// `POST /unban`——调用方自助解封。
 ///
-/// 免登录（S-EP-07）。每个 IP 30 天最多 3 次（S-AUTH-07）。
-/// 只解封调用方地址；不提供解封他人地址的能力。
+/// 免登录（S-EP-07）。每个 IP 每月最多 3 次（S-AUTH-07）。
+/// 配额用完时目标仍返回 `200`，正文 `ok=false`。
 pub async fn unban(
     State(state): State<Arc<AppState>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+) -> Json<Value> {
+    if !state.snapshot().auth.ip_guard_enabled {
+        return Json(json!({ "msg": "IP 管控未启用", "ok": false }));
+    }
     let ip = client_ip_with_peer(&headers, Some(peer));
     if !state.ip_guard.is_banned(&ip) {
-        return Ok(Json(json!({
-            "ok": false,
-            "ip": ip,
-            "reason": "not_banned",
-            "remaining": state.unban_quota.remaining(&ip),
-            "window_secs": WINDOW_SECS,
-        })));
+        return Json(json!({ "msg": "你的 IP 当前未被封禁", "ok": false }));
     }
     if !state.unban_quota.consume(&ip) {
-        return Err(ApiError::too_many(json!({
-            "error": "本月解封次数已用完",
-            "remaining": 0,
-            "window_secs": WINDOW_SECS,
-        })));
+        return Json(json!({
+            "msg": "本月自助解封次数已用完（每月最多3次）",
+            "ok": false,
+        }));
     }
     state.ip_guard.unban(&ip);
-    Ok(Json(json!({
-        "ok": true,
-        "ip": ip,
-        "remaining": state.unban_quota.remaining(&ip),
-        "window_secs": WINDOW_SECS,
-    })))
+    Json(json!({ "msg": "解封成功", "ok": true }))
 }

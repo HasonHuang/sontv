@@ -55,7 +55,7 @@ follower /security/ip/stats -> banned_ips=[{ip:203.0.113.9, remaining_secs:25919
 /playlist.m3u  /:group_id/playlist.m3u
 /epg.xml.gz  /epg  /epg/api/channels  /epg/api/programmes/:channel  /epg/api/search
 /logo  /logo/api/list  /logo/:file  /__assets/*path
-/unban  /unban/whoami  /whoami
+/unban  /unban/whoami  /whoami（静态 HIT；运行态 404，见 11 §3.1）
 /:group_id/:channel_id/index.m3u8  /:group_id/:channel_id  /:group_id/:channel_id/timeshift/:filename
 /:group_id/:channel_id/dash-timeshift/:track/{playlist.m3u8,playlist.txt,playlist,:filename}
 /:group_id/:channel_id/*segment  /panel  /panel/  /panel/epg  /panel/api

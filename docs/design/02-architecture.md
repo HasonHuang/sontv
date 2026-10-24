@@ -24,7 +24,7 @@
 │  main ──► 加载配置 ──► 建缓存目录 ──► 起后台任务 ──► 起 HTTP 监听     │
 │                                                                      │
 │  HTTP（axum Router）                                                  │
-│   ├─ 公开面   /health /unban /logo /epg /whoami /__assets             │
+│   ├─ 公开面   /health /unban /logo /epg /unban/whoami /__assets       │
 │   ├─ 播放面   /playlist.m3u /{gid}/playlist.m3u /{gid}/{cid}.{ext}    │
 │   │            切片 …/<P>_<S>.<ext>、timeshift、dash-timeshift        │
 │   └─ 面板面   /panel（静态） + /panel/api/*（Bearer 或 X-Token）      │

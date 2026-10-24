@@ -25,11 +25,15 @@ impl UnbanQuota {
         Self::default()
     }
 
+    /// 窗口内已用次数。
+    pub fn used(&self, ip: &str) -> u32 {
+        let mut inner = self.lock();
+        Self::prune(inner.entry(ip.to_string()).or_default()) as u32
+    }
+
     /// 剩余次数。
     pub fn remaining(&self, ip: &str) -> u32 {
-        let mut inner = self.lock();
-        let used = Self::prune(inner.entry(ip.to_string()).or_default());
-        MONTHLY_LIMIT.saturating_sub(used as u32)
+        MONTHLY_LIMIT.saturating_sub(self.used(ip))
     }
 
     /// 消耗一次；配额不足时返回 `false`。
@@ -68,6 +72,8 @@ mod tests {
         assert!(quota.consume("1.2.3.4"));
         assert!(!quota.consume("1.2.3.4"));
         assert_eq!(quota.remaining("1.2.3.4"), 0);
+        assert_eq!(quota.used("1.2.3.4"), 3);
+        assert_eq!(quota.used("2.2.2.2"), 0);
     }
 
     #[test]

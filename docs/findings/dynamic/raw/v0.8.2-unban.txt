@@ -1,0 +1,107 @@
+## v0.8.2 自助解封补测（2026-10-24）
+
+环境：容器 `rea82v09`（linux/amd64），映射 `:19974`；`config.toml` 打开 `[auth].ip_guard_enabled=true`。
+调用头：`X-Forwarded-For` 模拟客户端；管理员登录 `admin` / `admin`。
+
+### 1. IP 管控关闭
+
+```text
+
+GET  /unban/whoami  XFF: 203.0.113.210
+200  {"enabled":false,"ip":"203.0.113.210"}
+
+POST /unban         XFF: 203.0.113.210
+200  {"msg":"IP 管控未启用","ok":false}
+
+GET  /whoami        XFF: 203.0.113.210
+404  （空正文）
+
+```
+
+### 2. 地址提取
+
+```text
+
+GET /unban/whoami  XFF: 198.51.100.7, 203.0.113.213
+200 {"banned":false,"enabled":true,"ip":"203.0.113.213","max_per_month":3,"remaining":3,"used":0}
+
+GET /unban/whoami  X-Real-IP: 198.51.100.8
+200 {"banned":false,"enabled":true,"ip":"198.51.100.8","max_per_month":3,"remaining":3,"used":0}
+
+GET /unban/whoami  XFF: 198.51.100.9 / X-Real-IP: 198.51.100.10
+200 {"banned":false,"enabled":true,"ip":"198.51.100.9","max_per_month":3,"remaining":3,"used":0}
+
+GET /unban/whoami  XFF: 198.51.100.21, 198.51.100.22, 198.51.100.23
+200 {"banned":false,"enabled":true,"ip":"198.51.100.23","max_per_month":3,"remaining":3,"used":0}
+
+```
+
+结论：`X-Forwarded-For` 取**末项**；`X-Forwarded-For` 优先于 `X-Real-IP`。
+
+### 3. 配额与响应
+
+```text
+
+GET  /unban/whoami  XFF: 203.0.113.211
+200 {"banned":false,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":3,"used":0}
+
+POST /unban         XFF: 203.0.113.211（未封禁）
+200 {"msg":"你的 IP 当前未被封禁","ok":false}
+
+POST /panel/api/security/ip/ban {"ips":["203.0.113.211"]}
+200 {"ok":true,"results":[{"ip":"203.0.113.211","ok":true}],"secs":2592000}
+
+GET  /unban/whoami
+200 {"banned":true,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":3,"used":0}
+
+POST /unban
+200 {"msg":"解封成功","ok":true}
+
+GET  /unban/whoami
+200 {"banned":false,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":2,"used":1}
+
+```
+
+重复“封禁 → 自助解封”三次后：
+
+```text
+
+GET  /unban/whoami
+200 {"banned":false,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":0,"used":3}
+
+POST /panel/api/security/ip/ban {"ips":["203.0.113.211"]}
+200 {"ok":true,...}
+
+POST /unban
+200 {"msg":"本月自助解封次数已用完（每月最多3次）","ok":false}
+
+GET  /unban/whoami
+200 {"banned":true,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":0,"used":3}
+
+```
+
+结论：只有**成功解封**消耗配额；未封禁不消耗；配额耗尽仍返回 `200`，不返回 `429`；IP 保持封禁。
+
+### 4. 重启
+
+```text
+
+docker restart rea82v09
+GET /unban/whoami  XFF: 203.0.113.211
+200 {"banned":false,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":3,"used":0}
+
+```
+
+结论：封禁状态与自助解封计数都在内存；重启清零。
+
+### 5. 其他方法
+
+```text
+
+GET  /whoami        404
+GET  /unban/whoami  200
+POST /unban/whoami  405
+GET  /unban         200 text/html
+POST /unban         200 application/json
+
+```

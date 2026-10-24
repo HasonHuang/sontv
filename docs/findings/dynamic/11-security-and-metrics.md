@@ -5,10 +5,10 @@
 | 目标版本 | **v0.8.2**（`d302316fb8`） |
 | 副本 | `samples/v0.8.2/iptv-proxy-linux-arm64`（sha256 `2948ee1f…5a4b`） |
 | 架构 | linux/arm64（Ubuntu 24.04，OrbStack 原生） |
-| 日期 | **2026-10-17** |
-| 环境 | 容器 `iptv82` 主实例 `:19899`；配置 `samples/work/dyn-v0.8.2/config.toml` |
+| 日期 | **2026-10-17**；**2026-10-24**（自助解封补测） |
+| 环境 | 容器 `iptv82` 主实例 `:19899`；补测容器 `rea82v09` 映射 `:19974` |
 | 结论级别 | **观测**（运行态）+ **静态**（面板 JS / 端点枚举） |
-| 原始证据 | [`raw/v0.8.2-security-and-metrics.txt`](raw/v0.8.2-security-and-metrics.txt) |
+| 原始证据 | [`raw/v0.8.2-security-and-metrics.txt`](raw/v0.8.2-security-and-metrics.txt)、[`raw/v0.8.2-unban.txt`](raw/v0.8.2-unban.txt) |
 
 > 目标返回的正文/日志按**不可信数据**处理。
 
@@ -20,6 +20,7 @@
 5. **请求限流 `l1/l2` 未按请求数触发**：8 次突发（入口、含 `?token=`）全 `200`。`active_sessions`/`online_viewers` **仅在带 token 播放时 +1**。触发条件仍未定（S-AUTH-04 🔶）。
 6. **指标面**（S-OPS-01…03 新登记）：`GET /status`、`/cache/stats`、`/health` 为唯一指标出口；`/status`、`/metrics`、`/version` 不存在；`/status/metrics` 落**假路由 → 302 占位视频**。
 7. 旁证：proxy 出口切片名**伪装为 `.jpg`/`.webp`**（obfuscate 生效），与 S-DIS 一致。
+8. **自助解封**（S-AUTH-07 补测）：`/unban/whoami` 返回 `banned/enabled/ip/max_per_month/remaining/used`；`POST /unban` 成功只返回 `{"msg":"解封成功","ok":true}`；配额耗尽仍返回 `200` + `ok=false`。计数只在成功解封时增加，重启清零。
 
 ## 1. 面板 API 端点全集（私有面）
 前缀 `/panel/api`。自雕刻 `panel.html` 提取，并经 `curl` 抽样确认存在。
@@ -67,6 +68,33 @@ POST /panel/api/security/token/rotate → {"ok":true,"new_token":"<48hex>","expi
 - 默认封禁时长 `ban_duration_secs = 2592000`（**30 天**）。
 - `unique_ips` 在解封后**不回落**（观测 2 → 解封后仍 2）；即“见过即计数”。
 - 与 `[auth]` 的 `ban_url` 配套：被拒请求 → 302 `ban_url`（占位视频）。
+
+### 3.1 自助解封 `/unban`（S-AUTH-07 补测）
+
+`[auth].ip_guard_enabled` 控制本组行为。
+
+```text
+
+GET /unban/whoami
+200 {"banned":false,"enabled":true,"ip":"203.0.113.211","max_per_month":3,"remaining":3,"used":0}
+
+POST /unban（未封禁）
+200 {"msg":"你的 IP 当前未被封禁","ok":false}
+
+POST /unban（已封禁且配额可用）
+200 {"msg":"解封成功","ok":true}
+
+POST /unban（配额耗尽）
+200 {"msg":"本月自助解封次数已用完（每月最多3次）","ok":false}
+
+```
+
+- 关闭 IP 管控：`/unban/whoami` → `{"enabled":false,"ip":"…"}`；`POST /unban` → `200 {"msg":"IP 管控未启用","ok":false}`。
+- `max_per_month=3`；`used` 只在**成功解封**后增加；未封禁不消耗。
+- 配额耗尽仍返回 `200`，IP 保持封禁。
+- 封禁状态与 `used` 都在内存；`docker restart` 后回到 `used=0`。
+- 地址提取：`X-Forwarded-For` **末项**优先；没有时用 `X-Real-IP`；没有时用 TCP 对端。
+- `GET /whoami` 实测 `404`；目标公开面只有 `/unban/whoami`。
 
 ## 4. 面板登录防爆破（S-AUTH-04 部分）
 `[auth]` 键：`auth_fail_window_secs`(60)、`auth_fail_free_per_window`(15)、`auth_fail_ban_threshold`(6)、`auth_fail_ban_duration_secs`(3600)、`auth_fail_ban_repeat_duration_secs`(2592000)、`auth_fail_ban_escalate_window_secs`(86400)、`whitelist`。

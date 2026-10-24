@@ -1364,7 +1364,7 @@ async fn login(fixture: &Fixture) -> String {
 }
 
 #[tokio::test]
-async fn whoami_reports_forwarded_ip() {
+async fn whoami_reports_last_forwarded_ip() {
     let fixture = fixture().await;
 
     let response = fixture
@@ -1374,17 +1374,34 @@ async fn whoami_reports_forwarded_ip() {
         .send()
         .await
         .expect("请求 whoami");
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: serde_json::Value =
-        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["ip"], "1.2.3.4");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-    let response = fetch(&fixture, "/unban/whoami").await;
+    let response = fixture
+        .client
+        .get(format!("{}/unban/whoami", fixture.base))
+        .header("x-forwarded-for", "1.2.3.4, 5.6.7.8")
+        .send()
+        .await
+        .expect("请求 unban whoami");
     assert_eq!(response.status(), StatusCode::OK);
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    let ip = body["ip"].as_str().expect("ip");
-    assert!(!ip.is_empty() && ip != "unknown", "{body}");
+    assert_eq!(body["ip"], "5.6.7.8");
+    assert_eq!(body["enabled"], false);
+    assert!(body.get("banned").is_none());
+
+    let response = fixture
+        .client
+        .post(format!("{}/unban", fixture.base))
+        .header("x-forwarded-for", "5.6.7.8")
+        .send()
+        .await
+        .expect("请求 unban");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["msg"], "IP 管控未启用");
 }
 
 #[tokio::test]
@@ -1905,6 +1922,9 @@ async fn channel_headers_are_sent_upstream() {
 #[tokio::test]
 async fn self_service_unban_respects_quota() {
     let fixture = fixture().await;
+    let mut config = (*fixture.state.snapshot()).clone();
+    config.auth.ip_guard_enabled = true;
+    fixture.state.config.store(Arc::new(config));
     let session = login(&fixture).await;
     let auth = format!("Bearer {session}");
     let ban = |ip: &str| {
@@ -1914,6 +1934,13 @@ async fn self_service_unban_respects_quota() {
             .header("content-type", "application/json")
             .header("authorization", &auth)
             .body(format!(r#"{{"ip":"{ip}","seconds":60}}"#))
+    };
+    let whoami = || {
+        fixture
+            .client
+            .get(format!("{}/unban/whoami", fixture.base))
+            .header("x-forwarded-for", "8.8.8.8")
+            .send()
     };
 
     // 未封禁时只报告状态，不消耗配额。
@@ -1928,6 +1955,11 @@ async fn self_service_unban_respects_quota() {
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
     assert_eq!(body["ok"], false);
+    assert_eq!(body["msg"], "你的 IP 当前未被封禁");
+    let body: serde_json::Value =
+        serde_json::from_str(&whoami().await.expect("请求").text().await.expect("读正文"))
+            .expect("解析 JSON");
+    assert_eq!(body["used"], 0);
     assert_eq!(body["remaining"], 3);
 
     for round in 0..3 {
@@ -1957,7 +1989,13 @@ async fn self_service_unban_respects_quota() {
         let body: serde_json::Value =
             serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
         assert_eq!(body["ok"], true);
+        assert_eq!(body["msg"], "解封成功");
+        let body: serde_json::Value =
+            serde_json::from_str(&whoami().await.expect("请求").text().await.expect("读正文"))
+                .expect("解析 JSON");
+        assert_eq!(body["used"], round + 1);
         assert_eq!(body["remaining"], 2 - round);
+        assert_eq!(body["banned"], false);
     }
 
     assert_eq!(
@@ -1971,7 +2009,11 @@ async fn self_service_unban_respects_quota() {
         .send()
         .await
         .expect("请求");
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["msg"], "本月自助解封次数已用完（每月最多3次）");
     let response = fixture
         .client
         .get(format!("{}/playlist.m3u", fixture.base))

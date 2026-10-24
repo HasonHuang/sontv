@@ -63,8 +63,9 @@
 | GET | `/logo/<file>` | 无 | `200` 图片 + `public, max-age=86400`；缺文件、越界名、非白名单扩展 → `404` | ✅ P1 | F-011 §6 |
 | GET | `/logo/api/list` | 无 | `{"allowed_exts","count","logos":[{"file","name","ext","bytes","mtime","url"}]}` | ✅ P1 | F-011 |
 | GET | `/unban` | 无 | `200` `text/html`；封禁期也可访问 | ✅ P3 | S-EP-07 |
-| POST | `/unban` | 无 | `200` 解封结果；配额用完 → `429` | ✅ P3 | S-AUTH-07 |
-| GET | `/unban/whoami`、`/whoami` | 无 | `200` `{"ip":"<地址>"}`；取 `X-Forwarded-For` 首项、`X-Real-IP`，都没有时取 TCP 对端 | ✅ P1 | S-EP-15 |
+| POST | `/unban` | 无 | `200` `{"msg","ok"}`；未封禁、配额用完、IP 管控关闭均为 `ok:false` | ✅ P3 | S-AUTH-07 |
+| GET | `/unban/whoami` | 无 | 开启 IP 管控：`{"banned","enabled":true,"ip","max_per_month":3,"remaining","used"}`；关闭：`{"enabled":false,"ip"}`；XFF 取末项，其次 `X-Real-IP`，最后 TCP 对端 | ✅ P3 | S-EP-15 |
+| GET | `/whoami` | 无 | `404`（目标未注册） | ✅ P3 | S-EP-15 |
 | GET | `/health` | 无 | `200` `ok`（`text/plain`） | ✅ M0 | S-EP-10 |
 | GET | `/panel`、`/panel/`、`/panel/epg` | 无 | `200` `text/html` | ✅ M0 | S-EP-01 |
 | GET | `/__assets/*path` | 无 | `200` 静态资源 / `404` | ✅ M0 | S-EP-16 |
@@ -406,10 +407,10 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 
 | 项 | 规则 |
 | --- | --- |
-| 记账 | 非 `/panel` 路径按 `X-Forwarded-For` 首项或 `X-Real-IP` 记账；都没有时记 `unknown` 并忽略 |
-| 拦截 | 封禁期内 → `403` 纯文本 `banned`；面板路径不拦截（避免管理员自锁） |
+| 记账 | 非 `/panel`、非 `/unban` 路径按 `X-Forwarded-For` 末项或 `X-Real-IP` 记账；都没有时记 `unknown` 并忽略 |
+| 拦截 | 封禁期内 → `403` 纯文本 `banned`；面板与 `/unban` 路径不拦截（避免管理员或用户自锁） |
 | 容量 | 最多保留 10 000 个地址，超出后忽略新地址 |
-| 未实现 | 按 IP 的会话上限、自动限流与 `/unban` 自助解封（P2） |
+| 未实现 | 按 IP 的会话上限与自动限流 |
 
 ### 6.8 面板分区（前端）
 
@@ -481,7 +482,7 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | 未启用 | `[share].enabled = false` → `404`（形状自定） |
 | 密钥 | `key` 必须等于 `[share].key`；空 key 拒绝 |
 | 源 IP | 必须在 `[share].trust_ips`；支持精确地址、CIDR 与 `*`；不匹配 → `403` + 日志 |
-| 源 IP 取值 | `X-Forwarded-For` 首项 → `X-Real-IP` → TCP 对端 |
+| 源 IP 取值 | `X-Forwarded-For` 末项 → `X-Real-IP` → TCP 对端 |
 | 载荷 | `token` 为当前播放 Token；`token_old` 为宽限期旧值；`bans` 为封禁中地址；`unbans` 为最近两个周期内解封的地址 |
 | 角色 | `master` 每周期拉取 `follower_urls` 汇总；`follower` 从 `master_url` 采用 Token |
 | 周期 | `[share].poll_secs`，最小 5 秒 |
@@ -629,10 +630,12 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | --- | --- |
 | 入口 | `GET /unban` 免登录；封禁期也可访问 |
 | 提交 | `POST /unban` 免登录；只解封调用方地址 |
-| 配额 | 每个 IP 30 天最多 3 次；成功解封才消耗 |
-| 未封禁 | `200` `{"ok":false,"ip","reason":"not_banned","remaining","window_secs"}` |
-| 成功 | `200` `{"ok":true,"ip","remaining","window_secs":2592000}` |
-| 配额用完 | `429` `{"error":"本月解封次数已用完","remaining":0,"window_secs"}` |
+| 配额 | 每个 IP 每月最多 3 次；成功解封才消耗 |
+| 未封禁 | `200` `{"msg":"你的 IP 当前未被封禁","ok":false}` |
+| 成功 | `200` `{"msg":"解封成功","ok":true}` |
+| 配额用完 | `200` `{"msg":"本月自助解封次数已用完（每月最多3次）","ok":false}` |
+| IP 管控关闭 | `200` `{"msg":"IP 管控未启用","ok":false}` |
+| 查询 | `GET /unban/whoami`；开启时带 `banned/used/remaining/max_per_month` |
 | 计数 | 保存在内存；进程重启后清零 |
 
 ### 6.18 上游代理覆盖（P3 已实现）

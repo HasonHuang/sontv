@@ -43,6 +43,13 @@
 
 2026-10-24：
 
+- **V-06 自助解封按目标对齐**：
+  - `/unban/whoami` 返回 `banned/enabled/ip/max_per_month/remaining/used`；IP 管控关闭时只返回 `enabled/ip`。
+  - `POST /unban` 固定 `200` + `{"msg","ok"}`；只有成功解封消耗配额。
+  - 配额耗尽不再返回 `429`；未封禁、管控关闭都返回 `ok:false`。
+  - 移除目标未注册的 `/whoami`。
+  - `X-Forwarded-For` 改为取末项，与目标代理追加语义一致。
+  - 证据：`docs/findings/dynamic/11-security-and-metrics.md` §3.1。
 - **U-06 台标动效改为动画 WebP**：
   - 输出固定 10 帧：前 9 帧 80 ms，末帧 1500 ms，`total_ms=2220`。
   - 生成 `VP8X`/`ANIM`/`ANMF` 容器，帧载荷为无损 `VP8L`。
@@ -95,7 +102,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 223 项通过（154 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 227 项通过（158 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -103,7 +110,7 @@
 
 ### 1.5 当前工作区
 
-- 基线提交：`8e133bd`，已推送 `rust` 分支。
+- 基线提交：`beed427`，已推送 `rust` 分支。
 - `PROGRESS_bak.md` 保存 2026-10-23 之前的完整 1169 行记录。
 - `dist/` 与 `samples/` 不入库。
 - 目标测试容器、源站与本实现的临时实例应按需清理。
@@ -121,13 +128,13 @@
 | ID | 项 | 当前结论 | 所需证据 |
 | --- | --- | --- | --- |
 | V-05 | 每频道独立代理 | 实现顺序为频道 > 分组 > 直连 | 目标覆盖顺序、认证头、失败回退、`socks5` 行为 |
-| V-06 | `/unban` 配额与 `whoami` | 已实现每 IP 30 天 3 次；目标未实测 | 目标连续解封；记录状态码、`remaining`、窗口重置 |
 | V-07 | 切片 TS 结构 | 当前只做字节代理；无 PAT/PMT/SDT 证据 | 真实 TS 切片；核对 PID、SDT 与 `lumberjack` 水印 |
 | V-08 | 切片前缀 `<P>` 算法 | 自研 `sha256("<gid>:<cid>")[:16]`；目标算法未解 | 更多 `(gid,cid)` 样本或反编译；低影响 |
 | V-10 | 面板与录制/EPG 交互 | API 对拍 22/22 差异 0；12 个面板分区未逐屏对拍 | 目标操作录像；只比对行为，不复制前端代码、资源与文案 |
 
 已完成：
 
+- V-06 `/unban` 配额与 `/unban/whoami` ✅
 - V-03 公开 `/epg/api/*` 形状 ✅
 - U-05 `[cache.dash]` 发布延迟与看门狗参数 ✅
 - V-01 DASH 多 `<BaseURL>` 请求分布 ✅

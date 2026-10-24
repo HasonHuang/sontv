@@ -34,7 +34,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/epg/api/search", get(routes::epg::api_search))
         .route("/logo/api/list", get(routes::logo::public_list))
         .route("/logo/:file", get(routes::logo::file))
-        .route("/whoami", get(routes::public::whoami))
         .route("/unban/whoami", get(routes::public::whoami))
         .route("/api/share/pull", get(routes::share::pull))
         .route("/subs/status", get(routes::subs::status))

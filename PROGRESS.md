@@ -125,10 +125,52 @@
 
 ### 1.5 当前工作区
 
-- 基线提交：`086157d`，已推送 `rust` 分支。
+- 代码基线提交：`50ec323`，已推送 `rust` 分支。
 - `PROGRESS_bak.md` 保存 2026-10-23 之前的完整 1169 行记录。
 - `dist/` 与 `samples/` 不入库。
 - 目标测试容器、源站与本实现的临时实例应按需清理。
+
+### 1.6 续接快照（2026-10-24 本轮结束）
+
+本轮已完成并推送：
+
+- `96d5f7c feat(panel)`：面板改为目标的 13 个一级分区；系统设置合并配置/状态/备份；台标与回看独立；订阅源规则/预检；EPG 手工映射/额外频道。
+- `56066c9 feat(subs)`：订阅源正文落盘 `<cache>/sub_url/*.json`，状态落盘 `<cache>/subs/status.json`；重启后按源级 TTL 命中；`cache/flush` 清正文。
+- `50ec323 fix(dash)`：proxy MPD 错令牌 → `302 error_url`；已有 `minimumUpdatePeriod` → `PT1S`；已有 `publishTime` → 当前 UTC；响应头改为 `application/dash+xml; charset=utf-8` 与 `max-age=1, s-maxage=1`。
+- V-08 收口：目标 `<P>` 新增 5 个样本（`x1/c1`、`x1/c2`、`x2/c1`、`x_3/c-4`、`ts1/c1`）；约 2005 种输入模板与主流哈希族均不匹配；判定为低影响，停止黑盒穷举。
+- 质量门：`cargo fmt --check`；237 项测试（168 单元 + 69 集成）；`pnpm build`；`smoke-panel.sh`、`smoke-logo.sh` 通过。
+- 目标清理：已删除测试分组 `x1`、`x2`、`x_3`、`gprobe`；宿主 `:19994` 源站已停止；目标容器 `rea82v09` 保留。
+
+遇到的问题与阻塞：
+
+1. V-08 的 `<P>` 精确算法仍未解。目标为 stripped Rust；Hopper 不可用；环境无 `rizin`/`ghidra`；cargo-auditable 依赖表为空。功能影响低，保持自洽实现。
+2. V-10 只完成 API 与分区级对齐。未做逐屏视觉/交互对拍；缺目标操作录像；系统设置仍是原始配置编辑，不是字段级表单。
+3. 视频素材的 URL 转换/弃用资源列表、多 VPS 分享子页缺后端端点，面板未实现。
+4. U-06 只有 `breathe` 效果逐字节一致；其余效果与缩放仍为近似。
+5. `match-report` 目标 raw 抓包为 `text/plain` 表格，面板 JS 期望 JSON；冲突未解。
+6. 扩展名轮换未覆盖 `.ts` 与无扩展名；Remux 后缀选择与目标不同（目标观测 `.gif/.png`，本实现轮换 5 种）。
+7. `out_groups`/`dropped_groups` 顺序为目标哈希序，本实现为稳定排序；低影响。
+8. V-01 URL 池回退顺序未验；目标 `url_pool_size>1` 多 BaseURL 曾失败并产生零切片，无法继续对拍。
+9. MPD 本地令牌算法功能兼容，但不保证与目标逐字节相同。
+
+本轮新增结论：
+
+- 目标面板一级分区顺序：`dashboard, cache, groups, settings, security, stats, schedule, epg, logos, subs, livestream, assets, logs`。
+- 目标入口扩展名由分组 `format` 决定：`hls` → `.m3u8`，`mpd` → `.mpd`，与 `mode` 无关。探测 DASH proxy 时必须先把分组 `format` 设为 `mpd`。
+- 目标新建频道用 `POST /panel/api/groups/{gid}/channels`；`PUT .../channels/{cid}` 只更新已有频道。
+- 目标 proxy MPD 的 `publishTime` 每次请求更新为当前 UTC；上游缺该属性时不插入。
+- 目标 proxy MPD 错令牌跳 `server.error_url`，不是 `not_found_url`。
+
+下一步任务（按优先级）：
+
+1. V-10 收尾：补系统设置字段级表单、素材 URL 转换/弃用资源、分享子页；能拿到目标录像后做逐屏对拍。
+2. 扩展名轮换：补 `.ts` 与无扩展名的目标证据；决定 Remux 后缀是否改为目标观测集合。
+3. `match-report`：先确认面板调用方与目标 raw 形状，再决定保留 `text/plain` 还是兼容 JSON。
+4. V-01：若目标 URL 池可修复，补 `url_pool_size>1` 的首选与回退顺序；否则保持登记。
+5. U-06 可选：逐像素对齐其余 5 种台标效果与缩放采样。
+6. 每次改完运行完整质量门，提交并立即推送 `rust` 分支。
+
+当前工作区：除未跟踪的 `.opencode/` 外无未提交改动；`frontend/dist` 与 `samples/` 已重建但不入库。
 
 ## 2. 待处理任务
 
@@ -151,7 +193,7 @@
 - V-06 `/unban` 配额与 `/unban/whoami` ✅
 - V-03 公开 `/epg/api/*` 形状 ✅
 - U-05 `[cache.dash]` 发布延迟与看门狗参数 ✅
-- V-01 DASH 多 `<BaseURL>` 请求分布 ✅
+- V-01 DASH 多 `<BaseURL>` 请求分布 ✅（回退顺序未验）
 - V-02 `proxy`+MPD 绝对 `<BaseURL>` 本地反代 ✅
 - V-04 `/subs/{groups,preview}` 字段 ✅
 - V-09 `[playlist]` / `[share]` 目标语义 ✅
@@ -172,17 +214,17 @@
 | `random_id_enabled` | 仅回显；行为未观测 | F-018 |
 | `cache.backend=memory` | 仅回显；实际仍落盘 | F-015 |
 | 播放侧 `compat_mode` 与 `srt_ua_keywords` | 不实现；目标未测出行为 | D19 |
-| `socks5` 代理 | 不支持；未知类型直连并告警 | F-018 |
 | `match-report` 形状 | 保留目标 raw 抓包的 `text/plain` 表格；面板 JS 期望 JSON，冲突未解 | F-013 |
 | 扩展名轮换算法 | 未完全破解；只保证取自 `[cache.disguise].formats` | F-018、F-019 |
 | `out_groups`/`dropped_groups` 顺序 | 目标为哈希序；本实现稳定排序 | F-020 |
 
 ## 3. 建议推进顺序
 
-1. **V-08 / V-10**：继续补证据；低影响项保持登记。
-2. 可选：逐像素对齐 U-06 其余效果与缩放采样。
-3. 每项完成后更新本文件、对应 `docs/` 文档与测试。
-4. 提交使用 Conventional Commits，并立即 push `rust` 分支。
+1. **V-10 收尾**：字段级设置表单、素材/分享子页、逐屏视觉对拍。
+2. 扩展名轮换与 `match-report` 形状：先补证据，再决定是否改实现。
+3. V-01 URL 池回退：目标可复现时再补；否则保持登记。
+4. 可选：逐像素对齐 U-06 其余效果与缩放采样。
+5. 每项完成后运行完整质量门，更新本文件与对应 `docs/`，提交并立即 push `rust` 分支。
 
 ## 4. 关键设计结论
 

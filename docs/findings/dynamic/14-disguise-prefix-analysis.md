@@ -86,6 +86,33 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/test1/c1/ea8680a1b61c17e4_$S.png"  
 
 ```
 
+## 5.1 2026-10-24 补充样本与排除
+
+在 amd64 目标实例 `rea82v09` 上用新分组复验，前缀仍只随 `(gid, cid)` 变化：
+
+| `gid` | `cid` | `<P>` |
+| --- | --- | --- |
+| `x1` | `c1` | `60b602c374f3a606` |
+| `x1` | `c2` | `ca76db14a9439069` |
+| `x2` | `c1` | `932372bc20b32221` |
+| `x_3` | `c-4` | `dcab9780a2f16d50` |
+| `ts1` | `c1` | `6dc0662aa670c0f7` |
+
+复验条件：
+
+- 改分组名、频道名、频道 URL 后 `<P>` 不变。
+- 删 `/cache/m3u8/<gid>_<cid>__*` 与 `/cache/seg_url/<P>_*` 后重启，`<P>` 不变。
+- 请求 `Host` 变化不影响 `<P>`。
+
+新增排除：
+
+- 对 5 个样本同时尝试约 **2005** 种 `(gid,cid)` 模板（22 种分隔符、前后缀、路径、`.m3u8`/`.ts` 等），配合 MD5/SHA-1/SHA-2 族/BLAKE2/xxHash/mmh3 的任意 16 位窗口与大小端变换，均不匹配。
+- 尝试 `hash(gid) XOR hash(cid)`、相加/相减、Rust `DefaultHasher` 的元组/字符串拼接/XOR 组合，均不匹配。
+- 脱壳二进制为 stripped Rust；cargo-auditable 依赖表为空。内嵌 crate 列表未见独立哈希 crate（有 `ring`、`hex`、`uuid`），因此无法仅凭 crate 名确定算法。
+- 目标字符串中的 `filename prefix must be a valid UTF-8 string` 属于日志滚动文件名，与切片 `<P>` 无关；未找到可用的格式化串或常量盐。
+
+**结论不变**：低影响差异。客户端只从清单读取 `<P>`；重建实现使用自洽的 `sha256("<gid>:<cid>")[:16]` 即可。继续黑盒穷举的收益低于成本。
+
 ## 6. 未决 / 局限
 - `<P>` 的**具体算法未解**（负结果已覆盖主流哈希族与输入模板）。
 - 只验证 `proxy` 模式；`dash`/`rewrite` 的前缀是否同构未逐一对照（形状一致，见 S-DIS-12）。

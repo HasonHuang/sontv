@@ -343,16 +343,53 @@ type EpgStatus = {
   last_error: string | null;
 };
 
-/** 节目指南：采集状态与手动刷新。 */
+type EpgMapping = {
+  source_id: string;
+  source_channel_id: string;
+  source_name: string;
+  source_display_name: string;
+};
+
+type EpgExtra = {
+  source_id: string;
+  source_channel_id: string;
+  out_id: string;
+  out_name: string;
+};
+
+type EpgMapData = {
+  mappings: Record<string, EpgMapping>;
+  extra: EpgExtra[];
+};
+
+/** 节目指南：采集状态、手工映射与额外频道。 */
 export function EpgPanelPage() {
   const [status, setStatus] = useState<EpgStatus | null>(null);
+  const [data, setData] = useState<EpgMapData>({ mappings: {}, extra: [] });
+  const [mapping, setMapping] = useState({
+    gid: '',
+    cid: '',
+    source_id: '',
+    source_channel_id: '',
+  });
+  const [extra, setExtra] = useState({
+    source_id: '',
+    source_channel_id: '',
+    out_id: '',
+    out_name: '',
+  });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setStatus(await api<EpgStatus>('GET', '/epg/status'));
+      const [nextStatus, nextData] = await Promise.all([
+        api<EpgStatus>('GET', '/epg/status'),
+        api<EpgMapData>('GET', '/epg/mappings'),
+      ]);
+      setStatus(nextStatus);
+      setData(nextData);
       setError('');
     } catch (err) {
       setError(errorText(err));
@@ -381,47 +418,242 @@ export function EpgPanelPage() {
     }
   };
 
+  const saveMapping = async () => {
+    setMessage('');
+    setError('');
+    try {
+      await api('POST', '/epg/mapping', mapping);
+      setMapping({ gid: '', cid: '', source_id: '', source_channel_id: '' });
+      setMessage('映射已保存');
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const removeMapping = async (key: string) => {
+    const [gid, cid] = key.split('/');
+    try {
+      await api('POST', '/epg/mapping', { gid, cid, source_id: '', source_channel_id: '' });
+      setMessage('映射已清除');
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const addExtra = async () => {
+    setMessage('');
+    setError('');
+    try {
+      await api('POST', '/epg/extra', { action: 'add', ...extra });
+      setExtra({ source_id: '', source_channel_id: '', out_id: '', out_name: '' });
+      setMessage('额外频道已保存，正在重新生成');
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const removeExtra = async (item: EpgExtra) => {
+    try {
+      await api('POST', '/epg/extra', {
+        action: 'remove',
+        source_id: item.source_id,
+        source_channel_id: item.source_channel_id,
+      });
+      setMessage('额外频道已删除');
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const regenerate = async () => {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      const result = await api<{ channels: number; programmes: number }>(
+        'POST',
+        '/epg/regenerate',
+      );
+      setMessage(`重新生成：${result.channels} 个频道，${result.programmes} 条节目`);
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const last = status?.last_success
     ? new Date(status.last_success * 1000).toLocaleString()
     : '—';
 
   return (
-    <div className="card">
-      <div className="row between">
-        <div>
-          <h1>节目指南</h1>
-          <h2>{status?.enabled ? '已开启' : '已关闭'}</h2>
+    <>
+      <div className="card">
+        <div className="row between">
+          <div>
+            <h1>节目指南</h1>
+            <h2>{status?.enabled ? '已开启' : '已关闭'}</h2>
+          </div>
+          <div className="row">
+            <a className="nav-item" href="/epg" target="_blank" rel="noreferrer">
+              浏览页面
+            </a>
+            <button className="ghost" onClick={() => void load()}>
+              刷新状态
+            </button>
+            <button className="ghost" onClick={() => void regenerate()} disabled={busy}>
+              重新生成
+            </button>
+            <button onClick={() => void refresh()} disabled={busy || !status?.enabled}>
+              {busy ? '采集中…' : '立即采集'}
+            </button>
+          </div>
         </div>
-        <div className="row">
-          <a className="nav-item" href="/epg" target="_blank" rel="noreferrer">
-            浏览页面
-          </a>
-          <button className="ghost" onClick={() => void load()}>
-            刷新状态
-          </button>
-          <button onClick={() => void refresh()} disabled={busy || !status?.enabled}>
-            {busy ? '采集中…' : '立即采集'}
-          </button>
-        </div>
+        <dl>
+          <dt>源</dt>
+          <dd>{status?.sources ?? 0} 个</dd>
+          <dt>频道 / 节目</dt>
+          <dd>
+            {status?.channels ?? 0} / {status?.programmes ?? 0}
+          </dd>
+          <dt>保留</dt>
+          <dd>
+            已过 {status?.keep_days ?? 0} 天、未来 {status?.future_days ?? 0} 天
+          </dd>
+          <dt>最近成功</dt>
+          <dd>{last}</dd>
+          <dt>最近错误</dt>
+          <dd className="mono ellipsis">{status?.last_error ?? '—'}</dd>
+        </dl>
+        {message && <div className="msg ok">{message}</div>}
+        {error && <div className="msg err">{error}</div>}
       </div>
-      <dl>
-        <dt>源</dt>
-        <dd>{status?.sources ?? 0} 个</dd>
-        <dt>频道 / 节目</dt>
-        <dd>
-          {status?.channels ?? 0} / {status?.programmes ?? 0}
-        </dd>
-        <dt>保留</dt>
-        <dd>
-          已过 {status?.keep_days ?? 0} 天、未来 {status?.future_days ?? 0} 天
-        </dd>
-        <dt>最近成功</dt>
-        <dd>{last}</dd>
-        <dt>最近错误</dt>
-        <dd className="mono ellipsis">{status?.last_error ?? '—'}</dd>
-      </dl>
-      {message && <div className="msg ok">{message}</div>}
-      {error && <div className="msg err">{error}</div>}
-    </div>
+      <div className="card">
+        <h2>手工映射</h2>
+        <div className="row">
+          <input
+            placeholder="gid"
+            value={mapping.gid}
+            onChange={(event) => setMapping({ ...mapping, gid: event.target.value })}
+          />
+          <input
+            placeholder="cid"
+            value={mapping.cid}
+            onChange={(event) => setMapping({ ...mapping, cid: event.target.value })}
+          />
+          <input
+            placeholder="source_id"
+            value={mapping.source_id}
+            onChange={(event) => setMapping({ ...mapping, source_id: event.target.value })}
+          />
+          <input
+            placeholder="source_channel_id"
+            value={mapping.source_channel_id}
+            onChange={(event) =>
+              setMapping({ ...mapping, source_channel_id: event.target.value })
+            }
+          />
+          <button onClick={() => void saveMapping()}>保存映射</button>
+        </div>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>频道</th>
+              <th>源</th>
+              <th>源频道</th>
+              <th>源名称</th>
+              <th className="right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(data.mappings).map(([key, item]) => (
+              <tr key={key}>
+                <td className="mono">{key}</td>
+                <td className="mono">{item.source_id}</td>
+                <td className="mono">{item.source_channel_id}</td>
+                <td>{item.source_display_name || item.source_name || '—'}</td>
+                <td className="right">
+                  <button className="icon-btn" onClick={() => void removeMapping(key)}>
+                    清除
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {Object.keys(data.mappings).length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  暂无手工映射。
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h2>额外频道</h2>
+        <div className="row">
+          <input
+            placeholder="source_id"
+            value={extra.source_id}
+            onChange={(event) => setExtra({ ...extra, source_id: event.target.value })}
+          />
+          <input
+            placeholder="source_channel_id"
+            value={extra.source_channel_id}
+            onChange={(event) => setExtra({ ...extra, source_channel_id: event.target.value })}
+          />
+          <input
+            placeholder="out_id（可空）"
+            value={extra.out_id}
+            onChange={(event) => setExtra({ ...extra, out_id: event.target.value })}
+          />
+          <input
+            placeholder="out_name（可空）"
+            value={extra.out_name}
+            onChange={(event) => setExtra({ ...extra, out_name: event.target.value })}
+          />
+          <button onClick={() => void addExtra()}>添加额外频道</button>
+        </div>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>源</th>
+              <th>源频道</th>
+              <th>输出 ID</th>
+              <th>输出名称</th>
+              <th className="right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.extra.map((item) => (
+              <tr key={`${item.source_id}/${item.source_channel_id}`}>
+                <td className="mono">{item.source_id}</td>
+                <td className="mono">{item.source_channel_id}</td>
+                <td className="mono">{item.out_id || '—'}</td>
+                <td>{item.out_name || '—'}</td>
+                <td className="right">
+                  <button className="icon-btn" onClick={() => void removeExtra(item)}>
+                    删除
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {data.extra.length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  暂无额外频道。
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

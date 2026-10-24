@@ -45,6 +45,7 @@ docs/findings/
 | F-020 | 订阅聚合字段：`group_mode`/`group_map`/`merge_group`/`unlisted_groups`、状态字段、源级 TTL、URL 去重 | 动态 | 观测 | S-GAP-07, S-SUB-02/03/08 | 2026-10-23 | [`dynamic/17-subscription-merge.md`](dynamic/17-subscription-merge.md) |
 | F-021 | DASH `publish_delay_secs` 压后公式、`fast_start_secs` 无可观测差异、看门狗 tick/stall/stagger | 动态 | 观测 | S-DASH-02/03 | 2026-10-24 | [`dynamic/18-dash-window-knobs.md`](dynamic/18-dash-window-knobs.md) |
 | F-022 | DASH 多 `<BaseURL>` 首选分布；proxy MPD 绝对/相对/缺失 BaseURL 的本地令牌反代 | 动态 | 观测 | S-MODE-03/07, S-DASH-04 | 2026-10-24 | [`dynamic/19-dash-multi-baseurl-proxy.md`](dynamic/19-dash-multi-baseurl-proxy.md) |
+| F-023 | 面板 13 个一级分区、台标/回看/系统设置归属、订阅源规则与 EPG 映射交互对齐 | 动态+静态 | 观测/对拍 | S-EP-07, S-SUB-02/03, S-GAP-07 | 2026-10-24 | [`dynamic/21-panel-sections.md`](dynamic/21-panel-sections.md) |
 
 > 新发现按 `F-0NN` 追加一行；`关联规格 ID` 指向 [`../spec/08-target-spec.md`](../spec/08-target-spec.md) 的 `S-*` 条目。
 

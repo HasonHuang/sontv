@@ -6,42 +6,43 @@ import { GroupsPage } from './groups';
 import { BackupPage, EpgPanelPage, LogsPage, SecurityPage } from './ops';
 import { CachePage, StatsPage } from './cache';
 import { AssetsPage } from './assets';
+import { LogosPage } from './logo';
 import { PlaylistPage } from './playlist';
-import { SchedulePage } from './schedule';
+import { LivestreamPage, SchedulePage } from './schedule';
 import { SystemPage } from './system';
 import './style.css';
 
-/** 侧栏分区。已实现的分区可切换，其余显示为待实现。 */
+/** 侧栏分区；顺序按目标面板。 */
 type SectionId =
   | 'dashboard'
-  | 'groups'
   | 'cache'
-  | 'stats'
-  | 'epg'
-  | 'assets'
+  | 'groups'
+  | 'settings'
   | 'security'
+  | 'stats'
   | 'schedule'
-  | 'playlist'
-  | 'system'
-  | 'logs'
-  | 'backup';
+  | 'epg'
+  | 'logos'
+  | 'subs'
+  | 'livestream'
+  | 'assets'
+  | 'logs';
 
 const NAV: { id: SectionId; label: string }[] = [
   { id: 'dashboard', label: '概览' },
-  { id: 'groups', label: '分组管理' },
   { id: 'cache', label: '缓存状态' },
-  { id: 'stats', label: '频道热度' },
-  { id: 'epg', label: '节目指南' },
-  { id: 'assets', label: '视频素材' },
+  { id: 'groups', label: '分组管理' },
+  { id: 'settings', label: '系统设置' },
   { id: 'security', label: '安全管控' },
-  { id: 'schedule', label: '录制与回看' },
-  { id: 'playlist', label: '订阅聚合' },
-  { id: 'system', label: '系统状态' },
+  { id: 'stats', label: '频道热度' },
+  { id: 'schedule', label: '定时录制' },
+  { id: 'epg', label: '节目指南' },
+  { id: 'logos', label: '台标管理' },
+  { id: 'subs', label: '订阅聚合' },
+  { id: 'livestream', label: '回看管理' },
+  { id: 'assets', label: '视频素材' },
   { id: 'logs', label: '运行日志' },
-  { id: 'backup', label: '备份恢复' },
 ];
-
-const PENDING: string[] = [];
 
 type Status = Record<string, unknown>;
 
@@ -95,18 +96,59 @@ function Login({ onDone }: { onDone: () => void }) {
 
 function Overview() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await api<Status>('GET', '/status'));
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const entries = Object.entries(status ?? {}).filter(([, value]) => typeof value !== 'object');
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <div>
+          <h1>IPTV Proxy</h1>
+          <h2>概览</h2>
+        </div>
+        <div className="row">
+          <button className="ghost" onClick={() => void load()}>
+            刷新
+          </button>
+        </div>
+      </div>
+      <dl>
+        {entries.map(([key, value]) => (
+          <div key={key} style={{ display: 'contents' }}>
+            <dt>{key}</dt>
+            <dd>{String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+      {error && <div className="msg err">{error}</div>}
+    </div>
+  );
+}
+
+/** 系统设置：原始配置编辑、运行状态与备份恢复。 */
+function SettingsPage() {
   const [config, setConfig] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [nextStatus, nextConfig] = await Promise.all([
-        api<Status>('GET', '/status'),
-        api<unknown>('GET', '/config'),
-      ]);
-      setStatus(nextStatus);
-      setConfig(JSON.stringify(nextConfig, null, 2));
+      const next = await api<unknown>('GET', '/config');
+      setConfig(JSON.stringify(next, null, 2));
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -121,41 +163,22 @@ function Overview() {
     setMessage('');
     setError('');
     try {
-      const body = JSON.parse(config) as unknown;
-      await api('PUT', '/config', body);
+      await api('PUT', '/config', JSON.parse(config) as unknown);
       setMessage('配置已保存');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const entries = Object.entries(status ?? {}).filter(([, value]) => typeof value !== 'object');
-
   return (
     <>
       <div className="card">
         <div className="row between">
-          <div>
-            <h1>IPTV Proxy</h1>
-            <h2>概览</h2>
-          </div>
-          <div className="row">
-            <button className="ghost" onClick={() => void load()}>
-              刷新
-            </button>
-          </div>
+          <h1>系统设置</h1>
+          <button className="ghost" onClick={() => void load()}>
+            重新读取
+          </button>
         </div>
-        <dl>
-          {entries.map(([key, value]) => (
-            <div key={key} style={{ display: 'contents' }}>
-              <dt>{key}</dt>
-              <dd>{String(value)}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-
-      <div className="card">
         <h2>配置（config.toml 全量）</h2>
         <textarea value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} />
         <div style={{ marginTop: 12 }}>
@@ -164,6 +187,8 @@ function Overview() {
         {message && <div className="msg ok">{message}</div>}
         {error && <div className="msg err">{error}</div>}
       </div>
+      <SystemPage />
+      <BackupPage />
     </>
   );
 }
@@ -198,12 +223,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
               {item.label}
             </button>
           ))}
-          {PENDING.map((label) => (
-            <button key={label} className="nav-item" disabled>
-              {label}
-              <span className="tag">待实现</span>
-            </button>
-          ))}
         </nav>
         <div className="sidebar-foot">
           <button className="ghost" onClick={() => void logout()}>
@@ -212,18 +231,19 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </div>
       </aside>
       <main className="content">
-        {section === 'groups' && <GroupsPage />}
-        {section === 'cache' && <CachePage />}
-        {section === 'stats' && <StatsPage />}
-        {section === 'epg' && <EpgPanelPage />}
-        {section === 'assets' && <AssetsPage />}
-        {section === 'security' && <SecurityPage />}
-        {section === 'schedule' && <SchedulePage />}
-        {section === 'playlist' && <PlaylistPage />}
-        {section === 'system' && <SystemPage />}
-        {section === 'logs' && <LogsPage />}
-        {section === 'backup' && <BackupPage />}
         {section === 'dashboard' && <Overview />}
+        {section === 'cache' && <CachePage />}
+        {section === 'groups' && <GroupsPage />}
+        {section === 'settings' && <SettingsPage />}
+        {section === 'security' && <SecurityPage />}
+        {section === 'stats' && <StatsPage />}
+        {section === 'schedule' && <SchedulePage view="schedule" />}
+        {section === 'epg' && <EpgPanelPage />}
+        {section === 'logos' && <LogosPage />}
+        {section === 'subs' && <PlaylistPage />}
+        {section === 'livestream' && <LivestreamPage />}
+        {section === 'assets' && <AssetsPage />}
+        {section === 'logs' && <LogsPage />}
       </main>
     </div>
   );

@@ -58,7 +58,11 @@ async function download(name: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export function SchedulePage() {
+export function SchedulePage({
+  view = 'all',
+}: {
+  view?: 'all' | 'schedule' | 'livestream';
+} = {}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [timeshift, setTimeshift] = useState<TimeshiftStatus | null>(null);
@@ -146,175 +150,186 @@ export function SchedulePage() {
 
   return (
     <>
-      <div className="card">
-        <h1>新建录制任务</h1>
-        <div className="row">
-          <select
-            value={form.group_id}
-            onChange={(event) =>
-              setForm({ ...form, group_id: event.target.value, channel_id: '' })
-            }
-          >
-            <option value="">选择分组</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}（{group.id}）
-              </option>
-            ))}
-          </select>
-          <select
-            value={form.channel_id}
-            onChange={(event) => setForm({ ...form, channel_id: event.target.value })}
-          >
-            <option value="">选择频道</option>
-            {channels.map((channel) => (
-              <option key={channel.id} value={channel.id}>
-                {channel.name}
-              </option>
-            ))}
-          </select>
-          <input
-            placeholder="任务名（可空）"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-          />
-        </div>
-        <div className="row">
-          <input
-            type="datetime-local"
-            value={form.start_time}
-            onChange={(event) => setForm({ ...form, start_time: event.target.value })}
-          />
-          <input
-            type="datetime-local"
-            value={form.end_time}
-            onChange={(event) => setForm({ ...form, end_time: event.target.value })}
-          />
-          <select
-            value={form.format}
-            onChange={(event) => setForm({ ...form, format: event.target.value })}
-          >
-            <option value="mkv">MKV（需 ffmpeg）</option>
-            <option value="ts">TS</option>
-          </select>
-          <button onClick={() => void create()}>创建任务</button>
-        </div>
-      </div>
+      {view !== 'livestream' && (
+        <>
+          <div className="card">
+            <h1>新建录制任务</h1>
+            <div className="row">
+              <select
+                value={form.group_id}
+                onChange={(event) =>
+                  setForm({ ...form, group_id: event.target.value, channel_id: '' })
+                }
+              >
+                <option value="">选择分组</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}（{group.id}）
+                  </option>
+                ))}
+              </select>
+              <select
+                value={form.channel_id}
+                onChange={(event) => setForm({ ...form, channel_id: event.target.value })}
+              >
+                <option value="">选择频道</option>
+                {channels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                placeholder="任务名（可空）"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+            </div>
+            <div className="row">
+              <input
+                type="datetime-local"
+                value={form.start_time}
+                onChange={(event) => setForm({ ...form, start_time: event.target.value })}
+              />
+              <input
+                type="datetime-local"
+                value={form.end_time}
+                onChange={(event) => setForm({ ...form, end_time: event.target.value })}
+              />
+              <select
+                value={form.format}
+                onChange={(event) => setForm({ ...form, format: event.target.value })}
+              >
+                <option value="mkv">MKV（需 ffmpeg）</option>
+                <option value="ts">TS</option>
+              </select>
+              <button onClick={() => void create()}>创建任务</button>
+            </div>
+          </div>
 
-      <div className="card">
-        <h1>录制任务</h1>
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>频道</th>
-              <th>时间</th>
-              <th>状态</th>
-              <th>产物</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((task, index) => (
-              <tr key={task.id}>
-                <td>{task.name}</td>
-                <td>
-                  {task.group_id}/{task.channel_id}
-                </td>
-                <td className="muted">
-                  {task.start_time} → {task.end_time}
-                </td>
-                <td>
-                  <Badge tone={STATUS_TONE[task.status] ?? 'muted'}>{task.status}</Badge>
-                  {(task.error || task.note) && (
-                    <div className="muted">{task.error || task.note}</div>
-                  )}
-                </td>
-                <td>
-                  {task.output_file ? (
-                    <button
-                      className="ghost"
-                      onClick={() => void download(task.output_file).catch(() => err('下载失败'))}
-                    >
-                      {sizeText(task.file_size)}
-                    </button>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td>
-                  {task.status === 'recording' && (
-                    <button className="ghost" onClick={() => void stop(index)}>
-                      停止
-                    </button>
-                  )}
-                  <button className="icon-btn" onClick={() => void remove(index)}>
-                    删除
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {tasks.length === 0 && (
-              <tr>
-                <td colSpan={6} className="muted">
-                  暂无任务。
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h1>直播回看</h1>
-        <p className="muted">
-          点亮后按频道 `timeshift_hours` 缓冲；回看清单用 `?start&end` 或 `?playseek` 请求入口。
-          {timeshift &&
-            ` 已点亮 ${timeshift.channels.length} 个频道，已缓冲切片 ${timeshift.channels.reduce(
-              (sum, channel) => sum + channel.segments,
-              0,
-            )} 条。`}
-        </p>
-        <table>
-          <thead>
-            <tr>
-              <th>分组</th>
-              <th>频道</th>
-              <th>缓冲</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.flatMap((group) =>
-              (group.channels ?? []).map((channel) => {
-                const state = timeshift?.channels.find(
-                  (item) => item.group_id === group.id && item.channel_id === channel.id,
-                );
-                return (
-                  <tr key={`${group.id}/${channel.id}`}>
-                    <td>{group.name}</td>
-                    <td>{channel.name}</td>
+          <div className="card">
+            <h1>录制任务</h1>
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>频道</th>
+                  <th>时间</th>
+                  <th>状态</th>
+                  <th>产物</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task, index) => (
+                  <tr key={task.id}>
+                    <td>{task.name}</td>
                     <td>
-                      {channel.livestream ? (
-                        <Badge tone="ok">{state ? `${state.segments} 片` : '缓冲中'}</Badge>
-                      ) : (
-                        <Badge tone="muted">未点亮</Badge>
+                      {task.group_id}/{task.channel_id}
+                    </td>
+                    <td className="muted">
+                      {task.start_time} → {task.end_time}
+                    </td>
+                    <td>
+                      <Badge tone={STATUS_TONE[task.status] ?? 'muted'}>{task.status}</Badge>
+                      {(task.error || task.note) && (
+                        <div className="muted">{task.error || task.note}</div>
                       )}
                     </td>
                     <td>
-                      <button className="ghost" onClick={() => void toggle(group, channel)}>
-                        {channel.livestream ? '停止' : '点亮'}
+                      {task.output_file ? (
+                        <button
+                          className="ghost"
+                          onClick={() => void download(task.output_file).catch(() => err('下载失败'))}
+                        >
+                          {sizeText(task.file_size)}
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      {task.status === 'recording' && (
+                        <button className="ghost" onClick={() => void stop(index)}>
+                          停止
+                        </button>
+                      )}
+                      <button className="icon-btn" onClick={() => void remove(index)}>
+                        删除
                       </button>
                     </td>
                   </tr>
-                );
-              }),
-            )}
-          </tbody>
-        </table>
-      </div>
+                ))}
+                {tasks.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      暂无任务。
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {view !== 'schedule' && (
+        <div className="card">
+          <h1>直播回看</h1>
+          <p className="muted">
+            点亮后按频道 `timeshift_hours` 缓冲；回看清单用 `?start&end` 或 `?playseek` 请求入口。
+            {timeshift &&
+              ` 已点亮 ${timeshift.channels.length} 个频道，已缓冲切片 ${timeshift.channels.reduce(
+                (sum, channel) => sum + channel.segments,
+                0,
+              )} 条。`}
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>分组</th>
+                <th>频道</th>
+                <th>缓冲</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.flatMap((group) =>
+                (group.channels ?? []).map((channel) => {
+                  const state = timeshift?.channels.find(
+                    (item) => item.group_id === group.id && item.channel_id === channel.id,
+                  );
+                  return (
+                    <tr key={`${group.id}/${channel.id}`}>
+                      <td>{group.name}</td>
+                      <td>{channel.name}</td>
+                      <td>
+                        {channel.livestream ? (
+                          <Badge tone="ok">{state ? `${state.segments} 片` : '缓冲中'}</Badge>
+                        ) : (
+                          <Badge tone="muted">未点亮</Badge>
+                        )}
+                      </td>
+                      <td>
+                        <button className="ghost" onClick={() => void toggle(group, channel)}>
+                          {channel.livestream ? '停止' : '点亮'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }),
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {node}
     </>
   );
+}
+
+/** 独立回看管理分区。 */
+export function LivestreamPage() {
+  return <SchedulePage view="livestream" />;
 }

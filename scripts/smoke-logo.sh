@@ -62,7 +62,7 @@ check "越界名 404" "404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/logo/.
 check "越界扩展 404" "404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/logo/evil.exe")"
 
 check "台标页 200" "200" "$(curl -s -o "$WORK/page.html" -w '%{http_code}' "$B/logo")"
-check "页面含资源" "1" "$(grep -c '/assets/logo-' "$WORK/page.html")"
+check "页面含资源" "yes" "$(grep -q '/assets/logo-' "$WORK/page.html" && echo yes || echo no)"
 
 DEL=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/panel/api/logo/delete" \
   -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"file":"cctv1.png"}')

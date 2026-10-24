@@ -1,12 +1,10 @@
 /**
- * 台标库页（`/logo`）。
+ * 台标库页；可独立挂载（`/logo`），也可嵌入管理面板。
  *
  * 公开浏览；登录后可上传、重命名、删除，并把台标应用到频道。
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-
 import { api, getToken } from './api';
 import './style.css';
 
@@ -64,7 +62,7 @@ function channelKey(channel: Missing): string {
   return `${channel.gid}/${channel.cid}`;
 }
 
-function App() {
+export function LogosPage() {
   const [logos, setLogos] = useState<Logo[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, string>>({});
@@ -165,7 +163,7 @@ function App() {
   }
 
   return (
-    <div className="page">
+    <>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>台标库</h1>
@@ -277,8 +275,6 @@ function App() {
           </table>
         </div>
       )}
-    </div>
+    </>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<App />);

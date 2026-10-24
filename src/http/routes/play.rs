@@ -43,13 +43,7 @@ async fn aggregate_sources(state: &Arc<AppState>, config: &crate::config::Config
                 Ok(text) => text,
                 Err(error) => {
                     tracing::warn!(url = %source.url, error = %error, "抓取聚合源失败");
-                    let mut statuses = state
-                        .source_status
-                        .lock()
-                        .unwrap_or_else(|error| error.into_inner());
-                    let status = statuses.entry(source.id.clone()).or_default();
-                    status.last_try = now_secs();
-                    status.error = Some(error);
+                    state.sources.mark_error(&source.id, error);
                     continue;
                 }
             },
@@ -57,11 +51,7 @@ async fn aggregate_sources(state: &Arc<AppState>, config: &crate::config::Config
         let (piece, channels) =
             playlist::aggregate_seen(source, &config.playlist.global_exclude, &body, &mut seen);
         extra.push_str(&piece);
-        let mut statuses = state
-            .source_status
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        statuses.entry(source.id.clone()).or_default().channels = channels;
+        state.sources.set_channels(&source.id, channels);
     }
     extra
 }
@@ -71,7 +61,6 @@ async fn fetch_source(
     state: &Arc<AppState>,
     source: &crate::config::model::PlaylistSource,
 ) -> Result<String, String> {
-    let now = now_secs();
     let response = state
         .http
         .get(&source.url)
@@ -88,22 +77,8 @@ async fn fetch_source(
     state
         .sources
         .put(&format!("sub:{}:{}", source.id, source.url), text.clone());
-    let mut statuses = state
-        .source_status
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let status = statuses.entry(source.id.clone()).or_default();
-    status.last_try = now;
-    status.last_ok = now;
-    status.error = None;
+    state.sources.mark_success(&source.id);
     Ok(text)
-}
-
-fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_secs())
-        .unwrap_or(0)
 }
 
 /// `GET /{gid}/playlist.m3u`。

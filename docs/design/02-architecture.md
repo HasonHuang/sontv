@@ -99,6 +99,7 @@
 | `subtitle` | WebVTT 透传与 `.vtt` 伪装 | P1 | S-SUB-09、S-DIS-01 |
 | `logo` | 台标库 9 端点、`.orig/` 备份 | P2 | S-LOGO-01…04 |
 | `subs` | 订阅聚合、include/exclude、group_map | P2 | S-GAP-07 |
+| `source_cache` | 订阅源正文与状态落盘、跨重启 TTL | P2 | S-GAP-07、F-020 |
 | `share` | master/follower 同步 | P2 | S-EP-09、S-AUTH-06 |
 | `edge` | `X-IPP-Edge-Secret` 校验、CF 网段 | P2 | S-EDGE-01…03 |
 | `backup` | tar.gz 备份与恢复 | P2 | S-BAK-01/02 |

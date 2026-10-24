@@ -66,6 +66,7 @@ pub async fn cache_flush(
     // 同步丢弃内存索引与清单缓存，避免清空后仍命中旧数据。
     state.segments.clear();
     state.playlists.clear();
+    state.sources.clear();
     tracing::info!(removed, "缓存已清空");
     Ok(Json(json!({ "ok": true, "removed": removed })))
 }

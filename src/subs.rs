@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::m3u::Entry;
 
 /// 预检请求里的源参数。
@@ -59,7 +61,7 @@ impl GroupRules<'_> {
 }
 
 /// 聚合源最近一次抓取状态。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceStatus {
     pub channels: usize,
     pub error: Option<String>,

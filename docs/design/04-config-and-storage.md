@@ -64,7 +64,8 @@
 ├─ m3u8/          入口与媒体清单缓存
 ├─ seg_url/       上游切片地址缓存
 ├─ seg_bytes/     切片正文缓存
-├─ sub_url/       订阅源缓存
+├─ sub_url/       订阅源正文缓存
+├─ subs/status.json 订阅源最近抓取状态
 ├─ dash/          DASH 会话（flush 保留）
 ├─ livestream/    本地回看
 ├─ recordings/    录制产物 + schedule.json
@@ -91,7 +92,8 @@
 | DASH URL 池 | 多个 `<BaseURL>` 时首选地址固定给视频；音频/字幕在 `url_pool_size>1` 时轮询其余地址。目标默认 `url_pool_size=1` 实测音视频都只取首选（F-022） | `src/dash_hls.rs` |
 | proxy MPD 反代 | `<BaseURL>`（绝对/相对/缺失）统一改为 `/{gid}/{cid}/mpd/{token}/{Base64URL(base)}/`；切片请求解码还原上游地址并校验令牌 | `src/http/routes/stream.rs` |
 | 清单复用（M2 已实现） | 进程内 TTL 5 秒（`TtlCache`） | `src/proxy/mod.rs` |
-| flush | 清 `m3u8`/`seg_url`/`seg_bytes`/`sub_url`，**保留 `dash/`** | S-CACHE-06 |
+| 订阅源缓存（U-07 已实现） | `sub_url/<sha256("sub:{id}:{url}")>.json`：`{key,body,stored_at}`；`subs/status.json` 保存 `channels/last_ok/last_try/error`；重启后按源级 TTL 命中 | `src/source_cache.rs`、F-020 |
+| flush | 清 `m3u8`/`seg_url`/`seg_bytes`/`sub_url`，**保留 `dash/`**；同时清内存正文缓存 | S-CACHE-06 |
 | 容量上限 | P0 **不实现**（目标上限未生效） | F-015 |
 | 索引 | 启动扫描目录重建内存索引 | 设计决策 |
 

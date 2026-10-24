@@ -87,10 +87,11 @@
 - `src/playlist.rs`：分组选择/改名、过滤、URL 去重。
 - `src/http/routes/subs.rs`：`/subs/*` 与 `/panel/api/subs/*` 别名、状态形状。
 - `src/http/routes/play.rs`：源缓存、去重计数、状态更新。
+- `src/source_cache.rs`：源正文与状态落盘；`<cache>/sub_url/*.json`、`<cache>/subs/status.json`。
 - `src/config/model.rs`：源字段建模；未知键继续原样回写。
 
 ## 7 剩余差异
 
-- 目标源缓存与状态可跨进程重启保留；本实现只保存在内存。
+- 目标源缓存与状态可跨进程重启保留；本实现已落盘到 `<cache>/sub_url/`（状态在 `<cache>/subs/status.json`），重启后用源级 TTL 继续命中。
 - `merge_ttl_secs` 未观察到影响源抓取节奏；本实现不把它用于源缓存。
 - `out_groups` / `dropped_groups` 顺序按本实现的稳定排序，可能与目标哈希顺序不同。

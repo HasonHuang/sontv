@@ -117,7 +117,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 232 项通过（163 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 235 项通过（166 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -137,6 +137,7 @@
 | ID | 优先级 | 任务 | 当前状态 | 下一步 |
 | --- | --- | --- | --- | --- |
 | U-06 | P1 | 台标动效与解码 | ✅ 完成：动画 WebP、10 帧、脏矩形、PNG/WebP 纯 Rust 解码；其他格式回退 `ffmpeg` | 可选：逐像素对齐其余 5 种效果与缩放采样 |
+| U-07 | P2 | 订阅源缓存跨重启 | ✅ 完成：正文落盘 `<cache>/sub_url/`，状态 `<cache>/subs/status.json`；重启后按源级 TTL 命中 | 可补目标缓存文件名格式对拍（不影响行为） |
 
 ### 2.2 待补目标证据
 
@@ -155,6 +156,7 @@
 - V-04 `/subs/{groups,preview}` 字段 ✅
 - V-09 `[playlist]` / `[share]` 目标语义 ✅
 - V-11 真实 HLS/M3U 验证 ✅
+- U-07 订阅源缓存跨重启 ✅
 
 ### 2.3 已登记差异与不实现项
 
@@ -172,7 +174,6 @@
 | `socks5` 代理 | 不支持；未知类型直连并告警 | F-018 |
 | `match-report` 形状 | 保留目标 raw 抓包的 `text/plain` 表格；面板 JS 期望 JSON，冲突未解 | F-013 |
 | 扩展名轮换算法 | 未完全破解；只保证取自 `[cache.disguise].formats` | F-018、F-019 |
-| 源缓存跨重启 | 目标可保留；本实现仅内存保存 | F-020 |
 | `out_groups`/`dropped_groups` 顺序 | 目标为哈希序；本实现稳定排序 | F-020 |
 
 ## 3. 建议推进顺序
@@ -198,6 +199,7 @@
 - CENC/ClearKey 不解密，按原字节代理。
 - 台标扩展名白名单：`png/jpg/jpeg/webp/bmp/avif`。
 - 订阅源 `group_map` 是选择集；`group_mode` 未知值按 `keep`。
+- 订阅源正文落盘到 `<cache>/sub_url/`，状态在 `<cache>/subs/status.json`；重启后仍按源级 TTL 命中。
 - `map` 模式空映射值保留原名；`merge` 模式仅在 `merge_group` 非空时统一分组。
 - 聚合按 URL 去重，范围覆盖同源与跨源。
 - 源 `ttl_secs=0` 按 3600 秒；源级 TTL 优先于 `merge_ttl_secs`。

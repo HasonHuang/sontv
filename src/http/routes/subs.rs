@@ -18,10 +18,7 @@ use crate::{
 /// `GET /subs/status`——列出聚合源最近一次抓取状态。
 pub async fn status(State(state): State<Arc<AppState>>) -> Json<Value> {
     let config = state.snapshot();
-    let statuses = state
-        .source_status
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let statuses = state.sources.statuses();
     let sources: Vec<Value> = config
         .playlist
         .sources

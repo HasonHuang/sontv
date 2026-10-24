@@ -62,9 +62,9 @@ impl Extra {
     /// 输出标识；空时回退源频道 ID。
     pub fn output_id(&self) -> String {
         if self.out_id.trim().is_empty() {
-            self.source_channel_id.clone()
+            self.source_channel_id.to_ascii_lowercase()
         } else {
-            self.out_id.trim().to_string()
+            self.out_id.trim().to_ascii_lowercase()
         }
     }
 }
@@ -88,6 +88,155 @@ pub struct MatchRow {
     pub via: String,
     pub source_id: String,
     pub programmes: usize,
+}
+
+/// 公开频道表的一行。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewerChannel {
+    pub icon: Option<String>,
+    pub id: String,
+    pub kind: String,
+    pub last_stop: i64,
+    pub name: String,
+    pub programme_count: usize,
+    pub source_id: String,
+    pub source_name: String,
+}
+
+/// 公开频道表快照。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewerData {
+    pub generated_at: u64,
+    pub channels: Vec<ViewerChannel>,
+}
+
+/// 生成过程中的频道来源信息。
+#[derive(Debug, Clone, Default)]
+struct ViewerMeta {
+    name: String,
+    source_id: String,
+    source_name: String,
+}
+
+/// 公开频道表快照文件。
+pub fn viewer_file(cache_dir: &Path) -> PathBuf {
+    output_dir(cache_dir).join("viewer.json")
+}
+
+/// 读取公开频道表；缺失时从生成的 XML 反推最小形状。
+pub fn load_viewer(config: &Config) -> Option<ViewerData> {
+    let path = viewer_file(Path::new(&config.cache.disk_path));
+    if let Ok(bytes) = fs::read(&path) {
+        if let Ok(viewer) = serde_json::from_slice::<ViewerData>(&bytes) {
+            return Some(viewer);
+        }
+    }
+    let document = load_generated(config).ok()?;
+    let generated_at = fs::metadata(output_file(config))
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    Some(viewer_from_document(&document, generated_at))
+}
+
+/// 从生成的 XMLTV 反推公开频道表。
+fn viewer_from_document(document: &DocumentData, generated_at: u64) -> ViewerData {
+    let mut channels = Vec::new();
+    for channel in &document.channels {
+        let mut count = 0usize;
+        let mut last_stop = 0i64;
+        for programme in document
+            .programmes
+            .iter()
+            .filter(|programme| programme.channel == channel.id)
+        {
+            count += 1;
+            last_stop = last_stop.max(parse_time(&programme.stop).unwrap_or(0));
+        }
+        channels.push(ViewerChannel {
+            icon: channel_icon(channel),
+            id: channel.id.to_ascii_lowercase(),
+            kind: "local".to_string(),
+            last_stop,
+            name: channel
+                .names
+                .first()
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| channel.id.clone()),
+            programme_count: count,
+            source_id: String::new(),
+            source_name: String::new(),
+        });
+    }
+    ViewerData {
+        generated_at,
+        channels,
+    }
+}
+
+/// 频道图标地址。
+pub fn channel_icon(channel: &Channel) -> Option<String> {
+    for raw in &channel.raw_children {
+        let wrapper = format!("<x>{raw}</x>");
+        let Ok(document) = Document::parse(&wrapper) else {
+            continue;
+        };
+        let Some(node) = document
+            .root_element()
+            .children()
+            .find(|node| node.is_element() && node.tag_name().name() == "icon")
+        else {
+            continue;
+        };
+        if let Some(src) = node
+            .attribute("src")
+            .map(str::trim)
+            .filter(|src| !src.is_empty())
+        {
+            return Some(src.to_string());
+        }
+    }
+    None
+}
+
+/// 构建公开频道表快照。
+fn viewer_snapshot(
+    channels: &[Channel],
+    programmes: &[Programme],
+    meta: &HashMap<String, ViewerMeta>,
+    generated_at: u64,
+) -> ViewerData {
+    let mut out = Vec::new();
+    for channel in channels {
+        let Some(source) = meta.get(&channel.id) else {
+            continue;
+        };
+        let mut count = 0usize;
+        let mut last_stop = 0i64;
+        for programme in programmes
+            .iter()
+            .filter(|programme| programme.channel == channel.id)
+        {
+            count += 1;
+            last_stop = last_stop.max(parse_time(&programme.stop).unwrap_or(0));
+        }
+        out.push(ViewerChannel {
+            icon: channel_icon(channel),
+            id: channel.id.to_ascii_lowercase(),
+            kind: "local".to_string(),
+            last_stop,
+            name: source.name.clone(),
+            programme_count: count,
+            source_id: source.source_id.clone(),
+            source_name: source.source_name.clone(),
+        });
+    }
+    ViewerData {
+        generated_at,
+        channels: out,
+    }
 }
 
 impl EpgState {
@@ -419,6 +568,7 @@ async fn collect(state: &Arc<AppState>, config: &Config, mode: SourceMode) -> Re
     let mut errors: Vec<String> = Vec::new();
     let mut mapping_displays: HashMap<(String, String), String> = HashMap::new();
     let mut documents: HashMap<String, DocumentData> = HashMap::new();
+    let mut viewer_meta: HashMap<String, ViewerMeta> = HashMap::new();
 
     for source in config.epg.sources.iter().filter(|source| source.enabled) {
         let body = match source_body(state, config, source, mode).await {
@@ -475,6 +625,14 @@ async fn collect(state: &Arc<AppState>, config: &Config, mode: SourceMode) -> Re
             let target = &targets[candidate.target];
             if !seen.contains(&target.out_id) {
                 seen.insert(target.out_id.clone());
+                viewer_meta.insert(
+                    target.out_id.clone(),
+                    ViewerMeta {
+                        name: target.name.clone(),
+                        source_id: source.id.clone(),
+                        source_name: source.name.clone(),
+                    },
+                );
                 channels.push(Channel {
                     id: target.out_id.clone(),
                     names: vec![(None, target.name.clone())],
@@ -574,6 +732,14 @@ async fn collect(state: &Arc<AppState>, config: &Config, mode: SourceMode) -> Re
     fs::write(&file, xml.as_bytes()).with_context(|| format!("写 {}", file.display()))?;
     let gz = directory.join("epg.xml.gz");
     write_gzip(&gz, xml.as_bytes()).with_context(|| format!("写 {}", gz.display()))?;
+    let viewer = viewer_snapshot(&channels, &programmes, &viewer_meta, now_secs());
+    let viewer_file = viewer_file(Path::new(&config.cache.disk_path));
+    if let Err(error) = fs::write(
+        &viewer_file,
+        serde_json::to_vec(&viewer).context("序列化公开频道表")?,
+    ) {
+        tracing::warn!(path = %viewer_file.display(), %error, "写入公开频道表失败");
+    }
     *state
         .epg
         .match_rows
@@ -635,7 +801,10 @@ fn channel_targets(config: &Config) -> Vec<Target> {
                         .filter(|value| !value.is_empty())
                 })
                 .map(str::to_string);
-            let out_id = tvg_id.clone().unwrap_or_else(|| channel.id.clone());
+            let out_id = tvg_id
+                .clone()
+                .unwrap_or_else(|| channel.id.clone())
+                .to_ascii_lowercase();
             targets.push(Target {
                 gid: group.id.clone(),
                 cid: channel.id.clone(),
@@ -2039,16 +2208,20 @@ mod tests {
         first.name = "CCTV-1 综合".into();
         first
             .extra
-            .insert("tvg_id".into(), toml::Value::String("cctv1".into()));
+            .insert("tvg_id".into(), toml::Value::String("CCTV1".into()));
         let mut second = crate::config::model::Channel::default();
         second.id = "e2".into();
         second.name = " cctv-3　综艺 ".into();
-        group.channels = vec![first, second];
+        let mut third = crate::config::model::Channel::default();
+        third.id = "E3".into();
+        third.name = "E3".into();
+        group.channels = vec![first, second, third];
         config.groups.push(group);
 
         let targets = channel_targets(&config);
         assert_eq!(targets[0].out_id, "cctv1");
         assert_eq!(targets[1].out_id, "e2");
+        assert_eq!(targets[2].out_id, "e3");
         assert_eq!(targets[1].normalized, "cctv-3综艺");
         assert_eq!(normalize_name("  A　B  "), "ab");
     }

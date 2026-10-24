@@ -331,4 +331,5 @@ pub fn router(state: Arc<AppState>) -> Router {
             guard::ip_guard,
         ))
         .with_state(state)
+        .layer(tower_http::cors::CorsLayer::permissive())
 }

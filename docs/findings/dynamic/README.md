@@ -33,6 +33,7 @@
 | D18 | DASH/ClearKey/时移/回看/EPG 匹配 | 自建 MPD/CENC/XMLTV | S-MODE-06/11, S-CAP-*, S-EPG-*, S-DASH-01 | ✅ [`10`](10-dash-catchup-epg-match.md)（多音轨时移、keep_yesterday 未定） |
 | D19 | DASH 发布延迟与看门狗参数 | 冻结源 + 多延迟矩阵 | S-DASH-02/03 | ✅ [`18`](18-dash-window-knobs.md)（`fast_start_secs` 无可观测差异） |
 | D20 | DASH 多 BaseURL 与 proxy MPD | 多前缀源 + proxy 出口 | S-MODE-03/07, S-DASH-04 | ✅ [`19`](19-dash-multi-baseurl-proxy.md)（URL 池 `>1` 未验） |
+| D21 | 公开 EPG API 形状 | 本地 XMLTV + 面板刷新 + 批量节目 | S-EP-16/17 | ✅ [`20`](20-public-epg-api.md)（分享场景未验） |
 
 ## 运行期纪律
 

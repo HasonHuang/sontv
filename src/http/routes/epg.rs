@@ -7,7 +7,7 @@ use std::{collections::HashMap, path::Path as FsPath, sync::Arc};
 
 use axum::{
     extract::{Path, Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -21,6 +21,15 @@ use crate::{
 
 fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "not found").into_response()
+}
+
+/// EPG 关闭时公开接口的统一错误。
+fn epg_closed() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "error": "EPG 功能已关闭" })),
+    )
+        .into_response()
 }
 
 async fn document(state: &Arc<AppState>, gzip: bool) -> Response {
@@ -426,16 +435,57 @@ pub async fn viewer_channels(
     PanelAuth(_): PanelAuth,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    api_channels(State(state)).await
-}
-
-/// 读取并解析生成的节目单；关闭或缺失时返回 `None`。
-fn load(state: &Arc<AppState>) -> Option<epg::DocumentData> {
     let config = state.snapshot();
     if !config.epg.enabled {
-        return None;
+        return epg_closed();
     }
-    epg::load_generated(&config).ok()
+    let viewer = epg::load_viewer(&config).unwrap_or_default();
+    let channels: Vec<Value> = viewer.channels.iter().map(viewer_channel_json).collect();
+    Json(json!({ "channels": channels })).into_response()
+}
+
+/// 公开接口的前置条件：EPG 开启且公开浏览开启。
+fn public_ready(config: &crate::config::Config) -> Option<Response> {
+    if !config.epg.enabled {
+        return Some(
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "EPG 功能已关闭" })),
+            )
+                .into_response(),
+        );
+    }
+    if !config.epg.public_viewer_enabled {
+        return Some(
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "公开节目单查看器已关闭" })),
+            )
+                .into_response(),
+        );
+    }
+    None
+}
+
+fn cached_json(value: Value, cache: &'static str) -> Response {
+    let mut response = Json(value).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
+    response
+}
+
+fn viewer_channel_json(channel: &epg::ViewerChannel) -> Value {
+    json!({
+        "icon": channel.icon,
+        "id": channel.id,
+        "kind": channel.kind,
+        "last_stop": channel.last_stop,
+        "name": channel.name,
+        "programme_count": channel.programme_count,
+        "source_id": channel.source_id,
+        "source_name": channel.source_name,
+    })
 }
 
 fn title_of(programme: &epg::Programme) -> String {
@@ -456,42 +506,46 @@ fn desc_of(programme: &epg::Programme) -> String {
         .unwrap_or_default()
 }
 
-fn programme_json(programme: &epg::Programme) -> Value {
+fn time_of(value: &str) -> i64 {
+    epg::parse_time(value).unwrap_or(0)
+}
+
+fn programme_body_json(programme: &epg::Programme) -> Value {
     json!({
-        "channel": programme.channel,
-        "start": programme.start,
-        "stop": programme.stop,
-        "title": title_of(programme),
         "desc": desc_of(programme),
-        "categories": programme
-            .texts
-            .iter()
-            .filter(|(name, _, _)| name == "category")
-            .map(|(_, _, text)| text.clone())
-            .collect::<Vec<_>>(),
+        "start": time_of(&programme.start),
+        "stop": time_of(&programme.stop),
+        "title": title_of(programme),
     })
 }
 
-/// `GET /epg/api/channels`——频道表（形状为本实现自定）。
+fn search_programme_json(programme: &epg::Programme, channel_name: &str) -> Value {
+    json!({
+        "channel": programme.channel,
+        "channel_name": channel_name,
+        "start": time_of(&programme.start),
+        "stop": time_of(&programme.stop),
+        "title": title_of(programme),
+    })
+}
+
+/// `GET /epg/api/channels`——公开频道表。
 pub async fn api_channels(State(state): State<Arc<AppState>>) -> Response {
-    let Some(data) = load(&state) else {
-        return not_found();
-    };
-    let channels: Vec<Value> = data
-        .channels
-        .iter()
-        .map(|channel| {
-            json!({
-                "id": channel.id,
-                "names": channel
-                    .names
-                    .iter()
-                    .map(|(lang, name)| json!({ "lang": lang, "name": name }))
-                    .collect::<Vec<_>>(),
-            })
-        })
-        .collect();
-    Json(json!({ "count": channels.len(), "channels": channels })).into_response()
+    let config = state.snapshot();
+    if let Some(response) = public_ready(&config) {
+        return response;
+    }
+    let viewer = epg::load_viewer(&config).unwrap_or_default();
+    let channels: Vec<Value> = viewer.channels.iter().map(viewer_channel_json).collect();
+    cached_json(
+        json!({
+            "channels": channels,
+            "generated_at": viewer.generated_at,
+            "total": channels.len(),
+            "tz_offset_hours": config.server.timezone_offset_hours,
+        }),
+        "public, max-age=300",
+    )
 }
 
 /// `GET /epg/api/programmes/{channel}`——单个频道的节目。
@@ -499,46 +553,89 @@ pub async fn api_programmes(
     State(state): State<Arc<AppState>>,
     Path(channel): Path<String>,
 ) -> Response {
-    let Some(data) = load(&state) else {
-        return not_found();
-    };
-    let programmes: Vec<Value> = data
+    let config = state.snapshot();
+    if let Some(response) = public_ready(&config) {
+        return response;
+    }
+    let data = epg::load_generated(&config).unwrap_or_default();
+    let mut programmes: Vec<&epg::Programme> = data
         .programmes
         .iter()
         .filter(|programme| programme.channel == channel)
-        .map(programme_json)
         .collect();
-    Json(json!({ "channel": channel, "count": programmes.len(), "programmes": programmes }))
-        .into_response()
+    programmes.sort_by_key(|programme| time_of(&programme.start));
+    let programmes: Vec<Value> = programmes.into_iter().map(programme_body_json).collect();
+    cached_json(
+        json!({
+            "channel": channel,
+            "programmes": programmes,
+            "tz_offset_hours": config.server.timezone_offset_hours,
+        }),
+        "public, max-age=120",
+    )
 }
 
-/// `GET /epg/api/search?q=`——按标题/简介搜索，最多 200 条。
+/// `GET /epg/api/search?q=`——按频道名/节目标题搜索，最多 200 条。
 pub async fn api_search(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    let Some(data) = load(&state) else {
-        return not_found();
-    };
+    let config = state.snapshot();
+    if let Some(response) = public_ready(&config) {
+        return response;
+    }
+    let viewer = epg::load_viewer(&config).unwrap_or_default();
+    let data = epg::load_generated(&config).unwrap_or_default();
     let query = params
         .get("q")
         .map(|value| value.trim().to_lowercase())
         .unwrap_or_default();
-    if query.is_empty() {
-        return Json(json!({ "q": "", "count": 0, "programmes": Vec::<Value>::new() }))
-            .into_response();
-    }
-    let programmes: Vec<Value> = data
-        .programmes
+    let channels: Vec<Value> = if query.is_empty() {
+        Vec::new()
+    } else {
+        viewer
+            .channels
+            .iter()
+            .filter(|channel| {
+                channel.id.to_lowercase().contains(&query)
+                    || channel.name.to_lowercase().contains(&query)
+            })
+            .map(viewer_channel_json)
+            .collect()
+    };
+    let names: HashMap<String, String> = viewer
+        .channels
         .iter()
-        .filter(|programme| {
-            title_of(programme).to_lowercase().contains(&query)
-                || desc_of(programme).to_lowercase().contains(&query)
-        })
-        .take(200)
-        .map(programme_json)
+        .map(|channel| (channel.id.to_ascii_lowercase(), channel.name.clone()))
         .collect();
-    Json(json!({ "q": query, "count": programmes.len(), "programmes": programmes })).into_response()
+    let mut programmes: Vec<&epg::Programme> = if query.is_empty() {
+        Vec::new()
+    } else {
+        data.programmes
+            .iter()
+            .filter(|programme| title_of(programme).to_lowercase().contains(&query))
+            .collect()
+    };
+    programmes.sort_by_key(|programme| time_of(&programme.start));
+    let programmes: Vec<Value> = programmes
+        .into_iter()
+        .take(200)
+        .map(|programme| {
+            let name = names
+                .get(&programme.channel.to_ascii_lowercase())
+                .map(String::as_str)
+                .unwrap_or(&programme.channel);
+            search_programme_json(programme, name)
+        })
+        .collect();
+    cached_json(
+        json!({
+            "channels": channels,
+            "programmes": programmes,
+            "tz_offset_hours": config.server.timezone_offset_hours,
+        }),
+        "public, max-age=30",
+    )
 }
 
 /// `GET /epg/translate/status`——翻译能力与缓存状态。

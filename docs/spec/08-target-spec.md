@@ -37,6 +37,7 @@
 | S-EP-14 | DASH 接口 `/dash/…`、`/dash-timeshift/status` | 二进制 | ✅【观测】`/dash/status` 字段 `stream_key/source_url/phase/segment_count/last_error/checked_ms/uptime_secs/active_tracks`；`/dash-timeshift/status` 键 `{gid}:{cid}` |
 | S-EP-15 | 解封辅助 `/unban/whoami` | 二进制 | 🔶【观测】路由存在（路由表见 13 §3）；响应未测 |
 | S-EP-16 | 完整路由表（静态补录）：公开面含 `/epg/api/{channels,programmes/:channel,search}`、`/logo/api/list`、`/__assets/*path`、`/whoami`、`/{gid}/{cid}/{timeshift,dash-timeshift,segment}…`；私有面新增 `/groups/{import,import/force,:gid/export}`、`/cache/flush`、`/backup`、`/assets/ffmpeg-status`、`/dash/scan-url`、`/dash/tracks/:gid/:cid`、`/livestream/:gid/:cid/{start,stop}`、`/schedule/{from-epg,download/:filename,:idx/stop}` | 二进制 | ✅【观测】见 13 §3 |
+| S-EP-17 | 公开 EPG API：`channels` 返回 `icon/id/kind/last_stop/name/programme_count/source_id/source_name`；`programmes/:channel` 返回 `desc/start/stop/title`（Unix 秒）；`search` 匹配频道 `id`/`name` 与节目标题、按 `start` 升序、最多 200 条；ID 小写、路径大小写敏感；关闭时返回 `404` JSON；响应带宽松 CORS 与 `max-age` | 运行目标 | ✅【观测】F-023 |
 
 ## 3. 播放地址与扩展名规则
 
@@ -135,7 +136,7 @@
 
 | ID | 规格声明 | 来源 | 状态 |
 | --- | --- | --- | --- |
-| S-EPG-01 | 多源采集→匹配本机频道→生成统一 `/epg.xml.gz`；EPG 关闭时 `/epg*` 全 404 且导出 M3U 不带 `x-tvg-url` | D-panel | ✅【观测】匹配算法已解：`out_id = tvg_id \|\| channel.id`；先 `tvg_id`（大小写不敏感）再名称；规范化=删空白（含 U+3000）+小写 |
+| S-EPG-01 | 多源采集→匹配本机频道→生成统一 `/epg.xml.gz`；EPG 关闭时 `/epg*` 全 404 且导出 M3U 不带 `x-tvg-url` | D-panel | ✅【观测】匹配算法已解：`out_id = (tvg_id \|\| channel.id).to_ascii_lowercase()`；先 `tvg_id`（大小写不敏感）再名称；规范化=删空白（含 U+3000）+小写；公开表见 S-EP-17 |
 | S-EPG-02 | 采集节奏：每 4h / 每 6h / 每日 4 点 / 每日 3、5、12 点 / 每 30 分钟 | D-panel | ✅（见 `07` §2.3） |
 | S-EPG-03 | 名称匹配开关（tvg-id 不匹配时按频道名再匹配一次）；脚本源需 python3 | D-panel | ✅【观测】不做全角折叠、保留连字符、**无子串匹配** |
 | S-EPG-04 | EPG 标题可翻译（Google 免费 / Gemini(Key) / MTranServer），14 种目标语言 | D-panel | ⏳ |

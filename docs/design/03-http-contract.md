@@ -341,12 +341,12 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | `GET` | `/panel/api/epg/programmes/{channel}` | Bearer | `{"now","pad_before","pad_after","programmes":[{"disp_start","disp_end","stop_epoch","rec_start","rec_end","live","title","desc"}]}` |
 | `GET` | `/panel/api/epg/suggest/{gid}/{cid}` | Bearer | `{"suggestions":[{"source_id","source_channel_id","source_name","display_name","score"}]}` |
 | `GET` | `/panel/api/epg/search?q=` | Bearer | 同公开搜索 |
-| `GET` | `/panel/api/epg/viewer-channels` | Bearer | 同公开频道表 |
+| `GET` | `/panel/api/epg/viewer-channels` | Bearer | `{"channels":[…]}`；频道对象同公开表，无 `generated_at`/`total`/`tz_offset_hours` |
 | `GET` | `/panel/api/epg/source-channels/{id}?q=&offset=&limit=` | Bearer | `{"items":[{"id","display_names","source_id","source_name"}],"total"}`；`id=__all__` 跨源 |
 | `GET` | `/panel/api/epg/tz-preview/{id}?shift=` | Bearer | `{"ok":true,"items":[{"raw","current","shifted"}]}`；`shift` 单位为分钟 |
-| `GET` | `/epg/api/channels` | 无 | `{"count","channels":[{"id","names":[{"lang","name"}]}]}` |
-| `GET` | `/epg/api/programmes/{channel}` | 无 | `{"channel","count","programmes":[{"channel","start","stop","title","desc","categories"}]}` |
-| `GET` | `/epg/api/search?q=` | 无 | `{"q","count","programmes":[…]}`；最多 200 条；空 `q` 返回 0 |
+| `GET` | `/epg/api/channels` | 无 | `{"channels":[{"icon","id","kind","last_stop","name","programme_count","source_id","source_name"}],"generated_at","total","tz_offset_hours"}`；`cache-control: public, max-age=300` |
+| `GET` | `/epg/api/programmes/{channel}` | 无 | `{"channel","programmes":[{"desc","start","stop","title"}],"tz_offset_hours"}`；`start`/`stop` 为 Unix 秒；路径大小写敏感；`max-age=120` |
+| `GET` | `/epg/api/search?q=` | 无 | `{"channels":[…],"programmes":[{"channel","channel_name","start","stop","title"}],"tz_offset_hours"}`；只搜频道 ID/名称与节目标题；按 `start` 升序；最多 200 条；`max-age=30` |
 
 采集规则（F-008 观测值）：
 
@@ -358,7 +358,7 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | 超时 | 源级 `timeout_secs > 0` 优先，否则用 `[epg].script_timeout_secs`；均限制在 5–3600 秒 |
 | 时间偏移 | `source.tz_shift_mins` 在解析后平移 `start`/`stop`，单位分钟，正数向后 |
 | 时间窗 | 保留 `stop >= 现在 - keep_days` 且 `start <= 现在 + future_days`；`keep_yesterday = true` 时下界不晚于昨天 0 点 |
-| 输出标识 | `out_id = tvg_id \|\| channel.id`；XMLTV 的 `channel/@id` 与节目 `channel` 使用 `out_id` |
+| 输出标识 | `out_id = (tvg_id \|\| channel.id).to_ascii_lowercase()`；XMLTV 的 `channel/@id`、节目 `channel`、公开 API 与面板报告均使用小写 `out_id` |
 | 额外频道 | `extra.json` 持久化；`out_id` 为空时用源频道 ID；与输出 ID 冲突时跳过 |
 | 频道匹配 | 手工映射优先；否则 `tvg_id`（大小写不敏感）→ 名称（删全部空白含 U+3000、转小写、完全相等，不做子串）；`match_by_name=false` 时只保留 `tvg_id` |
 | 冲突 | 同一源频道被多个本地频道命中 → 配置顺序最后一个获得节目；重复 `out_id` 标为 `duplicate` |
@@ -368,8 +368,9 @@ http://<host>/<gid>/<cid>.<ext>[?token=<48hex>]
 | 手工映射 | 存 `<cache>/epg/mappings.json`；`GET /panel/api/epg/mappings` 读取；刷新后补源频道显示名 |
 | 调度 | 启动即采集一次；之后每分钟检查 `[epg].cron` 与源级 `cron`。全局到期刷新全部源，单源到期只刷新该源再用 raw 缓存重生成 |
 
-> `/epg/api/*` 的响应形状为本实现自定（目标只登记了路由存在性）；面板私有 EPG 端点按目标面板调用形状实现。
-> 实现：按请求读取 `epg.xml` 并解析；节目单较大时再改为内存快照。
+> `/epg/api/*` 形状按目标 v0.8.2 抓包对齐（F-023）。公开频道读取 `<cache>/epg/viewer.json` 快照；节目与搜索按请求解析 `epg.xml`。
+> 关闭 EPG → `404 {"error":"EPG 功能已关闭"}`；关闭公开查看器 → `404 {"error":"公开节目单查看器已关闭"}`。三个公开端点共享宽松 CORS。
+> 额外频道不进入公开频道表；只有已匹配本地频道可出现，且允许 `programme_count=0`。
 >
 | 翻译 | 读 `[epg.translate]`：`enabled`、`url`（或 `engine="mtran"` 时的 `mtran_url`）、`token`/`mtran_token`、`source`/`mtran_source`、`target`/`targets`、`translation_first`、`mtran_batch`。采集后把节目文本批量发到 MTranServer v5 `/translate/batch`（`{from,to,texts}` → `{results}`），兼容旧 `{texts,source_lang,target_lang}`；`/translate/batch` 不可用时回退单条 `/translate`。译文按目标语言追加为 `lang="<target>"` 的文本节点；`translation_first = true` 时排在原文前。结果缓存在 `<cache>/epg/.translate/cache.json`，命中不发请求 |
 | 翻译接口 | `GET /epg/translate/{status,models}` 报告引擎与目标语言；`POST /epg/translate/{run,probe,mtran/test,clear,clear-engine}`。面板别名在相同路径前加 `/panel/api`。`run/probe` 需面板会话；未启用或未配地址 → `400`。`clear*` 清空缓存 |

@@ -43,6 +43,12 @@
 
 2026-10-24：
 
+- **V-03 公开 EPG API 完成**：
+  - `/epg/api/channels`、`/programmes/:channel`、`/search` 按目标 v0.8.2 抓包对齐。
+  - 频道表含 `icon/id/kind/last_stop/name/programme_count/source_id/source_name`；生成时写 `viewer.json`。
+  - 节目与搜索使用 Unix 秒；搜索只匹配频道名与节目标题、按开始时间排序、最多 200 条。
+  - 输出 ID 统一小写；关闭态返回目标 JSON 错误；加入全局宽松 CORS。
+  - 证据：F-023、`docs/findings/dynamic/20-public-epg-api.md`、`raw/v0.8.2-public-epg-api.txt`。
 - **U-05 `[cache.dash]` 剩余参数完成**：
   - `publish_delay_secs>0` 按 `ceil(delay/切片时长)` 压后直播清单末端；`=0` 使用 `fetch_extra_segments`。
   - 看门狗接入 `watchdog_tick_secs`、`watchdog_stall_secs`、`watchdog_rebuild_stagger_ms`，并复用重建上限与冷却。
@@ -88,7 +94,7 @@
 
 ### 1.5 当前工作区
 
-- 基线提交：`6911fa8`，已推送 `rust` 分支。
+- 基线提交：`4b4aef1`，已推送 `rust` 分支。
 - `PROGRESS_bak.md` 保存 2026-10-23 之前的完整 1169 行记录。
 - `dist/` 与 `samples/` 不入库。
 - 目标测试容器、源站与本实现的临时实例应按需清理。
@@ -105,7 +111,6 @@
 
 | ID | 项 | 当前结论 | 所需证据 |
 | --- | --- | --- | --- |
-| V-03 | 公开 `/epg/api/*` 形状 | 面板私有端点已实现；公开端点形状仍为本实现自定 | 目标逐字段抓取；先解决 `spec/08` 的版本冲突 |
 | V-05 | 每频道独立代理 | 实现顺序为频道 > 分组 > 直连 | 目标覆盖顺序、认证头、失败回退、`socks5` 行为 |
 | V-06 | `/unban` 配额与 `whoami` | 已实现每 IP 30 天 3 次；目标未实测 | 目标连续解封；记录状态码、`remaining`、窗口重置 |
 | V-07 | 切片 TS 结构 | 当前只做字节代理；无 PAT/PMT/SDT 证据 | 真实 TS 切片；核对 PID、SDT 与 `lumberjack` 水印 |
@@ -114,6 +119,7 @@
 
 已完成：
 
+- V-03 公开 `/epg/api/*` 形状 ✅
 - U-05 `[cache.dash]` 发布延迟与看门狗参数 ✅
 - V-01 DASH 多 `<BaseURL>` 请求分布 ✅
 - V-02 `proxy`+MPD 绝对 `<BaseURL>` 本地反代 ✅

@@ -73,6 +73,8 @@
 ├─ resolvers/     解析脚本缓存
 ├─ epg/scripts/   EPG Python 脚本
 ├─ epg/raw/       每个源的原始 XMLTV（regenerate 用）
+├─ epg/epg.xml    生成的 XMLTV；同目录有 `epg.xml.gz`
+├─ epg/viewer.json 公开频道表快照（含源信息；重启后可查）
 ├─ epg/.translate/ EPG 翻译缓存
 └─ subtitles/.translate/ 字幕翻译缓存
 ```

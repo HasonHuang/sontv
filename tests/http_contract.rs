@@ -266,6 +266,14 @@ async fn fixture_with_extra(extra: &str) -> Fixture {
 }
 
 async fn fixture_with_all(epg_enabled: bool, extra_section: &str) -> Fixture {
+    fixture_with_options(epg_enabled, extra_section, true).await
+}
+
+async fn fixture_with_options(
+    epg_enabled: bool,
+    extra_section: &str,
+    public_viewer_enabled: bool,
+) -> Fixture {
     let dir = std::env::temp_dir().join(format!("iptv-proxy-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).expect("建临时目录");
 
@@ -392,6 +400,7 @@ url = "{upstream}/badseg.m3u8"
                 r#"
 [epg]
 enabled = true
+public_viewer_enabled = {public_viewer_enabled}
 keep_days = 3
 future_days = 1
 keep_yesterday = false
@@ -1264,31 +1273,78 @@ async fn epg_api_exposes_channels_programmes_and_search() {
 
     let response = fetch(&fixture, "/epg/api/channels").await;
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(header(&response, "cache-control"), "public, max-age=300");
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["count"], 1);
-    assert_eq!(body["channels"][0]["id"], "c1");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["tz_offset_hours"], 8);
+    assert!(body["generated_at"].as_u64().unwrap_or(0) > 0);
+    let channel = &body["channels"][0];
+    assert_eq!(channel["id"], "c1");
+    assert_eq!(channel["name"], "媒体清单频道");
+    assert_eq!(channel["kind"], "local");
+    assert_eq!(channel["source_id"], "s1");
+    assert_eq!(channel["source_name"], "本地源");
+    assert_eq!(channel["programme_count"], 1);
+    assert!(channel["last_stop"].as_i64().unwrap_or(0) > 0);
+    assert!(channel["icon"].is_null());
 
     let response = fetch(&fixture, "/epg/api/programmes/c1").await;
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(header(&response, "cache-control"), "public, max-age=120");
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["count"], 1);
+    assert_eq!(body["channel"], "c1");
     assert_eq!(body["programmes"][0]["title"], "新闻");
+    assert_eq!(body["programmes"][0]["desc"], "早间新闻");
+    assert!(
+        body["programmes"][0]["start"].as_i64().unwrap_or(0)
+            < body["programmes"][0]["stop"].as_i64().unwrap_or(0)
+    );
+
+    // 频道 ID 大小写敏感，与目标一致。
+    let response = fetch(&fixture, "/epg/api/programmes/C1").await;
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["programmes"].as_array().map(Vec::len), Some(0));
 
     let response = fetch(&fixture, "/epg/api/search?q=新闻").await;
+    assert_eq!(header(&response, "cache-control"), "public, max-age=30");
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["count"], 1);
+    assert_eq!(body["channels"].as_array().map(Vec::len), Some(0));
+    assert_eq!(body["programmes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["programmes"][0]["channel"], "c1");
+    assert_eq!(body["programmes"][0]["channel_name"], "媒体清单频道");
+
+    let response = fetch(&fixture, "/epg/api/search?q=媒体").await;
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["channels"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["programmes"].as_array().map(Vec::len), Some(0));
+
+    // 目标搜索只匹配标题，不匹配简介。
+    let response = fetch(&fixture, "/epg/api/search?q=早间").await;
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["programmes"].as_array().map(Vec::len), Some(0));
 
     let response = fetch(&fixture, "/epg/api/search?q=不存在").await;
     let body: serde_json::Value =
         serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
-    assert_eq!(body["count"], 0);
+    assert_eq!(body["channels"].as_array().map(Vec::len), Some(0));
+    assert_eq!(body["programmes"].as_array().map(Vec::len), Some(0));
 
     let disabled = fixture_with(false).await;
     let response = fetch(&disabled, "/epg/api/channels").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let hidden = fixture_with_options(true, "", false).await;
+    let response = fetch(&hidden, "/epg/api/channels").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("读正文")).expect("解析 JSON");
+    assert_eq!(body["error"], "公开节目单查看器已关闭");
 }
 
 /// 用默认口令登录，返回会话 Token。

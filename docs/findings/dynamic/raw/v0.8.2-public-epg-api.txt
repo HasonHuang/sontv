@@ -1,0 +1,287 @@
+# v0.8.2 公开 EPG API 原始抓包
+
+日期：2026-10-24
+目标：IPTV Proxy v0.8.2（linux/amd64）
+容器：rea82v09，映射 127.0.0.1:19974
+配置：`[epg].enabled=true`、`public_viewer_enabled=true`
+源：本地 XMLTV（`src_local`）
+本地频道：C1/C2/V
+
+## 1. 无节目数据
+
+请求：
+
+```sh
+curl -sS -i http://127.0.0.1:19974/epg/api/channels
+```
+
+响应：
+
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+cache-control: public, max-age=300
+vary: origin, access-control-request-method, access-control-request-headers
+vary: accept-encoding
+access-control-allow-origin: *
+access-control-expose-headers: *
+transfer-encoding: chunked
+```
+
+```json
+{"channels":[],"generated_at":1792818434,"total":0,"tz_offset_hours":8}
+```
+
+请求：
+
+```sh
+curl -sS -i http://127.0.0.1:19974/epg/api/programmes/C1
+```
+
+```json
+{"channel":"C1","programmes":[],"tz_offset_hours":8}
+```
+
+cache-control 为 `public, max-age=120`。
+
+请求：
+
+```sh
+curl -sS -i 'http://127.0.0.1:19974/epg/api/search?q=C1'
+```
+
+```json
+{"channels":[],"programmes":[],"tz_offset_hours":8}
+```
+
+cache-control 为 `public, max-age=30`。
+
+## 2. 有节目数据
+
+XMLTV 频道：`C1`、`C2`、`V`。频道对象：
+
+```json
+{
+  "channels": [
+    {
+      "icon": "http://host.docker.internal:19981/logo-c1.png",
+      "id": "c1",
+      "kind": "local",
+      "last_stop": 1792836480,
+      "name": "C1",
+      "programme_count": 3,
+      "source_id": "src_local",
+      "source_name": "Local XMLTV"
+    },
+    {
+      "icon": null,
+      "id": "c2",
+      "kind": "local",
+      "last_stop": 1792823940,
+      "name": "C2",
+      "programme_count": 1,
+      "source_id": "src_local",
+      "source_name": "Local XMLTV"
+    },
+    {
+      "icon": null,
+      "id": "v",
+      "kind": "local",
+      "last_stop": 1792825740,
+      "name": "V",
+      "programme_count": 1,
+      "source_id": "src_local",
+      "source_name": "Local XMLTV"
+    }
+  ],
+  "generated_at": 1792818512,
+  "total": 3,
+  "tz_offset_hours": 8
+}
+```
+
+观察：
+
+- `id` 为小写。
+- `name` 取本地频道名，不取 XMLTV `display-name`。
+- `kind` 为 `local`。
+- 无节目的已匹配频道仍出现在表中：`programme_count=0`、`last_stop=0`。
+- 图标保留源 URL，不转本地路径。
+
+## 3. 单频道节目
+
+请求：
+
+```sh
+curl -sS http://127.0.0.1:19974/epg/api/programmes/c1
+```
+
+```json
+{
+  "channel": "c1",
+  "programmes": [
+    {
+      "desc": "C1 新闻描述 & 测试",
+      "start": 1792814880,
+      "stop": 1792822080,
+      "title": "C1 早间新闻"
+    },
+    {
+      "desc": "第二个节目",
+      "start": 1792822080,
+      "stop": 1792829280,
+      "title": "C1 午间节目"
+    },
+    {
+      "desc": "",
+      "start": 1792829280,
+      "stop": 1792836480,
+      "title": "C1 No Lang"
+    }
+  ],
+  "tz_offset_hours": 8
+}
+```
+
+观察：
+
+- 节目只有 `desc`、`start`、`stop`、`title`。
+- 没有 `channel`、`categories`、`icon`、`count`。
+- `start`/`stop` 为 Unix 秒。
+- 路径大小写敏感：`/epg/api/programmes/C1` 返回空 `programmes`，但 `channel` 回显原文 `C1`。
+- 无 `limit`、`start`、`stop` 等查询参数效果。
+
+## 4. 搜索
+
+请求：
+
+```sh
+curl -sS 'http://127.0.0.1:19974/epg/api/search?q=C'
+```
+
+```json
+{
+  "channels": [
+    {"id": "c1", "name": "C1", "...": "..."},
+    {"id": "c2", "name": "C2", "...": "..."}
+  ],
+  "programmes": [
+    {"channel": "c1", "channel_name": "C1", "start": 1792815000, "stop": 1792822200, "title": "C1 早间新闻"},
+    {"channel": "c2", "channel_name": "C2", "start": 1792816700, "stop": 1792823900, "title": "C2 Show"},
+    {"channel": "c1", "channel_name": "C1", "start": 1792822200, "stop": 1792829400, "title": "C1 午间节目"},
+    {"channel": "c1", "channel_name": "C1", "start": 1792829400, "stop": 1792836600, "title": "C1 No Lang"}
+  ],
+  "tz_offset_hours": 8
+}
+```
+
+观察：
+
+- 大小写不敏感。
+- 搜索范围为频道 `id`/`name` 与节目标题。
+- **不搜索节目简介**：`q=描述`、`q=C2 desc`、`q=测试` 均返回空。
+- 结果按 `start` 升序。
+- 节目对象含 `channel`、`channel_name`，不含 `desc`。
+
+## 5. 搜索上限
+
+构造 250 条 `Bulk NNN` 节目。保留 215 条后：
+
+```sh
+curl -sS 'http://127.0.0.1:19974/epg/api/search?q=Bulk'
+```
+
+```text
+channels = 0
+programmes = 200
+first = Bulk 000
+last = Bulk 199
+```
+
+`GET /epg/api/programmes/c1` 同时返回 215 条，说明上限只作用于搜索。
+
+## 6. 关闭态
+
+`public_viewer_enabled=false`：
+
+```http
+HTTP/1.1 404 Not Found
+content-type: application/json
+```
+
+```json
+{"error":"公开节目单查看器已关闭"}
+```
+
+`/epg` 页面同时为 `404 text/html`。
+
+`[epg].enabled=false`：
+
+```http
+HTTP/1.1 404 Not Found
+content-type: application/json
+```
+
+```json
+{"error":"EPG 功能已关闭"}
+```
+
+三个 `/epg/api/*` 端点行为一致。
+
+## 7. CORS 与预检
+
+普通 GET（带或不带 `Origin`）均含：
+
+```http
+vary: origin, access-control-request-method, access-control-request-headers
+access-control-allow-origin: *
+access-control-expose-headers: *
+```
+
+预检：
+
+```sh
+curl -i -X OPTIONS http://127.0.0.1:19974/epg/api/channels \
+  -H 'Origin: http://example.com' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,authorization'
+```
+
+```http
+HTTP/1.1 200 OK
+access-control-allow-origin: *
+vary: origin, access-control-request-method, access-control-request-headers
+access-control-allow-methods: *
+access-control-allow-headers: *
+allow: GET,HEAD
+```
+
+## 8. 额外频道
+
+通过面板添加额外频道 `X` → `X1` 后，`/panel/api/epg/mappings` 可见，但公开频道表不出现 `x1`。公开表只含本地已匹配频道。
+
+## 9. 面板频道表
+
+```sh
+curl -H "Authorization: Bearer $T" \
+  http://127.0.0.1:19974/panel/api/epg/viewer-channels
+```
+
+```json
+{
+  "channels": [
+    {
+      "icon": null,
+      "id": "c1",
+      "kind": "local",
+      "last_stop": 1792944300,
+      "name": "C1",
+      "programme_count": 214,
+      "source_id": "src_local",
+      "source_name": "Local XMLTV"
+    }
+  ]
+}
+```
+
+面板端点不带公开表的 `generated_at`、`total`、`tz_offset_hours`。

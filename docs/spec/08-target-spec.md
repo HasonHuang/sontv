@@ -147,6 +147,7 @@
 | S-DASH-02 | `publish_delay_secs>0` → 直播清单末端压后 `ceil(delay/切片时长)` 段；`=0` → 压后 `fetch_extra_segments` 段 | 二进制 | ✅【观测】4s 切片：0/4/8/12/20/24/30 → 2/1/2/3/5/6/8 段（F-021） |
 | S-DASH-03 | 看门狗每 `watchdog_tick_secs` 扫描；切片进度停滞 `watchdog_stall_secs` → 重建；同轮按 `watchdog_rebuild_stagger_ms` 错开；达到 `watchdog_rebuild_max` → 冷却 `watchdog_cooldown_secs` | 二进制 | ✅【观测】tick=2/stall=5/stagger=500/max=2 已分离（F-021）；`fast_start_secs` 无可观测差异 |
 | S-DASH-04 | 多个 `<BaseURL>`、`url_pool_size=1` 时，音视频都只取第一个 BaseURL | 二进制 | ✅【观测】init/video/audio 均只请求 `/a/`，`/b/` 为 0（F-022）；`url_pool_size>1` 未验 |
+| S-DASH-05 | proxy MPD 改写：已有 `minimumUpdatePeriod`→`PT1S`；已有 `publishTime`→当前 UTC（缺失不插入）；本地令牌错误→`302 error_url`；响应头 `application/dash+xml; charset=utf-8` + `max-age=1, s-maxage=1` | 二进制 | ✅【观测】连续请求 `publishTime` 随时钟前进；去属性后不插入（F-022） |
 | S-LOGO-01 | 台标本地托管，`tvg-logo` 与 EPG `icon` 指向本地；支持上传转码与动效生成 | D-panel | ✅【观测】9 端点全验（见 12）；转码在**浏览器侧**，服务端只存字节 |
 | S-LOGO-02 | 台标库端点：`GET /logo/{list,match-report}`、`POST /logo/{upload,apply,rename,delete,restore,suggest,animate}` | D-panel | ✅【观测】`upload` 需 `name/ext/data`；`animate.quality` 为**字符串** |
 | S-LOGO-03 | 动效输出纯 Rust 无损**动画 WebP**；固定 10 帧（80 ms × 9 + 1500 ms），覆盖原文件、原图备份到 `logos/.orig/`；6 种效果 | D-panel/二进制 | ✅【观测】`VP8X`/`ANIM`/`ANMF`，`VP8L` 帧；`quality`/`anim_frame_ms` 被忽略；已动画源图 → `400`；`restore` 还原 |

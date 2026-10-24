@@ -117,7 +117,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | ✅ 通过 |
-| `cargo test --offline --all-targets` | ✅ 235 项通过（166 单元 + 69 集成） |
+| `cargo test --offline --all-targets` | ✅ 237 项通过（168 单元 + 69 集成） |
 | `cargo clippy --offline --all-targets` | ✅ 无 error；仍有历史 warning |
 | 冒烟脚本 | ✅ 15 个：assets、panel、resolver、share、remux、schedule、timeshift、record、record-dash、epg、aggregate、backup、logo、security、cli |
 | 发布校验 | ✅ 双架构静态产物通过 `verify-release.sh` |
@@ -157,6 +157,7 @@
 - V-09 `[playlist]` / `[share]` 目标语义 ✅
 - V-11 真实 HLS/M3U 验证 ✅
 - U-07 订阅源缓存跨重启 ✅
+- DASH 本地反代错误令牌 → 302 `error_url`；`minimumUpdatePeriod` → `PT1S`；`publishTime` → 当前 UTC；MPD 头对齐 ✅
 
 ### 2.3 已登记差异与不实现项
 

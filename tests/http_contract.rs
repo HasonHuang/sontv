@@ -3144,7 +3144,7 @@ url = "{upstream}/dash/base.mpd"
             .headers()
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok()),
-        Some("application/dash+xml")
+        Some("application/dash+xml; charset=utf-8")
     );
     let body = manifest.text().await.expect("读 MPD");
     assert!(
@@ -3174,6 +3174,19 @@ url = "{upstream}/dash/base.mpd"
     // BaseURL 的查询串会随切片请求转发。
     let segment = fetch(&fixture, &format!("{local_base}chunk-v0-1.m4s?token=abc")).await;
     assert_eq!(segment.status(), StatusCode::OK);
+    // 本地令牌错误：目标返回 302 占位，不是 404。
+    let wrong_token = local_base
+        .split('/')
+        .nth(4)
+        .expect("本地 BaseURL 应含令牌")
+        .to_string();
+    let wrong_base = local_base.replacen(&wrong_token, "00000000000000000000000000000000", 1);
+    let wrong = fetch(&fixture, &format!("{wrong_base}chunk-v0-1.m4s")).await;
+    assert_eq!(wrong.status(), StatusCode::FOUND);
+    assert_eq!(
+        header(&wrong, "location"),
+        "http://placeholder.test/mistake.mp4"
+    );
 
     // 已有的相对 BaseURL 改写后仍指向本服务，切片继续经本服务代理。
     let body = fetch(&fixture, "/mpg/c2.mpd")

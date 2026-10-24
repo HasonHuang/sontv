@@ -2,7 +2,12 @@
 //!
 //! 契约见 [`docs/design/03-http-contract.md`](../../../docs/design/03-http-contract.md) §4。
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     body::Body,
@@ -21,8 +26,10 @@ use crate::{
     state::AppState,
 };
 
-/// DASH/回退清单缓存头。
-const ENTRY_CACHE: &str = "public, max-age=5, s-maxage=5";
+/// proxy 模式 MPD 缓存头（目标实测 1 秒）。
+const MPD_CACHE: &str = "public, max-age=1, s-maxage=1";
+/// MPD 正文类型（目标带 UTF-8 字符集）。
+const MPD_CONTENT_TYPE: &str = "application/dash+xml; charset=utf-8";
 /// Rewrite 模式缓存头。
 const REWRITE_CACHE: &str = "no-cache, must-revalidate";
 /// 主清单入口缓存头：变体清单每次都要重取（S-PROXY-08）。
@@ -600,13 +607,97 @@ fn proxy_mpd(
 ) -> Response {
     let body = trim_mpd_window(body, keep_seconds);
     let body = rewrite_mpd_base_urls(&body, gid, cid, mpd_url, self_base);
+    let body = rewrite_minimum_update_period(&body);
+    let body = rewrite_publish_time(&body);
     let mut response = Response::new(Body::from(body));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static("application/dash+xml"),
+        HeaderValue::from_static(MPD_CONTENT_TYPE),
     );
-    insert_header(&mut response, header::CACHE_CONTROL, ENTRY_CACHE);
+    insert_header(&mut response, header::CACHE_CONTROL, MPD_CACHE);
     response
+}
+
+/// 目标 v0.8.2 把 `minimumUpdatePeriod` 统一改成 `PT1S`（F-022）。
+///
+/// 只改已有属性；缺失时不主动插入，避免改变上游声明的刷新模式。
+fn rewrite_minimum_update_period(xml: &str) -> String {
+    rewrite_attribute(xml, "minimumUpdatePeriod", "PT1S")
+}
+
+/// 目标每次代理 MPD 时把已有 `publishTime` 改成当前 UTC 时间（F-022）。
+fn rewrite_publish_time(xml: &str) -> String {
+    rewrite_attribute(xml, "publishTime", &format_utc(now_secs()))
+}
+
+/// 替换一个双引号或单引号属性的值；保留引号、空白和其余正文。
+fn rewrite_attribute(xml: &str, key: &str, value: &str) -> String {
+    let mut output = String::with_capacity(xml.len());
+    let mut cursor = 0;
+    while let Some(offset) = xml[cursor..].find(key) {
+        let key_start = cursor + offset;
+        output.push_str(&xml[cursor..key_start]);
+        let after_key = key_start + key.len();
+        let Some(eq_offset) = xml[after_key..].find('=') else {
+            output.push_str(&xml[key_start..]);
+            return output;
+        };
+        let eq = after_key + eq_offset;
+        let value_start = eq + 1;
+        let rest = &xml[value_start..];
+        let trimmed = rest.trim_start();
+        let whitespace = rest.len() - trimmed.len();
+        let Some(quote) = trimmed.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+            output.push_str(&xml[key_start..value_start + whitespace]);
+            cursor = value_start + whitespace;
+            continue;
+        };
+        let after_quote = &trimmed[1..];
+        let Some(end) = after_quote.find(quote) else {
+            output.push_str(&xml[key_start..]);
+            return output;
+        };
+        let value_start = value_start + whitespace + 1;
+        output.push_str(&xml[key_start..value_start]);
+        output.push_str(value);
+        cursor = value_start + end;
+    }
+    output.push_str(&xml[cursor..]);
+    output
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0)
+}
+
+fn format_utc(secs: u64) -> String {
+    let days = secs / 86_400;
+    let remainder = secs % 86_400;
+    let (year, month, day) = civil_from_days(days as i64);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        remainder / 3_600,
+        remainder % 3_600 / 60,
+        remainder % 60
+    )
+}
+
+/// Howard Hinnant 的 civil_from_days 算法；仅用于 MPD 时间戳。
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    let year = year + if month <= 2 { 1 } else { 0 };
+    (year, month as u32, day as u32)
 }
 
 /// 按 `mpd_keep_seconds` 裁掉 MPD 时间线中最旧的切片。
@@ -958,7 +1049,8 @@ async fn mpd_segment(
             return (StatusCode::NOT_FOUND, "Not found").into_response();
         };
         if mpd_base_token(gid, cid, &decoded) != token {
-            return (StatusCode::NOT_FOUND, "Not found").into_response();
+            // 目标：本地令牌错误 → 302 error_url（F-022）。
+            return redirect_asset(&config, &config.server.error_url);
         }
         let Ok(base) = Url::parse(&decoded) else {
             return (StatusCode::BAD_GATEWAY, "Upstream Error").into_response();
@@ -1019,9 +1111,9 @@ fn dash_body(body: String) -> Response {
     let mut response = Response::new(Body::from(body));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static("application/dash+xml"),
+        HeaderValue::from_static(MPD_CONTENT_TYPE),
     );
-    insert_header(&mut response, header::CACHE_CONTROL, ENTRY_CACHE);
+    insert_header(&mut response, header::CACHE_CONTROL, MPD_CACHE);
     response
 }
 
@@ -1409,7 +1501,8 @@ pub(crate) async fn fetch_bytes(
 #[cfg(test)]
 mod tests {
     use super::{
-        media_cache_control, merge_upstream_headers, mpd_base_token, rewrite_mpd_base_urls,
+        format_utc, media_cache_control, merge_upstream_headers, mpd_base_token,
+        rewrite_minimum_update_period, rewrite_mpd_base_urls, rewrite_publish_time,
         trim_mpd_window,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -1496,6 +1589,32 @@ mod tests {
 
     fn template_mpd() -> &'static str {
         r#"<MPD><Period><AdaptationSet><SegmentTemplate timescale="1000" startNumber="10" media="seg-$Number$.m4s"><SegmentTimeline><S t="0" d="2000"/><S t="2000" d="2000"/><S t="4000" d="2000"/><S t="6000" d="2000"/></SegmentTimeline></SegmentTemplate></AdaptationSet></Period></MPD>"#
+    }
+
+    #[test]
+    fn rewrites_minimum_update_period_to_one_second() {
+        let xml = r#"<MPD minimumUpdatePeriod="PT2.0S" type="dynamic"><Period/></MPD>"#;
+        let output = rewrite_minimum_update_period(xml);
+        assert_eq!(
+            output,
+            r#"<MPD minimumUpdatePeriod="PT1S" type="dynamic"><Period/></MPD>"#
+        );
+        let single = r#"<MPD minimumUpdatePeriod='PT4S'><Period/></MPD>"#;
+        assert!(rewrite_minimum_update_period(single).contains("minimumUpdatePeriod='PT1S'"));
+        let absent = r#"<MPD type="dynamic"><Period/></MPD>"#;
+        assert_eq!(rewrite_minimum_update_period(absent), absent);
+    }
+
+    #[test]
+    fn publish_time_uses_utc_and_keeps_absence() {
+        assert_eq!(format_utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(format_utc(1_700_000_000), "2023-11-14T22:13:20Z");
+        let xml = r#"<MPD publishTime="2020-01-01T00:00:00Z"><Period/></MPD>"#;
+        let output = rewrite_publish_time(xml);
+        assert!(!output.contains("2020-01-01"), "{output}");
+        assert!(output.contains("publishTime=\""));
+        let absent = r#"<MPD type="dynamic"><Period/></MPD>"#;
+        assert_eq!(rewrite_publish_time(absent), absent);
     }
 
     #[test]

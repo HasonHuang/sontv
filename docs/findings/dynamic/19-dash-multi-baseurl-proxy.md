@@ -21,8 +21,11 @@
 /{gid}/{cid}/mpd/{32位十六进制}/{Base64URL(原始BaseURL)}/
 ```
 
-4. 本地切片路径由 Base64URL 解码还原上游 BaseURL，再拼接相对切片路径；错误令牌返回跳转或 404（目标实测 302）。
-5. 目标同时把 MPD 的 `minimumUpdatePeriod` 改为 `PT1S`；本项未纳入本轮代码变更。
+4. 本地切片路径由 Base64URL 解码还原上游 BaseURL，再拼接相对切片路径；错误令牌返回 **302 到 `server.error_url`**。
+5. proxy MPD 会把已有 `minimumUpdatePeriod` 改为 `PT1S`，把已有 `publishTime` 改为当前 UTC 时间；缺失的属性不插入。
+6. proxy MPD 响应头：`content-type: application/dash+xml; charset=utf-8`，`cache-control: public, max-age=1, s-maxage=1`。
+
+上述 4–6 已在本实现对齐。
 
 ## 1. DASH 多 `<BaseURL>`
 
@@ -117,7 +120,27 @@ GET /gproxy/v/mpd/{token}/{base64}/chunk-0-1.m4s?name=v02
 ```text
 GET /gproxy/v/mpd/00000000000000000000000000000000/{base64}/chunk-0-1.m4s
 → 302
+location: https://material.yang-1989.eu.org/v/mistake.mp4   （server.error_url）
 ```
+
+### 2.6 MPD 响应头与动态属性
+
+同一请求的响应头：
+
+```text
+content-type: application/dash+xml; charset=utf-8
+cache-control: public, max-age=1, s-maxage=1
+```
+
+MPD 根属性变化：
+
+```text
+上游：minimumUpdatePeriod="PT2.0S" publishTime="2026-10-24T00:00:00Z"
+目标：minimumUpdatePeriod="PT1S"   publishTime="2026-10-24T07:33:26Z"
+```
+
+- 连续两次请求（间隔 1.1 秒）的 `publishTime` 各为请求时刻，确认每次刷新。
+- 去掉上游 `publishTime` 后，目标输出也不含该属性，确认只改已有值。
 
 ## 3. 实现映射
 
@@ -130,3 +153,7 @@ GET /gproxy/v/mpd/00000000000000000000000000000000/{base64}/chunk-0-1.m4s
 | 本地路径 | `/{gid}/{cid}/mpd/{token}/{Base64URL(base)}/` |
 | 切片还原 | 路径首段校验令牌，Base64URL 解码出 BaseURL，再拼相对路径 |
 | 多 BaseURL | 每个节点独立改写 |
+| 错误令牌 | 302 到 `server.error_url` |
+| `minimumUpdatePeriod` | 已有属性统一改为 `PT1S` |
+| `publishTime` | 已有属性改为当前 UTC；缺失不插入 |
+| MPD 响应头 | `application/dash+xml; charset=utf-8`；`max-age=1, s-maxage=1` |
